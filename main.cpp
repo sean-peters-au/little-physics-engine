@@ -1,10 +1,9 @@
 #include "simulator.h"
+#include "simulator_constants.h"
 #include "drawer.h"
 
 #include <iostream>
 #include <SDL2/SDL.h>
-
-unsigned int TICKS_PER_SECOND = 10;
 
 int main(int, char**){
 	if (SDL_Init(SDL_INIT_VIDEO) != 0){
@@ -34,8 +33,9 @@ int main(int, char**){
 		}
 
 		nowTicks = SDL_GetTicks();
-		if(nowTicks - lastTicks < 1000 / TICKS_PER_SECOND) {
+		if(nowTicks - lastTicks < 1000 / SimulatorConstants::TicksPerSecond) {
 			SDL_Delay(nowTicks - lastTicks);
+      lastTicks = nowTicks;
 		}
 		
 		simulator.tick();

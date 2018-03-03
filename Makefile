@@ -19,9 +19,3 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 clean:
 	rm -f *.o ; rm -f $(EXE) ; rm -f obj/*
-
-	Makefile			factories.h			main.o				particle_octant_tree.h		test.cpp
-	SDL_Lesson0			generators.c			particle.cpp			simulator.cpp			vector_math.cpp
-	drawer.cpp			generators.h			particle.h			simulator.h			vector_math.h
-	drawer.h			main.cpp			particle_octant_tree.cpp	simulator_constants.h
-

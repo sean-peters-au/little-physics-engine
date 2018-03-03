@@ -1,5 +1,5 @@
-#ifndef SIMULATOR_CONSTANTS_H
-#define SIMULATOR_CONSTANTS_H
+#ifndef FACTORIES_H
+#define FACTORIES_H
 
 #include "generators.h"
 

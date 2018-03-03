@@ -9,7 +9,7 @@ class Drawer {
 	public:
 	ParticleSimulator simulator;
 
-	Drawer(ParticleSimulator simulator);
+	Drawer(ParticleSimulator& simulator);
 
 	void draw(SDL_Renderer* renderer);
 };

@@ -21,6 +21,7 @@ namespace SimulatorConstants {
 
 	extern const unsigned int UniverseLength; 
 	extern const unsigned int ScreenLength;
+	extern const unsigned int TicksPerSecond;
 }
 
 #endif

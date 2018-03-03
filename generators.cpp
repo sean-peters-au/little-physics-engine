@@ -6,6 +6,7 @@
 
 #include <random>
 #include <vector>
+#include <iostream>
 
 class UniformScreenParticleGenerator : public ParticleGenerator 
 {
@@ -45,7 +46,9 @@ class UniformScreenParticleGenerator : public ParticleGenerator
 
 	std::vector<Particle> generateParticles() {
 		std::vector<Particle> particles;
-		particles.push_back(generateParticle());
+    for (int i = 0; i < SimulatorConstants::ParticleCount; ++i) {
+      particles.push_back(generateParticle());
+    }
 		return particles;
 	}
 };
