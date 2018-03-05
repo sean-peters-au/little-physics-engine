@@ -7,7 +7,7 @@ OBJ_DIR := ./obj
 SRC_FILES := $(wildcard $(SRC_DIR)/*.cpp)
 OBJ_FILES := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 LDFLAGS = $(SDL)
-CXXFLAGS = -Wall -c -std=c++11 -ffast-math -mrecip
+CXXFLAGS = -Wall -c -std=c++11 -ffast-math -mrecip  -march=native
 
 all: $(EXE)
 

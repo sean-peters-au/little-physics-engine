@@ -10,8 +10,8 @@ ParticleOctantTree::ParticleOctantTree() {}
 
 ParticleOctantTree::ParticleOctantTree(Position pos, double len, Particle* particle) {
   this->children = std::vector<std::vector<ParticleOctantTree*>> (
-    4, 
-    std::vector<ParticleOctantTree*>(4)
+    2, 
+    std::vector<ParticleOctantTree*>(2)
   );
 	this->pos = pos;
 	this->len = len;
@@ -43,7 +43,7 @@ void ParticleOctantTree::addParticleBelow(Particle* particle) {
   if (particle == NULL) {
     //std::cout << "null particle added below" << std::endl;
   }
-	double childLen = this->len / 4;
+	double childLen = this->len / 2;
   //std::cout << this->pos.x << " " << this->pos.y << " " << childLen << std::endl;
   //std::cout << particle->pos.x << " " << particle->pos.y << std::endl;
 
@@ -99,8 +99,8 @@ Vector ParticleOctantTree::netGravitationalAccelerationOn(Particle* other) {
     acceleration = this->approxGravitationalAccelerationOn(other);
   } else if (this->particle == NULL) {
     // non-leaf
-    for (int i = 0; i < 4; ++i) {
-      for (int j = 0; j < 4; ++j) {
+    for (int i = 0; i < 2; ++i) {
+      for (int j = 0; j < 2; ++j) {
         if (this->children[i][j] != NULL) {
           Vector v = this->children[i][j]->netGravitationalAccelerationOn(other);
           acceleration.add(v);

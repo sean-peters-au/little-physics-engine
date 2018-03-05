@@ -4,29 +4,29 @@
 class Vector
 {
 	public:
-	float x;
-	float y;
+	double x;
+	double y;
 
   Vector();
-	Vector(float x, float y);
+	Vector(double x, double y);
 
 	void add(Vector& v);
-	void multiply(float scalar);
-	void scale(float length);
-	float length();
+	void multiply(double scalar);
+	void scale(double length);
+	double length();
 };
 
 class Position
 {
 	public:
-	float x;
-	float y;
+	double x;
+	double y;
 
   Position();
-	Position(float x, float y);
+	Position(double x, double y);
 
 	void add(Vector& v);
-	float dist(Position& p);
+	double dist(Position& p);
 };
 
 #endif
