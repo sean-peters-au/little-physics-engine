@@ -8,7 +8,7 @@
 class ParticleSimulator
 {
     public:
-		std::vector<Particle> particles;
+		std::vector<Particle*> particles;
 
     void generateParticles();
 

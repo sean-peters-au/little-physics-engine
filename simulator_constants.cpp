@@ -6,19 +6,20 @@ namespace SimulatorConstants {
 
   extern const double CollisionDistance = 0;
 
-	extern const double BarnesHutRatio = 0.5;
+	extern const double BarnesHutRatio = 0.9;
 
-	extern const double TimeStep = 86400; // seconds
+	extern const double TimeStep = 86400 * 100; // seconds
 	extern const double PixelStep = 1e12; // metres
 	extern const double MassStep = 1e12; // kilograms
 
-	extern const double ParticleCount = 200;
-	extern const double ParticleMassMean = 1e12; // kilograms
+	extern const double ParticleCount = 10000;
+	extern const double ParticleMassMean = 1e24; // kilograms
 	extern const double ParticleMassStdDev = 0; 
 	extern const double ParticleVelocityMean = 0; // metres per second
-	extern const double ParticleVelocityStdDev = 5e5;
+	extern const double ParticleVelocityStdDev = 5e6;
 
-	extern const unsigned int UniverseLength = 10000; // pixels
+	extern const double UniverseLength = 10000 * PixelStep; // metres
 	extern const unsigned int ScreenLength = 600;
-	extern const unsigned int TicksPerSecond = 1;;
+	extern const unsigned int StepsPerSecond = 1000;
+	extern const unsigned int Threads = 4;
 }

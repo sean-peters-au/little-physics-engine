@@ -19,9 +19,10 @@ namespace SimulatorConstants {
 	extern const double ParticleVelocityMean; // metres per second
 	extern const double ParticleVelocityStdDev;
 
-	extern const unsigned int UniverseLength; 
+	extern const double UniverseLength; 
 	extern const unsigned int ScreenLength;
-	extern const unsigned int TicksPerSecond;
+	extern const unsigned int StepsPerSecond;
+	extern const unsigned int Threads;
 }
 
 #endif

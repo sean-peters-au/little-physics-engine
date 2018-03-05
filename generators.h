@@ -7,7 +7,7 @@
 
 class ParticleGenerator {
 	public:
-		virtual std::vector<Particle> generateParticles() = 0;
+		virtual std::vector<Particle*> generateParticles() = 0;
 };
 
 class ParticleGeneratorFactory {

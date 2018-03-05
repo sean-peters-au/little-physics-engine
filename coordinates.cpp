@@ -2,16 +2,18 @@
 #include "simulator_constants.h"
 
 Position screenToUniverse(Position pos) {
+  double universeLengthPixels = SimulatorConstants::UniverseLength / SimulatorConstants::PixelStep;
   return Position(
-    (pos.x + SimulatorConstants::UniverseLength / 2) * SimulatorConstants::PixelStep,
-    (pos.y + SimulatorConstants::UniverseLength / 2) * SimulatorConstants::PixelStep
+    (pos.x + universeLengthPixels / 2) * SimulatorConstants::PixelStep,
+    (pos.y + universeLengthPixels / 2) * SimulatorConstants::PixelStep
   );
 }
 
 Position universeToScreen(Position pos) {
+  double universeLengthPixels = SimulatorConstants::UniverseLength / SimulatorConstants::PixelStep;
   return Position(
-    pos.x / SimulatorConstants::PixelStep - SimulatorConstants::UniverseLength / 2,
-    pos.y / SimulatorConstants::PixelStep - SimulatorConstants::UniverseLength / 2
+    pos.x / SimulatorConstants::PixelStep - universeLengthPixels / 2,
+    pos.y / SimulatorConstants::PixelStep - universeLengthPixels / 2
   );
 }
 

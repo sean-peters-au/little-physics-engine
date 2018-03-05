@@ -9,12 +9,11 @@ class Particle
 		Position pos;
 		double mass;
 		Vector velocity;
-    bool null;
 
 		Particle();
 		Particle(Position pos, double mass, Vector velocity);
 
-		Vector gravitationalAccelerationOn(Particle other);
+		Vector gravitationalAccelerationOn(Particle* other);
 };
 
 #endif

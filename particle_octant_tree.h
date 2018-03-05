@@ -13,18 +13,18 @@ class ParticleOctantTree
 		Position pos; // top left corner
 		double len;
 		Position centre;
-		Particle particle; // for leaf nodes
+		Particle* particle; // for leaf nodes
 		double mass; // sum of mass within
 
 		ParticleOctantTree();
-		ParticleOctantTree(Position pos, double len, Particle particle);
+		ParticleOctantTree(Position pos, double len, Particle* particle);
 
-		std::vector<Particle> getParticles();
-		void addParticleBelow(Particle particle);
-		void addParticle(Particle particle);
+		std::vector<Particle*> getParticles();
+		void addParticleBelow(Particle* particle);
+		void addParticle(Particle* particle);
 
-		double approxGravitationalAccelerationOn(Particle other);
-		double netGravitationalAccelerationOn(Particle other);
+		Vector approxGravitationalAccelerationOn(Particle* other);
+		Vector netGravitationalAccelerationOn(Particle* other);
 };
 
 #endif
