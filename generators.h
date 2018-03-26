@@ -2,6 +2,7 @@
 #define GENERATORS_H
 
 #include "particle.h"
+#include "coordinates.h"
 
 #include <vector>
 
@@ -12,11 +13,15 @@ class ParticleGenerator {
 
 class ParticleGeneratorFactory {
 	public:
-		virtual ParticleGenerator* buildGenerator() = 0;
+		virtual ParticleGenerator* buildGenerator(CoordinateSystem* coordSystem) = 0;
 };
 
 class UniformScreenParticleGeneratorFactory : public ParticleGeneratorFactory {
-	ParticleGenerator* buildGenerator();
+	ParticleGenerator* buildGenerator(CoordinateSystem* coordSystem);
+};
+
+class RotatingParticleGeneratorFactory : public ParticleGeneratorFactory {
+	ParticleGenerator* buildGenerator(CoordinateSystem* coordSystem);
 };
 
 #endif

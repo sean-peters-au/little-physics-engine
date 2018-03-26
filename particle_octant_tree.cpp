@@ -3,10 +3,19 @@
 #include "vector_math.h"
 #include "simulator_constants.h"
 
+#include <cmath>
 #include <vector>
 #include <iostream>
 
 ParticleOctantTree::ParticleOctantTree() {}
+
+ParticleOctantTree::~ParticleOctantTree() {
+  for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < 2; ++j) {
+      delete(this->children[i][j]);
+    }
+  }
+}
 
 ParticleOctantTree::ParticleOctantTree(Position pos, double len, Particle* particle) {
   this->children = std::vector<std::vector<ParticleOctantTree*>> (
@@ -39,29 +48,54 @@ std::vector<Particle*> ParticleOctantTree::getParticles() {
 	return particles;
 }
 
+bool ParticleOctantTree::contains(Particle* particle) {
+  return this->pos.x - particle->radius < particle->pos.x &&
+    particle->pos.x < this->pos.x + this->len + particle->radius &&
+    this->pos.y - particle->radius < particle->pos.y &&
+    particle->pos.y < this->pos.y + this->len + particle->radius;
+}
+
+bool ParticleOctantTree::performCollisionEffectsOn(Particle* particle) {
+  if (this->particle == NULL) {
+    // non-leaf
+    for (int i = 0; i < 2; ++i) {
+      for (int j = 0; j < 2; ++j) {
+        if(this->children[i][j] != NULL
+          && this->children[i][j]->contains(particle)
+          && this->children[i][j]->performCollisionEffectsOn(particle)) {
+            return true;
+        }
+      }
+    }
+  } else {
+    return this->particle->collide(particle);
+  }
+
+  return false;
+}
+
 void ParticleOctantTree::addParticleBelow(Particle* particle) {
   if (particle == NULL) {
-    //std::cout << "null particle added below" << std::endl;
+    std::cout << "null particle added below" << std::endl;
   }
 	double childLen = this->len / 2;
   //std::cout << this->pos.x << " " << this->pos.y << " " << childLen << std::endl;
   //std::cout << particle->pos.x << " " << particle->pos.y << std::endl;
 
-	if (this->particle != NULL && childLen < SimulatorConstants::CollisionDistance) {
-		// TODO implement some sort of collision handling here
-	}
-
 	int childCol = (int)((particle->pos.x - this->pos.x) / childLen);
 	int childRow = (int)((particle->pos.y - this->pos.y) / childLen);
+  if (isnan(childCol) || isnan(childRow)) {
+    std::cout << "nan col or row" << std::endl;
+  }
 	Position childPos = Position(
 		childCol * childLen + this->pos.x, 
 		childRow * childLen + this->pos.y
 	);
 
-  if (childCol < 0 || childCol > SimulatorConstants::UniverseLength ||
-      childRow < 0 || childRow > SimulatorConstants::UniverseLength) {
+  if (childCol < 0 || childCol > 1 ||
+      childRow < 0 || childRow > 1) {
     // left universe
-    //std::cout << "a particle has left the universe" << std::endl;
+    std::cout << "bad particle: " << childCol << ":" << childRow << "\t(" << particle->pos.x << "," << particle->pos.y << ")\t(" << this->pos.x << "," << this->pos.y << ")" << std::endl;
   } else if (this->children[childCol][childRow] == NULL) {
     // new sub octant tree
 		this->children[childCol][childRow] = 
@@ -74,7 +108,7 @@ void ParticleOctantTree::addParticleBelow(Particle* particle) {
 
 void ParticleOctantTree::addParticle(Particle* particle) {
   if (particle == NULL) {
-    //std::cout << "null particle added" << std::endl;
+    std::cout << "null particle added" << std::endl;
   }
 	if (this->particle != NULL) {
     //std::cout << "splitting" << std::endl;
@@ -94,7 +128,9 @@ Vector ParticleOctantTree::approxGravitationalAccelerationOn(Particle* other) {
 Vector ParticleOctantTree::netGravitationalAccelerationOn(Particle* other) {
   Vector acceleration(0, 0);
 
-  if (this->len / this->centre.dist(other->pos) < SimulatorConstants::BarnesHutRatio) {
+  if (this->particle == other) {
+    // leaf (ignore self)
+  } else if (this->len / this->centre.dist(other->pos) < SimulatorConstants::BarnesHutRatio) {
     // 'distant' particles can be approximated
     acceleration = this->approxGravitationalAccelerationOn(other);
   } else if (this->particle == NULL) {
@@ -107,10 +143,29 @@ Vector ParticleOctantTree::netGravitationalAccelerationOn(Particle* other) {
         }
       }
     }
-  } else if (this->particle != other) {
-    // leaf (ignore self)
+  } else {
     acceleration = this->particle->gravitationalAccelerationOn(other);
   }
 
   return acceleration;
+}
+
+void ParticleOctantTree::updateDensities(double densityAbove) {
+  // p = m/V
+  double densityHere = this->mass / (this->len * this->len);
+  if (densityHere < densityAbove) {
+    densityHere = densityAbove;
+  }
+  
+  for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < 2; ++j) {
+      if (this->children[i][j] == NULL) {
+        continue;
+      } else if (this->children[i][j]->particle == NULL) {
+        this->children[i][j]->updateDensities(densityHere);
+      } else {
+        this->children[i][j]->particle->density = densityHere;
+      }
+    }
+  }
 }

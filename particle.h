@@ -7,13 +7,25 @@ class Particle
 {
     public:
 		Position pos;
-		double mass;
 		Vector velocity;
+		Vector acceleration;
+		double mass;
+    double temperature;
+    double moles;
+    double density;
+    double volume;
+    double radius;
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+    unsigned char a;
 
 		Particle();
 		Particle(Position pos, double mass, Vector velocity);
 
 		Vector gravitationalAccelerationOn(Particle* other);
+    bool collide(Particle* other);
+    void updateBoylesLaw();
 };
 
 #endif

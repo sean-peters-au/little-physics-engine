@@ -22,20 +22,44 @@ int main(int, char**){
 	SDL_CreateWindowAndRenderer(SimulatorConstants::ScreenLength, SimulatorConstants::ScreenLength, 0, &window, &renderer);
 
 	// Initialise Simulation	
-	ParticleSimulator simulator = ParticleSimulator();
+  CoordinateSystem coordSystem = CoordinateSystem();
+	ParticleSimulator simulator = ParticleSimulator(&coordSystem);
 	simulator.init();
-	Drawer drawer = Drawer(simulator);
-	
+	Drawer drawer = Drawer(simulator, &coordSystem);
 
 	bool running = true;
 	unsigned int lastTicks = 0, nowTicks;
   unsigned int steps = 0;
+    
 
 	while(running) {
-		SDL_Event events;
-		while(SDL_PollEvent(&events)) {
-			if(events.type == SDL_QUIT)
-				running = false;
+		SDL_Event event;
+		while(SDL_PollEvent(&event)) {
+      switch(event.type) {
+        case SDL_QUIT:
+          running = false;
+          break;
+        case SDL_KEYDOWN:
+          switch( event.key.keysym.sym ){
+            case SDLK_LEFT:
+              coordSystem.moveLeft();
+              break;
+            case SDLK_RIGHT:
+              coordSystem.moveRight();
+              break;
+            case SDLK_UP:
+              coordSystem.moveUp();
+              break;
+            case SDLK_DOWN:
+              coordSystem.moveDown();
+              break;
+            default:
+              break;
+          }
+          break;
+        default:
+          break;
+      }
 		}
 
 		nowTicks = SDL_GetTicks();

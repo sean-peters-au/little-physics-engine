@@ -10,8 +10,10 @@ class Drawer {
 	public:
 	ParticleSimulator simulator;
   TTF_Font* Sans;
+  CoordinateSystem* coordSystem;
 
-	Drawer(ParticleSimulator& simulator);
+	Drawer();
+	Drawer(ParticleSimulator& simulator, CoordinateSystem* coordSystem);
 
 	void draw(SDL_Renderer* renderer, unsigned int steps);
 };

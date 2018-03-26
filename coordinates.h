@@ -3,7 +3,21 @@
 
 #include "vector_math.h"
 
-Position screenToUniverse(Position pos);
-Position universeToScreen(Position pos);
+class CoordinateSystem
+{
+  public:
+  Position screenPos;
+
+  CoordinateSystem();
+  CoordinateSystem(Position screenPos);
+
+  void moveUp();
+  void moveDown();
+  void moveLeft();
+  void moveRight();
+
+  Position screenToUniverse(Position pos);
+  Position universeToScreen(Position pos);
+};
 
 #endif
