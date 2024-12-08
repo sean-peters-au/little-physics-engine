@@ -19,7 +19,7 @@ ParticleSimulator::ParticleSimulator(CoordinateSystem* coordSystem) {
 }
 
 void ParticleSimulator::generateParticles() {
-  ParticleGenerator::ParticleGenerator* generator = 
+  ParticleGenerator* generator = 
     SimulatorFactories::GeneratorFactory->buildGenerator(this->coordSystem);
   this->particles = generator->generateParticles();
 }
@@ -79,7 +79,7 @@ void ParticleSimulator::tick() {
     
   std::vector<std::future<void>> fut(SimulatorConstants::Threads);
   unsigned int size = this->particles.size();
-  for (int thread = 0; thread < SimulatorConstants::Threads; ++thread) {
+  for (unsigned int thread = 0; thread < SimulatorConstants::Threads; ++thread) {
     fut[thread] = std::async(
       std::launch::async, 
       [thread, 
@@ -89,7 +89,7 @@ void ParticleSimulator::tick() {
       &tree,
       timestep = SimulatorConstants::TimeStep]
     { 
-      for (int i = thread * size / threads; 
+      for (unsigned int i = thread * size / threads; 
           i < (thread + 1) * size / threads; 
           ++i) {
         Vector acc = tree.netGravitationalAccelerationOn((*particles)[i]); // m per s
@@ -97,7 +97,7 @@ void ParticleSimulator::tick() {
       }
     });
   }
-  for (int thread = 0; thread < SimulatorConstants::Threads; ++thread) {
+  for (unsigned int thread = 0; thread < SimulatorConstants::Threads; ++thread) {
     fut[thread].get();
   }
 

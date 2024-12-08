@@ -1,21 +1,47 @@
-CXX = clang++
-SDL = -framework SDL2 -framework SDL2_ttf
-# If your compiler is a bit older you may need to change -std=c++11 to -std=c++0x
-EXE = simulator
-SRC_DIR := .
-OBJ_DIR := ./obj
-SRC_FILES := $(wildcard $(SRC_DIR)/*.cpp)
-OBJ_FILES := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
-LDFLAGS = $(SDL)
-CXXFLAGS = -g -Wall -c -std=c++11 -ffast-math -mrecip  -march=native
+# Compiler settings
+CXX := clang++
+CXXFLAGS := -Wall -Wextra -std=c++14 -I./include -ffast-math -mrecip -march=native \
+            -I/opt/homebrew/include
+LDFLAGS := -L/opt/homebrew/lib -lSDL2 -lSDL2_ttf
 
-all: $(EXE)
+# Directory structure
+SRC_DIR := src
+INC_DIR := include
+BUILD_DIR := build
+TEST_DIR := test
 
-$(EXE): $(OBJ_FILES)
-	g++ $(LDFLAGS) -o $@ $^
+# Find all source files
+SRCS := $(wildcard $(SRC_DIR)/*.cpp)
+OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	g++ $(CXXFLAGS) -c -o $@ $<
+# Main target
+TARGET := $(BUILD_DIR)/simulator
 
+# Default target
+all: directories $(TARGET)
+
+# Create necessary directories
+directories:
+	@mkdir -p $(BUILD_DIR)
+
+# Compile source files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Link the executable
+$(TARGET): $(OBJS)
+	$(CXX) $(OBJS) -o $(TARGET) $(LDFLAGS)
+
+# Test target
+test: directories
+	$(CXX) $(CXXFLAGS) $(TEST_DIR)/*.cpp -o $(BUILD_DIR)/test
+	./$(BUILD_DIR)/test
+
+# Clean build files
 clean:
-	rm -f *.o ; rm -f $(EXE) ; rm -f obj/*
+	rm -rf $(BUILD_DIR)
+
+# Clean and rebuild
+rebuild: clean all
+
+.PHONY: all clean rebuild test directories

@@ -5,7 +5,7 @@
 
 #include <iostream>
 #include <SDL2/SDL.h>
-#include <SDL2_ttf/SDL_ttf.h>
+#include <SDL2/SDL_ttf.h>
 
 Drawer::Drawer(ParticleSimulator& simulator, CoordinateSystem* coordSystem) {
   this->simulator = simulator;
