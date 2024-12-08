@@ -27,17 +27,17 @@ void CoordinateSystem::moveRight() {
 }
 
 Position CoordinateSystem::screenToUniverse(Position pos) {
-  double universeLengthPixels = SimulatorConstants::UniverseLength / SimulatorConstants::PixelStep;
+  // Convert screen coordinates to meters
   return Position(
-    (pos.x - screenPos.x + universeLengthPixels / 2) * SimulatorConstants::PixelStep,
-    (pos.y - screenPos.y + universeLengthPixels / 2) * SimulatorConstants::PixelStep
+    SimulatorConstants::pixelsToMeters(pos.x - screenPos.x + SimulatorConstants::ScreenLength / 2),
+    SimulatorConstants::pixelsToMeters(pos.y - screenPos.y + SimulatorConstants::ScreenLength / 2)
   );
 }
 
 Position CoordinateSystem::universeToScreen(Position pos) {
-  double universeLengthPixels = SimulatorConstants::UniverseLength / SimulatorConstants::PixelStep;
+  // Convert meters to screen coordinates
   return Position(
-    pos.x / SimulatorConstants::PixelStep - universeLengthPixels / 2 + screenPos.x,
-    pos.y / SimulatorConstants::PixelStep - universeLengthPixels / 2 + screenPos.y
+    SimulatorConstants::metersToPixels(pos.x) - SimulatorConstants::ScreenLength / 2 + screenPos.x,
+    SimulatorConstants::metersToPixels(pos.y) - SimulatorConstants::ScreenLength / 2 + screenPos.y
   );
 }

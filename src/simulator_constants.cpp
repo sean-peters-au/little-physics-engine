@@ -1,43 +1,99 @@
 #include "simulator_constants.h"
+#include <cmath>
+#include <iostream>
 
 namespace SimulatorConstants {
-	extern const double Pi = 3.141592654;
-	extern const double GravitationalConst = 6.674 * 1e-11;
-  extern const double GasConst = 8.3144598;
-  extern const double DragCoeff = 3e-8;
-  
-  // Drag = Coeff * density * v^2 / 2 * A
+    // Universal constants
+    const double Pi = 3.141592654;
+    const double RealG = 6.674e-11;  // m³/kg/s²
 
-	extern const double GravitationalSoftener = 1e11;
-  // gas clouds aren't going to bounce cleanly off each other
-  // XXX: I could perhaps just implement some sort of "drag" and increase softening for a 
-  // more realistic clumping
-  extern const double CollisionCoeffRestitution = 0.05; 
+    // These will be set by initializeConstants()
+    double TimeAcceleration;
+    double MetersPerPixel;
+    double SecondsPerTick;
+    double GravitationalSoftener;
+    double CollisionCoeffRestitution;
+    double DragCoeff;
+    double ParticleDensity;
+    
+    // Grid parameters
+    int GridSize;
+    double CellSizePixels;
+    
+    // Particle parameters
+    int ParticleCount;
+    double ParticleMassMean;
+    double ParticleMassStdDev;
+    double InitialVelocityFactor;
+    
+    // Display settings (constant across simulations)
+    const unsigned int ScreenLength = 600;
+    const unsigned int StepsPerSecond = 60;
+    const unsigned int Threads = 1;
 
-  extern const double CollisionDistance = 0;
+    void initializeConstants(SimulationType type) {
+        switch (type) {
+            case SimulationType::CELESTIAL_GAS:
+                // Space scale: 1 pixel = 500 km = 5e5 meters
+                MetersPerPixel = 5e5;
+                
+                // Time scale: 1 second real time = 1 day simulation time
+                TimeAcceleration = 24 * 3600;  // seconds in a day
+                SecondsPerTick = 1.0;  // Each tick is 1 second of simulation time
+                
+                // Grid parameters - high resolution for accurate forces
+                GridSize = 500;  // 1000x1000 grid for fine-grained gravity
+                CellSizePixels = static_cast<double>(ScreenLength) / GridSize;
+                
+                // Large number of particles
+                ParticleCount = 3000;  // 100k particles
+                ParticleMassMean = 1e21;  // Reduced mass for more particles
+                ParticleMassStdDev = 1e20;
+                
+                // Physical parameters
+                GravitationalSoftener = 5e5;  // 500 km softening
+                CollisionCoeffRestitution = 0.3;
+                DragCoeff = 1e-7;
+                ParticleDensity = 0.1;
+                InitialVelocityFactor = 0.7;
 
-	extern const double BarnesHutRatio = 0.9;
+                // Debug output
+                std::cout << "Simulation constants initialized:\n"
+                         << "  Meters per pixel: " << MetersPerPixel << "\n"
+                         << "  Time acceleration: " << TimeAcceleration << " (1 real second = "
+                         << TimeAcceleration << " simulation seconds)\n"
+                         << "  Seconds per tick: " << SecondsPerTick << "\n"
+                         << "  Effective time per tick: " << (SecondsPerTick * TimeAcceleration)
+                         << " simulation seconds\n"
+                         << "  Grid: " << GridSize << "x" << GridSize 
+                         << " (cell size: " << CellSizePixels << " pixels)\n"
+                         << "  Particles: " << ParticleCount << "\n"
+                         << "  Particle mass: " << ParticleMassMean << " kg\n"
+                         << "  Central mass: " << (ParticleMassMean * 100.0) << " kg\n"
+                         << "  Total simulation mass: " << (ParticleMassMean * (ParticleCount + 100.0)) << " kg\n";
+                break;
 
-	extern const double TimeStep = 1; // seconds
-	extern const double PixelStep = 1e9; // metres
-	extern const double MassStep = 1e12; // kilograms 
+            // Add other simulation types here
+            default:
+                // Default to CELESTIAL_GAS for now
+                initializeConstants(SimulationType::CELESTIAL_GAS);
+                break;
+        }
+    }
 
-	extern const double ParticleCount = 3000;
-	extern const double ParticleMassMean = 1e26; // kilograms
-	extern const double ParticleMassStdDev = 0; 
-	extern const double ParticleDensity = 1e4; // pascals i.e 1e-5 atmos
-  // used by uniform screen generator
-	extern const double ParticleVelocityMean = 0; // metres per second
-	extern const double ParticleVelocityStdDev = 5e6;
-  // used by rotating generator
-	extern const double ParticleVelocityMin = 0; // metres per second
-	extern const double ParticleVelocityMax = 0; // metres per second
-  // this value is used by screen particle generators to determine how far from the screen 
-  // edge particles can spawn
-	extern const unsigned int ParticleSpawnPadding = 295;
+    double pixelsToMeters(double pixels) {
+        return pixels * MetersPerPixel;
+    }
 
-	extern const double UniverseLength = 1e6 * PixelStep; // metres
-	extern const unsigned int ScreenLength = 600;
-	extern const unsigned int StepsPerSecond = 1000;
-	extern const unsigned int Threads = 1;
+    double metersToPixels(double meters) {
+        return meters / MetersPerPixel;
+    }
+
+    double simulationToRealTime(double ticks) {
+        return ticks * SecondsPerTick / TimeAcceleration;
+    }
+
+    double realToSimulationTime(double seconds) {
+        return seconds * TimeAcceleration / SecondsPerTick;
+    }
 }

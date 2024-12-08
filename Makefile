@@ -1,6 +1,6 @@
 # Compiler settings
 CXX := clang++
-CXXFLAGS := -Wall -Wextra -std=c++14 -I./include -ffast-math -mrecip -march=native \
+CXXFLAGS := -Wall -Wextra -std=c++17 -I./include -I./external/entt/include -ffast-math -mrecip -march=native \
             -I/opt/homebrew/include
 LDFLAGS := -L/opt/homebrew/lib -lSDL2 -lSDL2_ttf
 
@@ -9,9 +9,10 @@ SRC_DIR := src
 INC_DIR := include
 BUILD_DIR := build
 TEST_DIR := test
+EXTERNAL_DIR := external
 
 # Find all source files
-SRCS := $(wildcard $(SRC_DIR)/*.cpp)
+SRCS := $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/systems/*.cpp)
 OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 
 # Main target
@@ -23,6 +24,7 @@ all: directories $(TARGET)
 # Create necessary directories
 directories:
 	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)/systems
 
 # Compile source files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
