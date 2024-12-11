@@ -1,7 +1,9 @@
-#include "systems/barnes_hut_system.h"
 #include <chrono>
 #include <iostream>
 #include <cmath>
+
+#include "systems/barnes_hut_system.h"
+#include "debug_helpers.h"
 
 namespace Systems {
 
@@ -139,39 +141,79 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
                                    const Components::Position& pos,
                                    Components::Velocity& vel,
                                    const Components::Mass& mass) {
-    if (!node || node->total_mass == 0.0) return;  // Added null check
+    if (!node || node->total_mass == 0.0) return;
+    
+    static int frame_count = 0;
+    frame_count++;
     
     // Convert position to meters for force calculation
     double pos_x_meters = SimulatorConstants::pixelsToMeters(pos.x);
     double pos_y_meters = SimulatorConstants::pixelsToMeters(pos.y);
     
     // Calculate distance to center of mass
-    double dx = node->center_of_mass_x - pos_x_meters;
-    double dy = node->center_of_mass_y - pos_y_meters;
+    // Note: dx and dy are now from particle to center of mass (not the other way around)
+    double dx = pos_x_meters - node->center_of_mass_x;
+    double dy = pos_y_meters - node->center_of_mass_y;
     double dist_sq = dx*dx + dy*dy + SimulatorConstants::GravitationalSoftener * SimulatorConstants::GravitationalSoftener;
+    double dist = std::sqrt(dist_sq);
     
     // If this is a leaf node or the node is far enough away (using Barnes-Hut criterion)
     if (node->is_leaf || (node->boundary_size * node->boundary_size / dist_sq < THETA * THETA)) {
         // Skip self-interaction
         if (node->is_leaf && node->particle == entity) return;
         
-        // Calculate gravitational force using real units
-        double force = SimulatorConstants::RealG * node->total_mass / (dist_sq * std::sqrt(dist_sq));
+        // Calculate gravitational force magnitude using real units
+        // F = G * M * m / r²
+        double force = SimulatorConstants::RealG * node->total_mass * mass.value / dist_sq;
         
-        // Convert acceleration back to pixels/second²
-        double acc_x = force * dx;
-        double acc_y = force * dy;
+        // Update debug stats
+        DebugStats::updateForce(force);
         
-        // Apply time acceleration and simulation tick time
+        // Convert to acceleration (F = ma, so a = F/m)
+        // Direction is -dx/r, -dy/r to point toward center of mass
+        double acc_x = -force * (dx / (mass.value * dist));  // Negative for attraction
+        double acc_y = -force * (dy / (mass.value * dist));  // Negative for attraction
+        
+        // Convert acceleration to pixels/tick and apply time factor
+        // Using leapfrog integration: v(t + dt/2) = v(t - dt/2) + a(t)dt
         double time_factor = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
-        vel.x += SimulatorConstants::metersToPixels(acc_x * time_factor);
-        vel.y += SimulatorConstants::metersToPixels(acc_y * time_factor);
+        double old_vx = vel.x;
+        double old_vy = vel.y;
+        
+        // Full step velocity update (since we're accumulating from multiple nodes)
+        double dv_x = SimulatorConstants::metersToPixels(acc_x * time_factor * time_factor);
+        double dv_y = SimulatorConstants::metersToPixels(acc_y * time_factor * time_factor);
+        
+        // Apply velocity update
+        vel.x += dv_x;
+        vel.y += dv_y;
+        
+        // Debug large velocity changes
+        if (frame_count % 60 == 0) {
+            double dv = std::sqrt((vel.x - old_vx) * (vel.x - old_vx) + 
+                                (vel.y - old_vy) * (vel.y - old_vy));
+            if (dv > 0.1) {
+                DEBUG_MSG(DEBUG_LEVEL_VERBOSE,
+                    "Large velocity change:\n"
+                    "  Distance: " << dist/1000.0 << " km\n"
+                    "  Force: " << force << " N\n"
+                    "  Acceleration: (" << acc_x << ", " << acc_y << ") m/s²\n"
+                    "  Velocity change: " << dv << " pixels/tick\n"
+                    "  New velocity: (" << vel.x << ", " << vel.y << ") pixels/tick\n"
+                );
+            }
+        }
     } else {
         // Recursively calculate forces from children
         calculateForce(node->nw.get(), entity, pos, vel, mass);
         calculateForce(node->ne.get(), entity, pos, vel, mass);
         calculateForce(node->sw.get(), entity, pos, vel, mass);
         calculateForce(node->se.get(), entity, pos, vel, mass);
+    }
+    
+    // Output debug info every 60 frames
+    if (frame_count % 6000 == 0) {
+        //DebugStats::printForceStats();
     }
 }
 

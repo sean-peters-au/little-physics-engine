@@ -9,11 +9,19 @@ class ECSSimulator {
 private:
     entt::registry registry;
 
+    // Particle generation functions
+    void createCentralBody();
+    void createKeplerianDisk();
+    
+    // Physics helper functions
+    double calculateKeplerianVelocity(double radius_meters, double central_mass) const;
+    double calculateDiskHeight(double radius, double max_radius) const;
+    double calculateDiskDensity(double radius, double max_radius) const;
+
 public:
     ECSSimulator();
     explicit ECSSimulator(CoordinateSystem* coordSystem);
     
-    void generateParticles();
     void init();
     void tick();
     
