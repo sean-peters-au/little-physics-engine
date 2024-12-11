@@ -39,15 +39,16 @@ std::unique_ptr<BarnesHutSystem::QuadTreeNode> BarnesHutSystem::buildTree(const 
     // Create root node covering the entire screen
     auto root = std::make_unique<QuadTreeNode>();
     root->registry = &registry;  // Store registry pointer
-    root->boundary_x = 0;
-    root->boundary_y = 0;
-    root->boundary_size = SimulatorConstants::ScreenLength;
-    
+    root->boundary_x = 0.0;
+    root->boundary_y = 0.0;
+    root->boundary_size = SimulatorConstants::UniverseSizeMeters;
+
     // Insert all particles
     auto view = registry.view<Components::Position, Components::Mass>();
     for (auto [entity, pos, mass] : view.each()) {
-        if (pos.x >= 0 && pos.x < SimulatorConstants::ScreenLength &&
-            pos.y >= 0 && pos.y < SimulatorConstants::ScreenLength) {
+        if (pos.x >= 0 && pos.x < SimulatorConstants::UniverseSizeMeters &&
+            pos.y >= 0 && pos.y < SimulatorConstants::UniverseSizeMeters)
+        {
             insertParticle(root.get(), entity, pos, mass);
         }
     }
@@ -65,8 +66,8 @@ void BarnesHutSystem::insertParticle(QuadTreeNode* node, entt::entity entity,
     // If node is empty, store the particle here
     if (node->total_mass == 0.0) {
         node->total_mass = mass.value;
-        node->center_of_mass_x = SimulatorConstants::pixelsToMeters(pos.x);
-        node->center_of_mass_y = SimulatorConstants::pixelsToMeters(pos.y);
+        node->center_of_mass_x = pos.x;
+        node->center_of_mass_y = pos.y;
         node->particle = entity;
         return;
     }
@@ -85,10 +86,8 @@ void BarnesHutSystem::insertParticle(QuadTreeNode* node, entt::entity entity,
     } else {
         // Update center of mass
         double new_total_mass = node->total_mass + mass.value;
-        node->center_of_mass_x = (node->center_of_mass_x * node->total_mass + 
-                                SimulatorConstants::pixelsToMeters(pos.x) * mass.value) / new_total_mass;
-        node->center_of_mass_y = (node->center_of_mass_y * node->total_mass + 
-                                SimulatorConstants::pixelsToMeters(pos.y) * mass.value) / new_total_mass;
+        node->center_of_mass_x = (node->center_of_mass_x * node->total_mass + pos.x * mass.value) / new_total_mass;
+        node->center_of_mass_y = (node->center_of_mass_y * node->total_mass + pos.y * mass.value) / new_total_mass;
         node->total_mass = new_total_mass;
         
         // Insert into appropriate quadrant
@@ -147,8 +146,8 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
     frame_count++;
     
     // Convert position to meters for force calculation
-    double pos_x_meters = SimulatorConstants::pixelsToMeters(pos.x);
-    double pos_y_meters = SimulatorConstants::pixelsToMeters(pos.y);
+    double pos_x_meters = pos.x;
+    double pos_y_meters = pos.y;
     
     // Calculate distance to center of mass
     // Note: dx and dy are now from particle to center of mass (not the other way around)
@@ -180,13 +179,9 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
         double old_vx = vel.x;
         double old_vy = vel.y;
         
-        // Full step velocity update (since we're accumulating from multiple nodes)
-        double dv_x = SimulatorConstants::metersToPixels(acc_x * time_factor * time_factor);
-        double dv_y = SimulatorConstants::metersToPixels(acc_y * time_factor * time_factor);
-        
-        // Apply velocity update
-        vel.x += dv_x;
-        vel.y += dv_y;
+        double dt = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
+        vel.x += acc_x * dt;
+        vel.y += acc_y * dt;
         
         // Debug large velocity changes
         if (frame_count % 60 == 0) {

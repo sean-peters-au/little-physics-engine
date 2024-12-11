@@ -1,4 +1,5 @@
 #include "systems/grid_thermodynamics_system.h"
+#include "simulator_constants.h"
 #include <chrono>
 #include <iostream>
 #include <cmath>
@@ -12,7 +13,6 @@ using TimePoint = std::chrono::time_point<Clock>;
 static GridThermodynamicsSystem::Grid static_grid;
 
 // Cached conversion factors
-static double pixels_to_grid_factor;
 static double cell_size_meters;
 static double cell_volume;
 static bool initialized = false;
@@ -20,9 +20,7 @@ static bool initialized = false;
 void GridThermodynamicsSystem::update(entt::registry& registry) {
     // Initialize static values if needed
     if (!initialized) {
-        pixels_to_grid_factor = static_cast<double>(SimulatorConstants::GridSize) / SimulatorConstants::ScreenLength;
-        cell_size_meters = SimulatorConstants::pixelsToMeters(
-            static_cast<double>(SimulatorConstants::ScreenLength) / SimulatorConstants::GridSize);
+        cell_size_meters = SimulatorConstants::UniverseSizeMeters / SimulatorConstants::GridSize;
         cell_volume = cell_size_meters * cell_size_meters * cell_size_meters;
         initialized = true;
     }
@@ -66,8 +64,8 @@ void GridThermodynamicsSystem::update(entt::registry& registry) {
             double vel_sq = vel.x * vel.x + vel.y * vel.y;
             if (vel_sq > 0) {
                 moving_particles++;
-                int x = static_cast<int>(pos.x * pixels_to_grid_factor);
-                int y = static_cast<int>(pos.y * pixels_to_grid_factor);
+                int x = static_cast<int>(pos.x / cell_size_meters);
+                int y = static_cast<int>(pos.y / cell_size_meters);
                 x = std::clamp(x, 0, SimulatorConstants::GridSize-1);
                 y = std::clamp(y, 0, SimulatorConstants::GridSize-1);
                 
@@ -115,9 +113,9 @@ void GridThermodynamicsSystem::populate_grid(Grid& grid, entt::registry& registr
     auto view = registry.view<Components::Position, Components::Mass>();
     
     for (auto [entity, pos, mass] : view.each()) {
-        // Map position to grid cell using cached factor
-        int x = static_cast<int>(pos.x * pixels_to_grid_factor);
-        int y = static_cast<int>(pos.y * pixels_to_grid_factor);
+        // Map position to grid cell using meters
+        int x = static_cast<int>(pos.x / cell_size_meters);
+        int y = static_cast<int>(pos.y / cell_size_meters);
         
         x = std::clamp(x, 0, SimulatorConstants::GridSize-1);
         y = std::clamp(y, 0, SimulatorConstants::GridSize-1);
@@ -146,13 +144,12 @@ void GridThermodynamicsSystem::calculate_cell_properties(Grid& grid) {
 void GridThermodynamicsSystem::apply_thermodynamics(const Grid& grid, entt::registry& registry) {
     auto view = registry.view<Components::Position, Components::Velocity, Components::Mass>();
     
-    // Cache time factor
     double time_factor = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
     
     for (auto [entity, pos, vel, mass] : view.each()) {
-        // Map position to grid cell using cached factor
-        int x = static_cast<int>(pos.x * pixels_to_grid_factor);
-        int y = static_cast<int>(pos.y * pixels_to_grid_factor);
+        // Map position to grid cell using meters
+        int x = static_cast<int>(pos.x / cell_size_meters);
+        int y = static_cast<int>(pos.y / cell_size_meters);
         
         x = std::clamp(x, 0, SimulatorConstants::GridSize-1);
         y = std::clamp(y, 0, SimulatorConstants::GridSize-1);

@@ -14,6 +14,9 @@ namespace SimulatorConstants {
 	extern const double Pi;
 	extern const double RealG;  // Real gravitational constant 6.674e-11
 
+	// Universe size in meters
+	extern double UniverseSizeMeters;
+
 	// Time acceleration factor (how much faster than real time)
 	extern double TimeAcceleration;
 	

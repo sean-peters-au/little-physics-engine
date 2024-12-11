@@ -18,14 +18,13 @@ void ECSSimulator::init() {
 
 void ECSSimulator::createCentralBody() {
     auto center = registry.create();
-    double center_x = SimulatorConstants::ScreenLength / 2.0;
-    double center_y = SimulatorConstants::ScreenLength / 2.0;
+    // Convert center from pixels to meters
+    double center_x_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
+    double center_y_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
     
-    registry.emplace<Components::Position>(center, center_x, center_y);
+    registry.emplace<Components::Position>(center, center_x_m, center_y_m);
     registry.emplace<Components::Velocity>(center, 0.0, 0.0);
     registry.emplace<Components::Mass>(center, SimulatorConstants::ParticleMassMean * 100.0);
-    
-    std::cout << "Central body mass: " << SimulatorConstants::ParticleMassMean * 100.0 << " kg\n";
 }
 
 double ECSSimulator::calculateKeplerianVelocity(double radius_meters, double central_mass) const {
@@ -50,113 +49,71 @@ double ECSSimulator::calculateDiskDensity(double radius, double /*max_radius*/) 
 
 void ECSSimulator::createKeplerianDisk() {
     std::default_random_engine generator{static_cast<unsigned int>(time(0))};
-    
-    const double center_x = SimulatorConstants::ScreenLength / 2.0;
-    const double center_y = SimulatorConstants::ScreenLength / 2.0;
-    const double min_radius = 100.0;  // pixels
-    const double max_radius = SimulatorConstants::ScreenLength / 2.5;
-    const double central_mass = SimulatorConstants::ParticleMassMean * 100.0;
-    
-    // Debug initial conditions
-    std::cout << "\nInitial conditions:\n"
-              << "  MetersPerPixel: " << SimulatorConstants::MetersPerPixel << "\n"
-              << "  TimeAcceleration: " << SimulatorConstants::TimeAcceleration << " seconds/tick\n"
-              << "  SecondsPerTick: " << SimulatorConstants::SecondsPerTick << "\n"
-              << "  Inner radius: " << min_radius << " pixels = " 
-              << SimulatorConstants::pixelsToMeters(min_radius) << " meters\n";
-    
-    // Create distribution for particle placement
+
+    // Physical center
+    double center_x_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
+    double center_y_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
+
+    double min_radius_pixels = 100.0;
+    double min_radius_m = SimulatorConstants::pixelsToMeters(min_radius_pixels);
+    double max_radius_pixels = SimulatorConstants::ScreenLength / 2.5;
+    double max_radius_m = SimulatorConstants::pixelsToMeters(max_radius_pixels);
+
+    double central_mass = SimulatorConstants::ParticleMassMean * 100.0;
+
     std::uniform_real_distribution<> angle_dist(0, 2 * SimulatorConstants::Pi);
-    
-    // Create particles
+
     int particles_created = 0;
     while (particles_created < SimulatorConstants::ParticleCount - 1) {
-        // Use rejection sampling to create proper density distribution
-        double radius;
+        double radius_pixels, radius_meters;
         double density_threshold;
         do {
-            std::uniform_real_distribution<> radius_dist(min_radius, max_radius);
-            radius = radius_dist(generator);
+            std::uniform_real_distribution<> radius_dist(min_radius_pixels, max_radius_pixels);
+            radius_pixels = radius_dist(generator);
+            radius_meters = SimulatorConstants::pixelsToMeters(radius_pixels);
+            double density_ratio = calculateDiskDensity(radius_pixels, max_radius_pixels);
             
-            // Calculate normalized density for rejection sampling
-            double density_ratio = calculateDiskDensity(radius, max_radius);
-            
-            // Random threshold for rejection sampling
             std::uniform_real_distribution<> density_dist(0, 1);
             density_threshold = density_dist(generator);
-        } while (density_threshold > calculateDiskDensity(radius, max_radius));
-        
-        // Generate angle and height
+        } while (density_threshold > calculateDiskDensity(radius_pixels, max_radius_pixels));
+
         double angle = angle_dist(generator);
-        double max_height = calculateDiskHeight(radius, max_radius);
-        std::normal_distribution<> height_dist(0.0, max_height/3.0);  // 3σ within max height
-        double height_offset = height_dist(generator);
-        
-        // Calculate position
-        double x = center_x + radius * cos(angle);
-        double y = center_y + radius * sin(angle) + height_offset;
-        
-        // Skip if outside screen bounds
-        if (x < 0 || x >= SimulatorConstants::ScreenLength ||
-            y < 0 || y >= SimulatorConstants::ScreenLength) {
-            continue;
-        }
-        
-        // Calculate Keplerian orbital velocity in m/s
-        double radius_meters = SimulatorConstants::pixelsToMeters(radius);
-        double base_velocity = calculateKeplerianVelocity(radius_meters, central_mass);
-        
-        // Add small random variations to velocity (1% variation)
+        double max_height_pixels = calculateDiskHeight(radius_pixels, max_radius_pixels);
+        double max_height_m = SimulatorConstants::pixelsToMeters(max_height_pixels);
+
+        std::normal_distribution<> height_dist(0.0, max_height_m/3.0);
+        double height_offset_m = height_dist(generator);
+
+        double x_m = center_x_m + radius_meters * cos(angle);
+        double y_m = center_y_m + radius_meters * sin(angle) + height_offset_m;
+
+        // Base orbital velocity in m/s
+        double base_velocity_m_s = calculateKeplerianVelocity(radius_meters, central_mass);
+
+        // Add small random variation
         std::normal_distribution<> vel_variation(1.0, 0.01);
-        double speed = base_velocity * vel_variation(generator);
-        
-        // Convert from m/s to pixels/tick:
-        // 1. Convert speed from m/s to pixels/s
-        double pixels_per_second = SimulatorConstants::metersToPixels(speed);
-        // 2. Multiply by time_factor to get pixels/tick
-        double time_factor = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
-        double pixels_per_tick = pixels_per_second * time_factor;
-        
-        // Tangential velocity for circular orbit
-        double vx = -pixels_per_tick * sin(angle);  // Negative for counterclockwise rotation
-        double vy = pixels_per_tick * cos(angle);
-        
-        // Add small radial velocity component (0.1% of orbital velocity)
-        std::normal_distribution<> radial_vel_dist(0.0, pixels_per_tick * 0.001);
+        double speed_m_s = base_velocity_m_s * vel_variation(generator);
+
+        // Tangential velocity (in m/s)
+        double vx_m_s = -speed_m_s * sin(angle);
+        double vy_m_s = speed_m_s * cos(angle);
+
+        // Radial perturbation
+        std::normal_distribution<> radial_vel_dist(0.0, speed_m_s * 0.001);
         double radial_vel = radial_vel_dist(generator);
-        vx += radial_vel * cos(angle);
-        vy += radial_vel * sin(angle);
-        
+        vx_m_s += radial_vel * cos(angle);
+        vy_m_s += radial_vel * sin(angle);
+
         // Create particle
         auto entity = registry.create();
-        registry.emplace<Components::Position>(entity, x, y);
-        registry.emplace<Components::Velocity>(entity, vx, vy);  // Now in pixels/tick
-        
-        // Mass varies with radius (heavier particles tend to sink inward)
+        registry.emplace<Components::Position>(entity, x_m, y_m);
+        registry.emplace<Components::Velocity>(entity, vx_m_s, vy_m_s);
+
         double base_mass = SimulatorConstants::ParticleMassMean;
-        double mass_factor = std::pow(min_radius / radius, 1.0/2.0);  // Lighter at outer radii
+        double mass_factor = std::pow(min_radius_m / radius_meters, 0.5);
         std::normal_distribution<> mass_variation(mass_factor * base_mass, base_mass * 0.1);
         registry.emplace<Components::Mass>(entity, mass_variation(generator));
-        
-        if (particles_created == 0) {  // Debug output for first particle
-            double orbital_period = 2 * SimulatorConstants::Pi * std::sqrt(std::pow(radius_meters, 3) / 
-                                                                         (SimulatorConstants::RealG * central_mass));
-            double expected_pixels_per_tick = (2 * SimulatorConstants::Pi * radius) / (orbital_period / time_factor);
-            
-            std::cout << "\nFirst particle details:\n"
-                     << "  Position: (" << x << ", " << y << ") pixels\n"
-                     << "  Radius: " << radius << " pixels = " << radius_meters << " meters\n"
-                     << "  Orbital velocity: " << base_velocity << " m/s\n"
-                     << "  Conversion steps:\n"
-                     << "    1. Speed in pixels/s: " << pixels_per_second << "\n"
-                     << "    2. Time factor: " << time_factor << " seconds/tick\n"
-                     << "    3. Final speed: " << pixels_per_tick << " pixels/tick\n"
-                     << "  Actual velocity: (" << vx << ", " << vy << ") pixels/tick\n"
-                     << "  Expected speed: " << expected_pixels_per_tick << " pixels/tick\n"
-                     << "  Orbital period: " << orbital_period << " seconds\n"
-                     << "  Mass: " << mass_factor * base_mass << " kg\n";
-        }
-        
+
         particles_created++;
     }
 }

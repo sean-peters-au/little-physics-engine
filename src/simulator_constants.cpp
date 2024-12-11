@@ -8,6 +8,7 @@ namespace SimulatorConstants {
     const double RealG = 6.674e-11;  // m³/kg/s²
 
     // These will be set by initializeConstants()
+	double UniverseSizeMeters;
     double TimeAcceleration;
     double MetersPerPixel;
     double SecondsPerTick;
@@ -38,11 +39,13 @@ namespace SimulatorConstants {
         double central_mass;
         double orbital_period;
         double days_per_second;
+
         
         switch (type) {
             case SimulationType::CELESTIAL_GAS:
                 // Space scale: 1 pixel = 10,000 km = 1e7 meters
                 MetersPerPixel = 1e7;
+				UniverseSizeMeters = ScreenLength * MetersPerPixel;
                 
                 // Mass scale: Central mass = 1e25 kg (about 1/100th of Jupiter)
                 central_mass = 1e25;
@@ -73,7 +76,7 @@ namespace SimulatorConstants {
                 // Increase softening length to 20,000 km (2 pixels)
                 GravitationalSoftener = 2e7;  
                 CollisionCoeffRestitution = 0.5;
-                DragCoeff = 1e-7;  
+                DragCoeff = 1e-11;  
                 ParticleDensity = 0.1;
                 InitialVelocityFactor = 1.0;
                 

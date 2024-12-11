@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "simulator_constants.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -73,8 +74,8 @@ Renderer::aggregateParticlesByPixel(const entt::registry& registry) {
         const auto& pos = view.get<Components::Position>(entity);
         
         // Get pixel coordinates
-        int px = static_cast<int>(pos.x);
-        int py = static_cast<int>(pos.y);
+        int px = static_cast<int>(SimulatorConstants::metersToPixels(pos.x));
+        int py = static_cast<int>(SimulatorConstants::metersToPixels(pos.y));
         
         // Get optional components
         auto* density = registry.try_get<Components::Density>(entity);
