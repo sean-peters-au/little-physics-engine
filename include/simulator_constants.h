@@ -8,7 +8,8 @@ namespace SimulatorConstants {
         SOLAR_SYSTEM,     // Planetary orbits (not currently implemented)
         GALAXY,           // Galactic rotation (not currently implemented)
         MOLECULAR,        // Molecular dynamics (not currently implemented)
-        ISOTHERMAL_BOX    // A simple uniform box of gas for testing SPH
+        ISOTHERMAL_BOX,    // A simple uniform box of gas for testing SPH
+        BOUNCY_BALLS       // Bouncy balls in a box
     };
 
     enum class ECSSystem {

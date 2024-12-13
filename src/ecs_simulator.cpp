@@ -4,6 +4,7 @@
 #include "systems/barnes_hut_system.h"
 #include "systems/grid_thermodynamics_system.h"
 #include "systems/sph_system.h"
+#include "systems/basic_gravity_system.h"
 #include <random>
 #include <cmath>
 #include <iostream>
@@ -34,6 +35,9 @@ void ECSSimulator::init() {
             break;
         case SimulatorConstants::SimulationType::ISOTHERMAL_BOX:
             createIsothermalBox();
+            break;
+        case SimulatorConstants::SimulationType::BOUNCY_BALLS:
+            createBouncyBalls();
             break;
         default:
             // Fallback
@@ -149,6 +153,41 @@ void ECSSimulator::createKeplerianDisk() {
         registry.emplace<Components::Mass>(entity, mass_variation(generator));
 
         particles_created++;
+    }
+}
+
+void ECSSimulator::createBouncyBalls() {
+    std::default_random_engine generator{static_cast<unsigned int>(time(0))};
+    
+    // Create a grid of balls with some spacing
+    int balls_per_side = static_cast<int>(std::sqrt(SimulatorConstants::ParticleCount));
+    double spacing = SimulatorConstants::UniverseSizeMeters / (balls_per_side + 1);
+    
+    // Small random initial velocity (±1 m/s in each direction)
+    std::normal_distribution<> velocity_dist(0.0, 1.0);
+    
+    // Mass distribution around 1kg
+    std::normal_distribution<> mass_dist(SimulatorConstants::ParticleMassMean, 
+                                       SimulatorConstants::ParticleMassStdDev);
+
+    int particles_created = 0;
+    for (int i = 0; i < balls_per_side && particles_created < SimulatorConstants::ParticleCount; i++) {
+        for (int j = 0; j < balls_per_side && particles_created < SimulatorConstants::ParticleCount; j++) {
+            // Position in meters, offset by spacing to keep away from edges
+            double x_m = (i + 1) * spacing;
+            double y_m = (j + 1) * spacing;
+
+            // Create entity and add components
+            auto entity = registry.create();
+            registry.emplace<Components::Position>(entity, x_m, y_m);
+            registry.emplace<Components::Velocity>(entity, 
+                velocity_dist(generator), 
+                velocity_dist(generator));
+            registry.emplace<Components::Mass>(entity, mass_dist(generator));
+            registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
+
+            particles_created++;
+        }
     }
 }
 

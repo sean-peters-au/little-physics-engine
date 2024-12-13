@@ -14,6 +14,7 @@ private:
     void createCentralBody();
     void createKeplerianDisk();
     void createIsothermalBox();
+    void createBouncyBalls();
 
     // Physics helper functions
     double calculateKeplerianVelocity(double radius_meters, double central_mass) const;

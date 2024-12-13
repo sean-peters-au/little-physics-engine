@@ -155,7 +155,8 @@ void Renderer::renderUI(bool paused, SimulatorConstants::SimulationType scenario
         "P: Pause/Play\n"
         "R: Reset\n"
         "1: CELESTIAL_GAS\n"
-        "2: ISOTHERMAL_BOX";
+        "2: ISOTHERMAL_BOX\n"
+        "3: BOUNCY_BALLS";
 
     int line_y = 50;
     std::stringstream instr(instructions);
