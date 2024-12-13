@@ -68,7 +68,7 @@ namespace SimulatorConstants {
                 CellSizePixels = static_cast<double>(ScreenLength) / GridSize;
                 
                 // Particle parameters
-                ParticleCount = 3000;
+                ParticleCount = 500;
                 ParticleMassMean = 1e22;  // About 1/1000th of central mass
                 ParticleMassStdDev = 1e21;
                 

@@ -3,6 +3,7 @@
 #include "systems/movement_system.h"
 #include "systems/barnes_hut_system.h"
 #include "systems/grid_thermodynamics_system.h"
+#include "systems/sph_system.h"
 #include <random>
 #include <cmath>
 #include <iostream>
@@ -122,7 +123,10 @@ void ECSSimulator::createKeplerianDisk() {
 void ECSSimulator::tick() {
     // First calculate gravitational forces using Barnes-Hut
     Systems::BarnesHutSystem::update(registry);
-    
+
+    // Then apply SPH forces
+    Systems::SPHSystem::update(registry);
+
     // Then apply local thermodynamic effects using the grid system
     Systems::GridThermodynamicsSystem::update(registry);
     
