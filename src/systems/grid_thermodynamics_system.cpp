@@ -142,51 +142,7 @@ void GridThermodynamicsSystem::calculate_cell_properties(Grid& grid) {
 }
 
 void GridThermodynamicsSystem::apply_thermodynamics(const Grid& grid, entt::registry& registry) {
-    auto view = registry.view<Components::Position, Components::Velocity, Components::Mass>();
-    
-    double time_factor = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
-    
-    for (auto [entity, pos, vel, mass] : view.each()) {
-        // Map position to grid cell using meters
-        int x = static_cast<int>(pos.x / cell_size_meters);
-        int y = static_cast<int>(pos.y / cell_size_meters);
-        
-        x = std::clamp(x, 0, SimulatorConstants::GridSize-1);
-        y = std::clamp(y, 0, SimulatorConstants::GridSize-1);
-        
-        // Pre-calculate velocity magnitude once
-        double vel_sq = vel.x * vel.x + vel.y * vel.y;
-        double speed = std::sqrt(vel_sq);  // Only one sqrt per particle
-        
-        if (speed > 0) {  // Only process if moving
-            // Apply effects from current cell and neighbors
-            double total_drag_factor = 1.0;
-            
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dy = -1; dy <= 1; dy++) {
-                    int nx = x + dx;
-                    int ny = y + dy;
-                    if (nx >= 0 && nx < SimulatorConstants::GridSize && 
-                        ny >= 0 && ny < SimulatorConstants::GridSize) {
-                        const auto& cell = grid[nx][ny];
-                        if (cell.particle_count > 0) {
-                            // Drag increases with density and temperature
-                            double effective_drag = SimulatorConstants::DragCoeff * 
-                                                cell.density * 
-                                                std::sqrt(cell.temperature / 273.15);
-                            
-                            double drag = effective_drag * vel_sq;
-                            total_drag_factor *= std::max(0.0, 1.0 - (drag * time_factor / speed));
-                        }
-                    }
-                }
-            }
-            
-            // Apply accumulated drag factor once
-            vel.x *= total_drag_factor;
-            vel.y *= total_drag_factor;
-        }
-    }
+    // TODO
 }
 
 } 

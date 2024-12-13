@@ -4,6 +4,15 @@
 #include "vector_math.h"
 
 namespace Components {
+
+    // Define a simple enumeration for particle phases
+    enum class Phase {
+        Solid,
+        Liquid,
+        Gas
+        // If needed, more exotic phases (Plasma, Bose-Einstein condensate, etc.) could be added
+    };
+
     struct Position {
         double x, y;
         
@@ -35,10 +44,20 @@ namespace Components {
         explicit Density(double v = 0.0) : value(v) {}
     };
 
+    struct Pressure {
+        double value;
+        explicit Pressure(double v = 0.0) : value(v) {}
+    };
+
     struct Volume {
         double value;
         explicit Volume(double v = 0.0) : value(v) {}
     };
+
+    struct ParticlePhase {
+        Phase phase;
+        explicit ParticlePhase(Phase p) : phase(p) {}
+    };
 }
 
-#endif 
+#endif

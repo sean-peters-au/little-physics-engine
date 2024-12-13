@@ -108,6 +108,7 @@ void ECSSimulator::createKeplerianDisk() {
         auto entity = registry.create();
         registry.emplace<Components::Position>(entity, x_m, y_m);
         registry.emplace<Components::Velocity>(entity, vx_m_s, vy_m_s);
+        registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Gas);
 
         double base_mass = SimulatorConstants::ParticleMassMean;
         double mass_factor = std::pow(min_radius_m / radius_meters, 0.5);
