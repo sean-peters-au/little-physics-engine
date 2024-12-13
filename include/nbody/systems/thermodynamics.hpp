@@ -4,8 +4,8 @@
 #include <entt/entt.hpp>
 #include <vector>
 #include <array>
-#include "components.h"
-#include "simulator_constants.h"
+#include "nbody/components/basic.hpp"
+#include "nbody/core/constants.hpp"
 
 namespace Systems {
     class GridThermodynamicsSystem {

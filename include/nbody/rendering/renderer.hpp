@@ -8,8 +8,8 @@
 #include <vector>
 #include <SFML/Graphics.hpp>
 
-#include "components.h"
-#include "simulator_constants.h"
+#include "nbody/components/basic.hpp"
+#include "nbody/core/constants.hpp"
 
 // Hash for pixel coords
 struct PixelCoordHash {

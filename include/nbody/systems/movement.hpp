@@ -2,9 +2,9 @@
 #define MOVEMENT_SYSTEM_H
 
 #include <entt/entt.hpp>
-#include "components.h"
-#include "simulator_constants.h"
-#include "debug_helpers.h"
+#include "nbody/components/basic.hpp"
+#include "nbody/core/constants.hpp"
+#include "nbody/core/debug.hpp"
 
 namespace Systems
 {

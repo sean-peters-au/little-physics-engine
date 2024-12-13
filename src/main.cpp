@@ -1,9 +1,9 @@
 #include <iostream>
 #include <SFML/Graphics.hpp>
 
-#include "ecs_simulator.h"
-#include "simulator_constants.h"
-#include "renderer.h"
+#include "nbody/core/simulator.hpp"
+#include "nbody/core/constants.hpp"
+#include "nbody/rendering/renderer.hpp"
 
 // Helper function to get scenario list with names
 static std::vector<std::pair<SimulatorConstants::SimulationType,std::string>> buildScenarioList() {

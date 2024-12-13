@@ -1,4 +1,4 @@
-#include "simulator_constants.h"
+#include "nbody/core/constants.hpp"
 #include <cmath>
 #include <iostream>
 #include <vector>

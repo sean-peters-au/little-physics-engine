@@ -2,8 +2,8 @@
 #define ECS_SIMULATOR_H
 
 #include <entt/entt.hpp>
-#include "components.h"
-#include "coordinates.h"
+#include "nbody/components/components.hpp"
+#include "nbody/core/coordinates.hpp"
 
 class ECSSimulator {
 private:

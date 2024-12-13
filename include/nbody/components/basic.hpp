@@ -1,7 +1,7 @@
 #ifndef COMPONENTS_H
 #define COMPONENTS_H
 
-#include "vector_math.h"
+#include "nbody/core/vector_math.hpp"
 
 namespace Components {
 

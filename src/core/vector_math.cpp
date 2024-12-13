@@ -1,4 +1,4 @@
-#include "vector_math.h"
+#include "nbody/core/vector_math.hpp"
 
 #include <iostream>
 #include <cmath>

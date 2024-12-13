@@ -1,7 +1,7 @@
 #ifndef COORDINATES_H
 #define COORDINATES_H
 
-#include "vector_math.h"
+#include "nbody/core/vector_math.hpp"
 
 class CoordinateSystem
 {

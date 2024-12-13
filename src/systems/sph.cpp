@@ -1,7 +1,7 @@
-#include "systems/sph_system.h"
-#include "simulator_constants.h"
-#include "components.h"
-#include "components_sph.h"
+#include "nbody/systems/sph.hpp"
+#include "nbody/core/constants.hpp"
+#include "nbody/components/basic.hpp"
+#include "nbody/components/sph.hpp"
 #include <cmath>
 #include <algorithm>
 #include <iostream>

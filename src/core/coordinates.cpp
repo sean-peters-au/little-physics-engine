@@ -1,6 +1,6 @@
-#include "vector_math.h"
-#include "simulator_constants.h"
-#include "coordinates.h"
+#include "nbody/core/vector_math.hpp"
+#include "nbody/core/constants.hpp"
+#include "nbody/core/coordinates.hpp"
 
 CoordinateSystem::CoordinateSystem() {
   this->screenPos = Position(0,0);

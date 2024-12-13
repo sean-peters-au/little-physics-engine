@@ -1,5 +1,6 @@
-#include "renderer.h"
-#include "simulator_constants.h"
+#include "nbody/rendering/renderer.hpp"
+#include "nbody/core/constants.hpp"
+#include <iostream>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
@@ -35,18 +36,11 @@ Renderer::~Renderer() {
 }
 
 bool Renderer::init() {
-    // Create window: 600 (sim) + 200 (UI) = 800 width
-    int totalWidth = SimulatorConstants::ScreenLength + 200;
-    int totalHeight = SimulatorConstants::ScreenLength;
-
-    window.create(sf::VideoMode(totalWidth, totalHeight), "NBody Simulation (SFML)");
-    if (!window.isOpen()) {
-        return false;
-    }
-
-    // Load a font - make sure "arial.ttf" is in the working directory
-    if (!font.loadFromFile("arial.ttf")) {
-        // Attempt to load a fallback or handle error
+    window.create(sf::VideoMode(screenWidth, screenHeight), "N-Body Simulator");
+    
+    // Update font path to look in assets/fonts directory
+    if (!font.loadFromFile("assets/fonts/arial.ttf")) {
+        std::cout << "Failed to load font \"assets/fonts/arial.ttf\"" << std::endl;
         return false;
     }
 

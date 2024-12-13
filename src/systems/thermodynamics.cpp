@@ -1,5 +1,5 @@
-#include "systems/grid_thermodynamics_system.h"
-#include "simulator_constants.h"
+#include "nbody/systems/thermodynamics.hpp"
+#include "nbody/core/constants.hpp"
 #include <chrono>
 #include <iostream>
 #include <cmath>

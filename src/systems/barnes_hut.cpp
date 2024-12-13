@@ -2,8 +2,8 @@
 #include <iostream>
 #include <cmath>
 
-#include "systems/barnes_hut_system.h"
-#include "debug_helpers.h"
+#include "nbody/systems/barnes_hut.hpp"
+#include "nbody/core/debug.hpp"
 
 namespace Systems {
 

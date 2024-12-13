@@ -1,6 +1,6 @@
-#include "systems/basic_gravity_system.h"
-#include "components.h"
-#include "simulator_constants.h"
+#include "nbody/systems/gravity.hpp"
+#include "nbody/components/basic.hpp"
+#include "nbody/core/constants.hpp"
 #include <cmath>
 
 namespace Systems {
