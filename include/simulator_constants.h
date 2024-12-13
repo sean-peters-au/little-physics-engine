@@ -2,19 +2,22 @@
 #define SIMULATOR_CONSTANTS_H
 
 #include <vector>
+#include <string>
+
 namespace SimulatorConstants {
     enum class SimulationType {
-        CELESTIAL_GAS,    // Gas-to-planet formation (e.g., proto-Jupiter)
+        CELESTIAL_GAS,    // Gas-to-planet formation
         SOLAR_SYSTEM,     // Planetary orbits (not currently implemented)
         GALAXY,           // Galactic rotation (not currently implemented)
         MOLECULAR,        // Molecular dynamics (not currently implemented)
-        ISOTHERMAL_BOX,    // A simple uniform box of gas for testing SPH
-        BOUNCY_BALLS       // Bouncy balls in a box
+        ISOTHERMAL_BOX,   // A simple uniform box of gas
+        BOUNCY_BALLS      // Bouncy balls in a box
     };
 
     enum class ECSSystem {
         BASIC_GRAVITY,
         BARNES_HUT,
+        COLLISION,
         SPH,
         GRID_THERMODYNAMICS,
         MOVEMENT
@@ -52,6 +55,10 @@ namespace SimulatorConstants {
     double metersToPixels(double meters);
     double simulationToRealTime(double ticks);
     double realToSimulationTime(double seconds);
+
+    // Helper functions to manage scenarios
+    std::vector<SimulationType> getAllScenarios();
+    std::string getScenarioName(SimulationType scenario);
 }
 
 #endif

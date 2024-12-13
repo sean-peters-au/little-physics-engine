@@ -1,5 +1,6 @@
 #include "ecs_simulator.h"
 #include "simulator_constants.h"
+#include "systems/collision_system.h"
 #include "systems/movement_system.h"
 #include "systems/barnes_hut_system.h"
 #include "systems/grid_thermodynamics_system.h"
@@ -50,6 +51,9 @@ void ECSSimulator::tick() {
     // Run systems in the order specified by ActiveSystems
     for (const auto& system : SimulatorConstants::ActiveSystems) {
         switch (system) {
+            case SimulatorConstants::ECSSystem::COLLISION:
+                Systems::CollisionSystem::update(registry);
+                break;
             case SimulatorConstants::ECSSystem::BASIC_GRAVITY:
                 Systems::BasicGravitySystem::update(registry);
                 break;
@@ -184,6 +188,7 @@ void ECSSimulator::createBouncyBalls() {
                 velocity_dist(generator), 
                 velocity_dist(generator));
             registry.emplace<Components::Mass>(entity, mass_dist(generator));
+            registry.emplace<Components::Radius>(entity, 0.1);
             registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
 
             particles_created++;

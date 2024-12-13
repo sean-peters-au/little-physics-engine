@@ -8,7 +8,6 @@
 class ECSSimulator {
 private:
     entt::registry registry;
-
     // Particle generation functions
     void createCentralBody();
     void createKeplerianDisk();

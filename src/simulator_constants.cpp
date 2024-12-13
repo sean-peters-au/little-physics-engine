@@ -33,7 +33,7 @@ namespace SimulatorConstants {
     void initializeConstants(SimulationType type) {
         switch (type) {
             case SimulationType::CELESTIAL_GAS: {
-                MetersPerPixel = 1e7; // 1 pixel = 10 million meters
+                MetersPerPixel = 1e7;
                 UniverseSizeMeters = ScreenLength * MetersPerPixel;
                 double central_mass = 1e25;
                 double inner_orbit_radius = 100 * MetersPerPixel;  
@@ -52,7 +52,6 @@ namespace SimulatorConstants {
                 ParticleDensity = 0.1;
                 InitialVelocityFactor = 1.0;
 
-                // Configure which systems to use and their order
                 ActiveSystems = {
                     ECSSystem::BARNES_HUT,
                     ECSSystem::SPH,
@@ -64,10 +63,8 @@ namespace SimulatorConstants {
                 break;
             }
             case SimulationType::ISOTHERMAL_BOX: {
-                // A simple box of gas particles with no gravity or central body
-                MetersPerPixel = 1e6; // 1 pixel = 1 million meters
+                MetersPerPixel = 1e6;
                 UniverseSizeMeters = ScreenLength * MetersPerPixel;
-                // Time scaling: no complex orbital timescales needed
                 SecondsPerTick = 1.0 / StepsPerSecond;
                 TimeAcceleration = 1.0; 
                 GridSize = 50;
@@ -80,9 +77,8 @@ namespace SimulatorConstants {
                 CollisionCoeffRestitution = 0.5;
                 DragCoeff = 0.0;
                 ParticleDensity = 0.5;
-                InitialVelocityFactor = 0.0; // Start with no initial velocity
+                InitialVelocityFactor = 0.0;
 
-                // Configure different systems for isothermal box
                 ActiveSystems = {
                     ECSSystem::SPH,
                     ECSSystem::GRID_THERMODYNAMICS,
@@ -92,31 +88,36 @@ namespace SimulatorConstants {
                 std::cout << "Simulation constants initialized for ISOTHERMAL_BOX:\n";
                 break;
             }
-			case SimulationType::BOUNCY_BALLS: {
-				// Bouncy balls in a box
-				MetersPerPixel = 1e-2; // 1 metre = 100 pixels
-				UniverseSizeMeters = ScreenLength * MetersPerPixel;
-				SecondsPerTick = 1.0 / StepsPerSecond;
-				TimeAcceleration = 1.0; 
-				GridSize = 50;
-				CellSizePixels = static_cast<double>(ScreenLength) / GridSize;
+            case SimulationType::BOUNCY_BALLS: {
+                MetersPerPixel = 1e-2;
+                UniverseSizeMeters = ScreenLength * MetersPerPixel;
+                SecondsPerTick = 1.0 / StepsPerSecond;
+                TimeAcceleration = 1.0; 
+                GridSize = 50;
+                CellSizePixels = static_cast<double>(ScreenLength) / GridSize;
 
-				ParticleCount = 100;
-				ParticleMassMean = 1; // 1 kg
-				ParticleMassStdDev = 0.1; // 100 grams
-				GravitationalSoftener = 1e-2; // not used in basic gravity
-				CollisionCoeffRestitution = 0.5;
-				DragCoeff = 0.0;
-				ParticleDensity = 0.5;
-				InitialVelocityFactor = 1.0; // Start with no initial velocity
+                ParticleCount = 100;
+                ParticleMassMean = 1; 
+                ParticleMassStdDev = 0.1;
+                GravitationalSoftener = 1e-2;
+                CollisionCoeffRestitution = 0.5;
+                DragCoeff = 0.0;
+                ParticleDensity = 0.5;
+                InitialVelocityFactor = 1.0;
 
-				ActiveSystems = {
-					ECSSystem::BASIC_GRAVITY,
-					ECSSystem::MOVEMENT
-				};
-			}
+                ActiveSystems = {
+                    ECSSystem::COLLISION,
+                    ECSSystem::BASIC_GRAVITY,
+                    ECSSystem::MOVEMENT
+                };
+                std::cout << "Simulation constants initialized for BOUNCY_BALLS:\n";
+                break;
+            }
+            case SimulationType::SOLAR_SYSTEM:
+            case SimulationType::GALAXY:
+            case SimulationType::MOLECULAR:
             default:
-                // Default to CELESTIAL_GAS if not recognized
+                // Default to CELESTIAL_GAS
                 initializeConstants(SimulationType::CELESTIAL_GAS);
                 break;
         }
@@ -136,5 +137,30 @@ namespace SimulatorConstants {
 
     double realToSimulationTime(double seconds) {
         return seconds * TimeAcceleration / SecondsPerTick;
+    }
+
+    std::vector<SimulationType> getAllScenarios() {
+        // Add all known scenarios here. 
+        // If you add a new scenario to the enum, just add it here:
+        return {
+            SimulationType::CELESTIAL_GAS,
+            SimulationType::SOLAR_SYSTEM,
+            SimulationType::GALAXY,
+            SimulationType::MOLECULAR,
+            SimulationType::ISOTHERMAL_BOX,
+            SimulationType::BOUNCY_BALLS
+        };
+    }
+
+    std::string getScenarioName(SimulationType scenario) {
+        switch (scenario) {
+            case SimulationType::CELESTIAL_GAS: return "CELESTIAL_GAS";
+            case SimulationType::SOLAR_SYSTEM: return "SOLAR_SYSTEM";
+            case SimulationType::GALAXY: return "GALAXY";
+            case SimulationType::MOLECULAR: return "MOLECULAR";
+            case SimulationType::ISOTHERMAL_BOX: return "ISOTHERMAL_BOX";
+            case SimulationType::BOUNCY_BALLS: return "BOUNCY_BALLS";
+            default: return "UNKNOWN";
+        }
     }
 }

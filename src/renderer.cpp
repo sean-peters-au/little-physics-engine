@@ -1,19 +1,20 @@
 #include "renderer.h"
 #include "simulator_constants.h"
-#include <iostream>
 #include <sstream>
 #include <iomanip>
-#include <functional>
+#include <algorithm>
+#include <cmath>
 
-SDL_Color Renderer::densityGrayscale(const PixelProperties& props) {
+// Example color mappers (if needed)
+static sf::Color densityGrayscale(const Renderer::PixelProperties& props) {
     const double max_density = 100.0;
     uint8_t intensity = static_cast<uint8_t>(
         std::min(255.0, (props.density / max_density) * 255.0)
     );
-    return {intensity, intensity, intensity, 255};
+    return sf::Color(intensity, intensity, intensity);
 }
 
-SDL_Color Renderer::temperatureHeatmap(const PixelProperties& props) {
+static sf::Color temperatureHeatmap(const Renderer::PixelProperties& props) {
     const double max_temp = 1000.0;
     double t = std::min(1.0, props.temperature / max_temp);
 
@@ -21,52 +22,31 @@ SDL_Color Renderer::temperatureHeatmap(const PixelProperties& props) {
     uint8_t b = static_cast<uint8_t>((1.0 - t) * 255);
     uint8_t g = static_cast<uint8_t>(std::min(r, b) / 2);
 
-    return {r, g, b, 255};
+    return sf::Color(r, g, b);
 }
 
 Renderer::Renderer(int screenWidth, int screenHeight)
-    : window(nullptr)
-    , renderer(nullptr)
-    , font(nullptr)
-    , initialized(false)
-    , screenWidth(screenWidth)
-    , screenHeight(screenHeight)
+    : window(), font(), initialized(false), screenWidth(screenWidth), screenHeight(screenHeight)
 {
 }
 
 Renderer::~Renderer() {
-    if (font) {
-        TTF_CloseFont(font);
-    }
-    if (renderer) {
-        SDL_DestroyRenderer(renderer);
-    }
-    if (window) {
-        SDL_DestroyWindow(window);
-    }
-    TTF_Quit();
-    SDL_Quit();
+    // SFML automatically cleans up resources in destructors
 }
 
 bool Renderer::init() {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        std::cout << "SDL_Init Error: " << SDL_GetError() << std::endl;
+    // Create window: 600 (sim) + 200 (UI) = 800 width
+    int totalWidth = SimulatorConstants::ScreenLength + 200;
+    int totalHeight = SimulatorConstants::ScreenLength;
+
+    window.create(sf::VideoMode(totalWidth, totalHeight), "NBody Simulation (SFML)");
+    if (!window.isOpen()) {
         return false;
     }
 
-    if (TTF_Init() != 0) {
-        std::cout << "TTF_Init Error: " << SDL_GetError() << std::endl;
-        return false;
-    }
-
-    if (SDL_CreateWindowAndRenderer(screenWidth, screenHeight, 0, &window, &renderer) != 0) {
-        std::cout << "Window/Renderer creation error: " << SDL_GetError() << std::endl;
-        return false;
-    }
-
-    font = TTF_OpenFont("/System/Library/Fonts/Helvetica.ttc", 16);
-    if (!font) {
-        std::cout << "TTF_OpenFont Error: " << TTF_GetError() << std::endl;
+    // Load a font - make sure "arial.ttf" is in the working directory
+    if (!font.loadFromFile("arial.ttf")) {
+        // Attempt to load a fallback or handle error
         return false;
     }
 
@@ -75,12 +55,11 @@ bool Renderer::init() {
 }
 
 void Renderer::clear() {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
+    window.clear(sf::Color::Black);
 }
 
 void Renderer::present() {
-    SDL_RenderPresent(renderer);
+    window.display();
 }
 
 std::unordered_map<std::pair<int,int>, Renderer::PixelProperties, PixelCoordHash>
@@ -93,12 +72,16 @@ Renderer::aggregateParticlesByPixel(const entt::registry& registry) {
         int px = static_cast<int>(SimulatorConstants::metersToPixels(pos.x));
         int py = static_cast<int>(SimulatorConstants::metersToPixels(pos.y));
 
-        auto* density = registry.try_get<Components::Density>(entity);
-        auto* temp = registry.try_get<Components::Temperature>(entity);
-        auto* mass = registry.try_get<Components::Mass>(entity);
+        if (px >=0 && px < (int)SimulatorConstants::ScreenLength &&
+            py >=0 && py < (int)SimulatorConstants::ScreenLength) {
 
-        std::pair<int,int> coords(px,py);
-        pixelMap[coords].add(density, temp, mass);
+            auto* density = registry.try_get<Components::Density>(entity);
+            auto* temp = registry.try_get<Components::Temperature>(entity);
+            auto* mass = registry.try_get<Components::Mass>(entity);
+
+            std::pair<int,int> coords(px,py);
+            pixelMap[coords].add(density, temp, mass);
+        }
     }
 
     return pixelMap;
@@ -106,63 +89,146 @@ Renderer::aggregateParticlesByPixel(const entt::registry& registry) {
 
 void Renderer::renderParticles(const entt::registry& registry, ColorMapper colorMapper) {
     auto pixelMap = aggregateParticlesByPixel(registry);
-    for (const auto& [coords, props] : pixelMap) {
-        SDL_Color color = colorMapper(props);
-        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-        SDL_Rect point = { coords.first, coords.second, 1, 1 };
-        SDL_RenderFillRect(renderer, &point);
+
+    // Draw each particle as a circle with correct radius
+    auto view = registry.view<Components::Position, Components::Radius>();
+    for (auto entity : view) {
+        const auto& pos = view.get<Components::Position>(entity);
+        const auto& radius = view.get<Components::Radius>(entity);
+
+        // Convert position from meters to pixels
+        float px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
+        float py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
+        
+        // Convert radius from meters to pixels (minimum 1 pixel)
+        float radiusPixels = static_cast<float>(
+            std::max(1.0, SimulatorConstants::metersToPixels(radius.value))
+        );
+
+        // Create circle shape
+        sf::CircleShape circle(radiusPixels);
+        circle.setPosition(px - radiusPixels, py - radiusPixels); // Center the circle on the position
+        
+        // Get color based on density/temperature/etc at this position
+        std::pair<int,int> coords(static_cast<int>(px), static_cast<int>(py));
+        auto it = pixelMap.find(coords);
+        if (it != pixelMap.end()) {
+            circle.setFillColor(colorMapper(it->second));
+        } else {
+            circle.setFillColor(sf::Color::White);
+        }
+
+        window.draw(circle);
     }
+
+    // Draw UI separator line
+    sf::Vertex line[] = {
+        sf::Vertex(sf::Vector2f((float)SimulatorConstants::ScreenLength, 0.f), sf::Color::White),
+        sf::Vertex(sf::Vector2f((float)SimulatorConstants::ScreenLength, (float)screenHeight), sf::Color::White)
+    };
+    window.draw(line, 2, sf::Lines);
 }
 
 void Renderer::renderFPS(float fps) {
     std::stringstream ss;
     ss << std::fixed << std::setprecision(1) << fps << " FPS";
-    renderText(ss.str(), 10, 10, {255,255,255,255});
+    renderText(ss.str(), 10, 10, sf::Color::White);
 }
 
-void Renderer::renderText(const std::string& text, int x, int y, SDL_Color color) {
-    SDL_Surface* surface = TTF_RenderText_Solid(font, text.c_str(), color);
-    if (surface) {
-        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-        if (texture) {
-            SDL_Rect dstRect = {x, y, surface->w, surface->h};
-            SDL_RenderCopy(renderer, texture, NULL, &dstRect);
-            SDL_DestroyTexture(texture);
+void Renderer::renderText(const std::string& text, int x, int y, sf::Color color) {
+    sf::Text sfText;
+    sfText.setFont(font);
+    sfText.setString(text);
+    sfText.setCharacterSize(16);
+    sfText.setFillColor(color);
+    sfText.setPosition((float)x, (float)y);
+    window.draw(sfText);
+}
+
+void Renderer::renderUI(bool paused,
+                        SimulatorConstants::SimulationType currentScenario,
+                        const std::vector<std::pair<SimulatorConstants::SimulationType,std::string>>& scenarios,
+                        bool showPausePlayHighlight,
+                        bool showResetHighlight,
+                        SimulatorConstants::SimulationType highlightedScenario) {
+    scenarioButtons.clear();
+
+    int panelX = (int)SimulatorConstants::ScreenLength + 10;
+    int panelY = 10;
+
+    // Pause/Play button
+    std::string pauseLabel = paused ? "Play" : "Pause";
+    pausePlayButton.rect = sf::IntRect(panelX, panelY, 80, 30);
+    pausePlayButton.label = pauseLabel;
+    pausePlayButton.isSpecialButton = true;
+    pausePlayButton.scenario = currentScenario;
+
+    {
+        sf::RectangleShape btnShape(sf::Vector2f((float)pausePlayButton.rect.width, (float)pausePlayButton.rect.height));
+        btnShape.setPosition((float)pausePlayButton.rect.left, (float)pausePlayButton.rect.top);
+        if (showPausePlayHighlight) {
+            btnShape.setFillColor(sf::Color(200,200,0));
+        } else {
+            btnShape.setFillColor(sf::Color(100,100,100));
         }
-        SDL_FreeSurface(surface);
+        btnShape.setOutlineColor(sf::Color::White);
+        btnShape.setOutlineThickness(1.f);
+        window.draw(btnShape);
+        renderText(pauseLabel, panelX+5, panelY+5);
     }
-}
+    panelY += 40;
 
-void Renderer::renderUI(bool paused, SimulatorConstants::SimulationType scenario) {
-    std::string scenarioName;
-    switch (scenario) {
-        case SimulatorConstants::SimulationType::CELESTIAL_GAS:
-            scenarioName = "CELESTIAL_GAS";
-            break;
-        case SimulatorConstants::SimulationType::ISOTHERMAL_BOX:
-            scenarioName = "ISOTHERMAL_BOX";
-            break;
-        default:
-            scenarioName = "UNKNOWN";
-            break;
+    // Reset button
+    resetButton.rect = sf::IntRect(panelX, panelY, 80, 30);
+    resetButton.label = "Reset";
+    resetButton.isSpecialButton = true;
+    resetButton.scenario = currentScenario;
+
+    {
+        sf::RectangleShape btnShape(sf::Vector2f((float)resetButton.rect.width, (float)resetButton.rect.height));
+        btnShape.setPosition((float)resetButton.rect.left, (float)resetButton.rect.top);
+        if (showResetHighlight) {
+            btnShape.setFillColor(sf::Color(200,200,0));
+        } else {
+            btnShape.setFillColor(sf::Color(100,100,100));
+        }
+        btnShape.setOutlineColor(sf::Color::White);
+        btnShape.setOutlineThickness(1.f);
+        window.draw(btnShape);
+        renderText("Reset", panelX+5, panelY+5);
     }
+    panelY += 50;
 
-    std::string stateText = "Scenario: " + scenarioName + (paused ? " [PAUSED]" : " [RUNNING]");
-    renderText(stateText, 10, 30, {255,255,255,255});
+    renderText("Scenarios:", panelX, panelY, sf::Color::White);
+    panelY += 20;
 
-    std::string instructions =
-        "Controls:\n"
-        "P: Pause/Play\n"
-        "R: Reset\n"
-        "1: CELESTIAL_GAS\n"
-        "2: ISOTHERMAL_BOX\n"
-        "3: BOUNCY_BALLS";
+    for (auto& sc : scenarios) {
+        UIButton btn;
+        btn.rect = sf::IntRect(panelX, panelY, 150, 30);
+        btn.label = sc.second;
+        btn.scenario = sc.first;
+        btn.isSpecialButton = false;
 
-    int line_y = 50;
-    std::stringstream instr(instructions);
-    std::string line;
-    while (std::getline(instr, line)) {
-        renderText(line, 10, line_y, {255,255,255,255});
-        line_y += 20;
+        bool isCurrent = (sc.first == currentScenario);
+        bool isHover = (sc.first == highlightedScenario);
+
+        sf::RectangleShape btnShape(sf::Vector2f((float)btn.rect.width, (float)btn.rect.height));
+        btnShape.setPosition((float)btn.rect.left, (float)btn.rect.top);
+
+        if (isCurrent) {
+            btnShape.setFillColor(sf::Color(0,200,0));
+        } else if (isHover) {
+            btnShape.setFillColor(sf::Color(200,200,0));
+        } else {
+            btnShape.setFillColor(sf::Color(100,100,100));
+        }
+
+        btnShape.setOutlineColor(sf::Color::White);
+        btnShape.setOutlineThickness(1.f);
+        window.draw(btnShape);
+        renderText(btn.label, panelX+5, panelY+5);
+
+        panelY += 40;
+        scenarioButtons.push_back(btn);
     }
 }

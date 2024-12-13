@@ -34,6 +34,11 @@ namespace Components {
         explicit Mass(double v = 0.0) : value(v) {}
     };
 
+    struct Radius {
+        double value;
+        explicit Radius(double v = 0.0) : value(v) {}
+    };
+
     struct Temperature {
         double value;
         explicit Temperature(double v = 0.0) : value(v) {}
