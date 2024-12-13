@@ -8,24 +8,72 @@
 #include <cmath>
 #include <iostream>
 
-ECSSimulator::ECSSimulator() {}
+ECSSimulator::ECSSimulator() : currentScenario(SimulatorConstants::SimulationType::CELESTIAL_GAS) {}
 
-ECSSimulator::ECSSimulator(CoordinateSystem* /*coordSystem*/) {}
+ECSSimulator::ECSSimulator(CoordinateSystem* /*coordSystem*/)
+    : currentScenario(SimulatorConstants::SimulationType::CELESTIAL_GAS) {}
+
+void ECSSimulator::setScenario(SimulatorConstants::SimulationType scenario) {
+    currentScenario = scenario;
+}
+
+void ECSSimulator::reset() {
+    registry.clear();
+    SimulatorConstants::initializeConstants(currentScenario);
+    init();
+}
 
 void ECSSimulator::init() {
-    createCentralBody();
-    createKeplerianDisk();
+    registry.clear(); 
+    // Initialize scenario
+    switch (currentScenario) {
+        case SimulatorConstants::SimulationType::CELESTIAL_GAS:
+            // Create a central body + keplerian disk
+            createCentralBody();
+            createKeplerianDisk();
+            break;
+        case SimulatorConstants::SimulationType::ISOTHERMAL_BOX:
+            createIsothermalBox();
+            break;
+        default:
+            // Fallback
+            createIsothermalBox();
+            break;
+    }
+}
+
+void ECSSimulator::tick() {
+    // Run systems in the order specified by ActiveSystems
+    for (const auto& system : SimulatorConstants::ActiveSystems) {
+        switch (system) {
+            case SimulatorConstants::ECSSystem::BASIC_GRAVITY:
+                Systems::BasicGravitySystem::update(registry);
+                break;
+            case SimulatorConstants::ECSSystem::BARNES_HUT:
+                Systems::BarnesHutSystem::update(registry);
+                break;
+            case SimulatorConstants::ECSSystem::SPH:
+                Systems::SPHSystem::update(registry);
+                break;
+            case SimulatorConstants::ECSSystem::GRID_THERMODYNAMICS:
+                Systems::GridThermodynamicsSystem::update(registry);
+                break;
+            case SimulatorConstants::ECSSystem::MOVEMENT:
+                Systems::MovementSystem::update(registry);
+                break;
+        }
+    }
 }
 
 void ECSSimulator::createCentralBody() {
     auto center = registry.create();
-    // Convert center from pixels to meters
     double center_x_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
     double center_y_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
-    
+
     registry.emplace<Components::Position>(center, center_x_m, center_y_m);
     registry.emplace<Components::Velocity>(center, 0.0, 0.0);
     registry.emplace<Components::Mass>(center, SimulatorConstants::ParticleMassMean * 100.0);
+    registry.emplace<Components::ParticlePhase>(center, Components::Phase::Solid);
 }
 
 double ECSSimulator::calculateKeplerianVelocity(double radius_meters, double central_mass) const {
@@ -33,35 +81,26 @@ double ECSSimulator::calculateKeplerianVelocity(double radius_meters, double cen
 }
 
 double ECSSimulator::calculateDiskHeight(double radius, double /*max_radius*/) const {
-    // Disk height follows h ∝ r^(5/4) for typical accretion disks
-    // Scale it so the height at the inner radius is 1/20 of the radius
-    // and increases outward according to the power law
-    const double inner_radius = 100.0;  // pixels
+    const double inner_radius = 100.0;
     const double height_scale = inner_radius / 20.0;
     return height_scale * std::pow(radius / inner_radius, 5.0/4.0);
 }
 
 double ECSSimulator::calculateDiskDensity(double radius, double /*max_radius*/) const {
-    // Surface density follows Σ ∝ r^(-15/8) for typical accretion disks
-    // Normalize so density at inner radius is 1.0
-    const double inner_radius = 100.0;  // pixels
+    const double inner_radius = 100.0; 
     return std::pow(inner_radius / radius, 15.0/8.0);
 }
 
 void ECSSimulator::createKeplerianDisk() {
     std::default_random_engine generator{static_cast<unsigned int>(time(0))};
-
-    // Physical center
     double center_x_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
     double center_y_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
 
     double min_radius_pixels = 100.0;
-    double min_radius_m = SimulatorConstants::pixelsToMeters(min_radius_pixels);
     double max_radius_pixels = SimulatorConstants::ScreenLength / 2.5;
-    double max_radius_m = SimulatorConstants::pixelsToMeters(max_radius_pixels);
+    double min_radius_m = SimulatorConstants::pixelsToMeters(min_radius_pixels);
 
     double central_mass = SimulatorConstants::ParticleMassMean * 100.0;
-
     std::uniform_real_distribution<> angle_dist(0, 2 * SimulatorConstants::Pi);
 
     int particles_created = 0;
@@ -72,8 +111,6 @@ void ECSSimulator::createKeplerianDisk() {
             std::uniform_real_distribution<> radius_dist(min_radius_pixels, max_radius_pixels);
             radius_pixels = radius_dist(generator);
             radius_meters = SimulatorConstants::pixelsToMeters(radius_pixels);
-            double density_ratio = calculateDiskDensity(radius_pixels, max_radius_pixels);
-            
             std::uniform_real_distribution<> density_dist(0, 1);
             density_threshold = density_dist(generator);
         } while (density_threshold > calculateDiskDensity(radius_pixels, max_radius_pixels));
@@ -88,24 +125,19 @@ void ECSSimulator::createKeplerianDisk() {
         double x_m = center_x_m + radius_meters * cos(angle);
         double y_m = center_y_m + radius_meters * sin(angle) + height_offset_m;
 
-        // Base orbital velocity in m/s
         double base_velocity_m_s = calculateKeplerianVelocity(radius_meters, central_mass);
 
-        // Add small random variation
         std::normal_distribution<> vel_variation(1.0, 0.01);
         double speed_m_s = base_velocity_m_s * vel_variation(generator);
 
-        // Tangential velocity (in m/s)
         double vx_m_s = -speed_m_s * sin(angle);
         double vy_m_s = speed_m_s * cos(angle);
 
-        // Radial perturbation
         std::normal_distribution<> radial_vel_dist(0.0, speed_m_s * 0.001);
         double radial_vel = radial_vel_dist(generator);
         vx_m_s += radial_vel * cos(angle);
         vy_m_s += radial_vel * sin(angle);
 
-        // Create particle
         auto entity = registry.create();
         registry.emplace<Components::Position>(entity, x_m, y_m);
         registry.emplace<Components::Velocity>(entity, vx_m_s, vy_m_s);
@@ -120,16 +152,28 @@ void ECSSimulator::createKeplerianDisk() {
     }
 }
 
-void ECSSimulator::tick() {
-    // First calculate gravitational forces using Barnes-Hut
-    Systems::BarnesHutSystem::update(registry);
+void ECSSimulator::createIsothermalBox() {
+    std::default_random_engine generator{static_cast<unsigned int>(time(0))};
+    double box_size = SimulatorConstants::UniverseSizeMeters;
+    double spacing = box_size / std::sqrt(SimulatorConstants::ParticleCount);
 
-    // Then apply SPH forces
-    Systems::SPHSystem::update(registry);
+    double mass_mean = SimulatorConstants::ParticleMassMean;
+    std::normal_distribution<> mass_dist(mass_mean, mass_mean * 0.1);
 
-    // Then apply local thermodynamic effects using the grid system
-    Systems::GridThermodynamicsSystem::update(registry);
-    
-    // Finally update positions
-    Systems::MovementSystem::update(registry);
-} 
+    int particles = 0;
+    for (int i = 0; i < static_cast<int>(std::sqrt(SimulatorConstants::ParticleCount)); i++) {
+        for (int j = 0; j < static_cast<int>(std::sqrt(SimulatorConstants::ParticleCount)); j++) {
+            double x_m = i * spacing + spacing*0.5;
+            double y_m = j * spacing + spacing*0.5;
+            if (x_m < box_size && y_m < box_size) {
+                auto entity = registry.create();
+                registry.emplace<Components::Position>(entity, x_m, y_m);
+                registry.emplace<Components::Velocity>(entity, 0.0, 0.0);
+                registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Gas);
+                registry.emplace<Components::Mass>(entity, mass_dist(generator));
+                particles++;
+                if (particles >= SimulatorConstants::ParticleCount) return;
+            }
+        }
+    }
+}

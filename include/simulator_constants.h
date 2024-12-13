@@ -1,58 +1,56 @@
 #ifndef SIMULATOR_CONSTANTS_H
 #define SIMULATOR_CONSTANTS_H
 
+#include <vector>
 namespace SimulatorConstants {
-	// Simulation types for different physical scenarios
-	enum class SimulationType {
-		CELESTIAL_GAS,    // Gas-to-planet formation (e.g., proto-Jupiter)
-		SOLAR_SYSTEM,     // Planetary orbits
-		GALAXY,           // Galactic rotation
-		MOLECULAR         // Molecular dynamics
-	};
+    enum class SimulationType {
+        CELESTIAL_GAS,    // Gas-to-planet formation (e.g., proto-Jupiter)
+        SOLAR_SYSTEM,     // Planetary orbits (not currently implemented)
+        GALAXY,           // Galactic rotation (not currently implemented)
+        MOLECULAR,        // Molecular dynamics (not currently implemented)
+        ISOTHERMAL_BOX    // A simple uniform box of gas for testing SPH
+    };
 
-	// Universal constants (truly constant)
-	extern const double Pi;
-	extern const double RealG;  // Real gravitational constant 6.674e-11
+    enum class ECSSystem {
+        BASIC_GRAVITY,
+        BARNES_HUT,
+        SPH,
+        GRID_THERMODYNAMICS,
+        MOVEMENT
+    };
 
-	// Universe size in meters
-	extern double UniverseSizeMeters;
+    extern const double Pi;
+    extern const double RealG;  // Real gravitational constant 6.674e-11
 
-	// Time acceleration factor (how much faster than real time)
-	extern double TimeAcceleration;
-	
-	// Conversion factors
-	extern double MetersPerPixel;     // How many meters one pixel represents
-	extern double SecondsPerTick;     // How many real seconds each simulation tick represents
+    extern double UniverseSizeMeters;
+    extern double TimeAcceleration;
+    extern double MetersPerPixel;
+    extern double SecondsPerTick;
+    extern double GravitationalSoftener;
+    extern double CollisionCoeffRestitution;
+    extern double DragCoeff;
+    extern double ParticleDensity;
 
-	// Simulation parameters
-	extern double GravitationalSoftener;
-	extern double CollisionCoeffRestitution;
-	extern double DragCoeff;
-	extern double ParticleDensity;
+    extern int GridSize;
+    extern double CellSizePixels;
 
-	// Grid parameters
-	extern int GridSize;              // Number of cells in each dimension
-	extern double CellSizePixels;     // Size of each grid cell in pixels
+    extern int ParticleCount;
+    extern double ParticleMassMean;
+    extern double ParticleMassStdDev;
+    extern double InitialVelocityFactor;
 
-	// Particle generation
-	extern int ParticleCount;
-	extern double ParticleMassMean;
-	extern double ParticleMassStdDev;
-	extern double InitialVelocityFactor;  // Multiplier for calculated orbital velocities
+    extern const unsigned int ScreenLength;
+    extern const unsigned int StepsPerSecond;
+    extern const unsigned int Threads;
 
-	// Display settings (truly constant)
-	extern const unsigned int ScreenLength;
-	extern const unsigned int StepsPerSecond;
-	extern const unsigned int Threads;
+    extern std::vector<ECSSystem> ActiveSystems;
 
-	// Initialize constants for a specific simulation type
-	void initializeConstants(SimulationType type);
+    void initializeConstants(SimulationType type);
 
-	// Helper functions to convert between simulation and real units
-	double pixelsToMeters(double pixels);
-	double metersToPixels(double meters);
-	double simulationToRealTime(double ticks);
-	double realToSimulationTime(double seconds);
+    double pixelsToMeters(double pixels);
+    double metersToPixels(double meters);
+    double simulationToRealTime(double ticks);
+    double realToSimulationTime(double seconds);
 }
 
 #endif
