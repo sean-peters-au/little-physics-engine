@@ -6,19 +6,16 @@
 #include <vector>
 #include <memory>
 
-// A Quadtree for broad-phase collision detection.
-// Each node covers a square region of space and stores particles if under capacity.
-// If it exceeds capacity, it subdivides into four children and distributes particles among them.
-
 namespace Systems {
 
 struct ParticleInfo {
     entt::entity entity;
     double x, y;
-    double radius;
+    Components::ShapeType type;
+    double size; // radius if circle, half-size if square
 };
 
-// Quadtree node
+// Quadtree node (unchanged)
 struct QuadNode {
     double x, y;       // top-left corner of the node
     double size;       // length of the node's side
@@ -48,26 +45,21 @@ struct QuadNode {
     }
 
     void insert(const ParticleInfo &p) {
-        // If this node doesn't contain the particle, skip
         if (!contains(p.x, p.y)) return;
 
-        // If leaf and not full, store here
         if (is_leaf && (int)particles.size() < capacity) {
             particles.push_back(p);
             return;
         }
 
-        // If leaf but full, subdivide and redistribute
         if (is_leaf) {
             subdivide();
-            // Move existing particles down
             for (auto &part : particles) {
                 insertIntoChild(part);
             }
             particles.clear();
         }
 
-        // Insert new particle into a child
         insertIntoChild(p);
     }
 
@@ -76,18 +68,11 @@ struct QuadNode {
         else if (ne->contains(p.x, p.y)) ne->insert(p);
         else if (sw->contains(p.x, p.y)) sw->insert(p);
         else if (se->contains(p.x, p.y)) se->insert(p);
-        else {
-            // Should not happen if boundaries match the universe and insert calls are correct
-            // If it does, consider fallback to store in parent node or handle boundaries carefully.
-        }
     }
 
-    // Query all particles in this node and descendants that lie within the query region
     void query(double qx, double qy, double qsize, std::vector<ParticleInfo>& found) const {
-        // Check for overlap
         if (!overlaps(qx, qy, qsize)) return;
 
-        // If leaf, check these particles
         if (is_leaf) {
             for (auto &part : particles) {
                 if (part.x >= qx && part.x <= qx + qsize && 
@@ -98,7 +83,6 @@ struct QuadNode {
             return;
         }
 
-        // Check children
         nw->query(qx, qy, qsize, found);
         ne->query(qx, qy, qsize, found);
         sw->query(qx, qy, qsize, found);
@@ -111,15 +95,112 @@ struct QuadNode {
     }
 };
 
-// Collision handling functions (unchanged logic from before, but could be improved)
-static void handleSolidSolidCollision(
-    Components::Position& posA, Components::Velocity& velA, const Components::Mass& massA,
-    Components::Position& posB, Components::Velocity& velB, const Components::Mass& massB,
-    double dx, double dy, double dist, double min_dist)
+// Helper functions for shape collisions
+static bool circleCircleCollision(double xA, double yA, double rA,
+                                  double xB, double yB, double rB,
+                                  double &dx, double &dy, double &dist, double &min_dist) {
+    dx = xB - xA;
+    dy = yB - yA;
+    double dist_sq = dx*dx + dy*dy;
+    min_dist = rA + rB;
+    if (dist_sq < (min_dist * min_dist)) {
+        dist = std::sqrt(dist_sq);
+        if (dist < 1e-9) dist = min_dist;
+        return true;
+    }
+    return false;
+}
+
+static bool squareSquareCollision(double xA, double yA, double halfA,
+                                  double xB, double yB, double halfB,
+                                  double &dx, double &dy, double &dist, double &min_dist) {
+    // Squares are axis-aligned. Check overlap in x and y
+    double leftA = xA - halfA;
+    double rightA = xA + halfA;
+    double topA = yA - halfA;
+    double bottomA = yA + halfA;
+
+    double leftB = xB - halfB;
+    double rightB = xB + halfB;
+    double topB = yB - halfB;
+    double bottomB = yB + halfB;
+
+    // Overlap in x?
+    if (rightA < leftB || leftA > rightB) return false;
+    // Overlap in y?
+    if (bottomA < topB || topA > bottomB) return false;
+
+    // If overlapping, find smallest overlap direction
+    double overlapX = std::min(rightA, rightB) - std::max(leftA, leftB);
+    double overlapY = std::min(bottomA, bottomB) - std::max(topA, topB);
+
+    // Use the smaller overlap to define penetration
+    if (overlapX < overlapY) {
+        // Push apart in x
+        dx = (xB > xA) ? overlapX : -overlapX;
+        dy = 0.0;
+        dist = std::fabs(dx);
+        min_dist = dist; // no radius concept here
+    } else {
+        dx = 0.0;
+        dy = (yB > yA) ? overlapY : -overlapY;
+        dist = std::fabs(dy);
+        min_dist = dist;
+    }
+
+    return true;
+}
+
+static bool circleSquareCollision(double xC, double yC, double r,
+                                  double xS, double yS, double halfS,
+                                  double &dx, double &dy, double &dist, double &min_dist) {
+    // Closest point on the square to the circle center
+    double left = xS - halfS;
+    double right = xS + halfS;
+    double top = yS - halfS;
+    double bottom = yS + halfS;
+
+    double closestX = (xC < left) ? left : (xC > right ? right : xC);
+    double closestY = (yC < top) ? top : (yC > bottom ? bottom : yC);
+
+    dx = closestX - xC;
+    dy = closestY - yC;
+    double dist_sq = dx*dx + dy*dy;
+    if (dist_sq < r*r) {
+        dist = std::sqrt(dist_sq);
+        if (dist < 1e-9) dist = r;
+        min_dist = r; // the circle radius defines the min_dist
+        return true;
+    }
+    return false;
+}
+
+// Collision resolution functions
+// We'll modify them to accept dx, dy, dist, min_dist directly, since we computed them above.
+
+static void resolveCollision(Components::Position& posA, Components::Velocity& velA, const Components::Mass& massA,
+                             Components::Position& posB, Components::Velocity& velB, const Components::Mass& massB,
+                             Components::Phase phaseA, Components::Phase phaseB,
+                             double dx, double dy, double dist, double min_dist) 
 {
-    double restitution = 0.9;
-    double nx = dx / dist;
-    double ny = dy / dist;
+    // Determine restitution based on phase
+    double restitution;
+    if (phaseA == Components::Phase::Solid && phaseB == Components::Phase::Solid) {
+        restitution = 0.9;
+    } else if (phaseA == Components::Phase::Gas && phaseB == Components::Phase::Gas) {
+        restitution = 0.1;
+    } else {
+        // For mixed phases or liquid-liquid, just use a middle ground
+        restitution = 0.5;
+    }
+
+    double nx, ny;
+    if (dist > 1e-9) {
+        nx = dx / dist;
+        ny = dy / dist;
+    } else {
+        nx = 1.0; ny = 0.0; 
+    }
 
     double relvx = velB.x - velA.x;
     double relvy = velB.y - velA.y;
@@ -146,131 +227,24 @@ static void handleSolidSolidCollision(
     }
 }
 
-// Other handlers can remain the same as previously. For brevity, we just show the same structure:
-static void handleSolidLiquidCollision(
-    Components::Position& posA, Components::Velocity& /*velA*/, const Components::Mass& massA, Components::Phase /*phaseA*/,
-    Components::Position& posB, Components::Velocity& /*velB*/, const Components::Mass& /*massB*/, Components::Phase /*phaseB*/,
-    double dx, double dy, double dist, double min_dist)
-{
-    double nx = dx / dist;
-    double ny = dy / dist;
-    double penetration = min_dist - dist;
-    posA.x -= 0.5 * penetration * nx;
-    posA.y -= 0.5 * penetration * ny;
-    posB.x += 0.5 * penetration * nx;
-    posB.y += 0.5 * penetration * ny;
-}
-
-static void handleLiquidLiquidCollision(
-    Components::Position& posA, Components::Velocity& /*velA*/, const Components::Mass& /*massA*/,
-    Components::Position& posB, Components::Velocity& /*velB*/, const Components::Mass& /*massB*/,
-    double dx, double dy, double dist, double min_dist)
-{
-    double nx = dx / dist;
-    double ny = dy / dist;
-    double penetration = min_dist - dist;
-    posA.x -= 0.5 * penetration * nx;
-    posA.y -= 0.5 * penetration * ny;
-    posB.x += 0.5 * penetration * nx;
-    posB.y += 0.5 * penetration * ny;
-}
-
-static void handleGasGasCollision(
-    Components::Position& posA, Components::Velocity& velA, const Components::Mass& massA,
-    Components::Position& posB, Components::Velocity& velB, const Components::Mass& massB,
-    double dx, double dy, double dist, double min_dist)
-{
-    double restitution = 0.1;
-    double nx = dx / dist;
-    double ny = dy / dist;
-
-    double relvx = velB.x - velA.x;
-    double relvy = velB.y - velA.y;
-    double relative_speed = relvx * nx + relvy * ny;
-
-    if (relative_speed < 0) {
-        double invMassA = 1.0 / massA.value;
-        double invMassB = 1.0 / massB.value;
-        double invMassSum = invMassA + invMassB;
-
-        double impulse = -(1.0 + restitution)*relative_speed / invMassSum;
-
-        velA.x -= (impulse * invMassA) * nx;
-        velA.y -= (impulse * invMassA) * ny;
-        velB.x += (impulse * invMassB) * nx;
-        velB.y += (impulse * invMassB) * ny;
-    }
-}
-
-static void handleSolidGasCollision(
-    Components::Position& posA, Components::Velocity& velA, const Components::Mass& massA, Components::Phase /*phaseA*/,
-    Components::Position& posB, Components::Velocity& velB, const Components::Mass& massB, Components::Phase /*phaseB*/,
-    double dx, double dy, double dist, double min_dist)
-{
-    // For now, treat solid-gas like gas-gas
-    handleGasGasCollision(posA, velA, massA, posB, velB, massB, dx, dy, dist, min_dist);
-}
-
-static void handleLiquidGasCollision(
-    Components::Position& posA, Components::Velocity& /*velA*/, const Components::Mass& /*massA*/, Components::Phase /*phaseA*/,
-    Components::Position& posB, Components::Velocity& /*velB*/, const Components::Mass& /*massB*/, Components::Phase /*phaseB*/,
-    double dx, double dy, double dist, double min_dist)
-{
-    double nx = dx / dist;
-    double ny = dy / dist;
-    double penetration = min_dist - dist;
-    posA.x -= 0.5 * penetration * nx;
-    posA.y -= 0.5 * penetration * ny;
-    posB.x += 0.5 * penetration * nx;
-    posB.y += 0.5 * penetration * ny;
-}
-
-static void handleCollisionByPhase(
-    Components::Position& posA, Components::Velocity& velA, const Components::Mass& massA, Components::Phase phaseA,
-    Components::Position& posB, Components::Velocity& velB, const Components::Mass& massB, Components::Phase phaseB,
-    double dx, double dy, double dist, double min_dist)
-{
-    if (phaseA == Components::Phase::Solid && phaseB == Components::Phase::Solid) {
-        handleSolidSolidCollision(posA, velA, massA, posB, velB, massB, dx, dy, dist, min_dist);
-    } else if ((phaseA == Components::Phase::Solid && phaseB == Components::Phase::Liquid) ||
-               (phaseA == Components::Phase::Liquid && phaseB == Components::Phase::Solid)) {
-        handleSolidLiquidCollision(posA, velA, massA, phaseA, posB, velB, massB, phaseB, dx, dy, dist, min_dist);
-    } else if (phaseA == Components::Phase::Liquid && phaseB == Components::Phase::Liquid) {
-        handleLiquidLiquidCollision(posA, velA, massA, posB, velB, massB, dx, dy, dist, min_dist);
-    } else if (phaseA == Components::Phase::Gas && phaseB == Components::Phase::Gas) {
-        handleGasGasCollision(posA, velA, massA, posB, velB, massB, dx, dy, dist, min_dist);
-    } else if ((phaseA == Components::Phase::Solid && phaseB == Components::Phase::Gas) ||
-               (phaseA == Components::Phase::Gas && phaseB == Components::Phase::Solid)) {
-        handleSolidGasCollision(posA, velA, massA, phaseA, posB, velB, massB, phaseB, dx, dy, dist, min_dist);
-    } else if ((phaseA == Components::Phase::Liquid && phaseB == Components::Phase::Gas) ||
-               (phaseA == Components::Phase::Gas && phaseB == Components::Phase::Liquid)) {
-        handleLiquidGasCollision(posA, velA, massA, phaseA, posB, velB, massB, phaseB, dx, dy, dist, min_dist);
-    }
-}
-
 // Build the quadtree from all particles
 static std::unique_ptr<QuadNode> buildQuadtree(entt::registry& registry) {
-    // Universe boundaries: 0 to UniverseSizeMeters
     double size = SimulatorConstants::UniverseSizeMeters;
-    int capacity = 8; // max particles per node before subdividing
+    int capacity = 8; 
     auto root = std::make_unique<QuadNode>(0.0, 0.0, size, capacity);
 
-    auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
+    auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase, Components::Shape>();
     for (auto entity : view) {
         auto &pos = view.get<Components::Position>(entity);
-
-        double r = 0.0;
-        if (auto radiusComp = registry.try_get<Components::Radius>(entity)) {
-            r = radiusComp->value;
-        }
+        auto &shape = view.get<Components::Shape>(entity);
 
         ParticleInfo pinfo;
         pinfo.entity = entity;
         pinfo.x = pos.x;
         pinfo.y = pos.y;
-        pinfo.radius = r;
+        pinfo.type = shape.type;
+        pinfo.size = shape.size;
 
-        // Insert into quadtree if within bounds
         if (pinfo.x >= 0 && pinfo.x < size && pinfo.y >= 0 && pinfo.y < size) {
             root->insert(pinfo);
         }
@@ -280,64 +254,79 @@ static std::unique_ptr<QuadNode> buildQuadtree(entt::registry& registry) {
 }
 
 static void resolveCollisions(entt::registry& registry, QuadNode* root) {
-    auto view = registry.view<Components::Position, Components::Velocity, Components::Mass, Components::ParticlePhase>();
+    auto view = registry.view<Components::Position, Components::Velocity, Components::Mass, Components::ParticlePhase, Components::Shape>();
 
-    // For each particle, query neighbors from the quadtree
     for (auto entity : view) {
-        auto &pos = view.get<Components::Position>(entity);
-        auto &vel = view.get<Components::Velocity>(entity);
-        auto &mass = view.get<Components::Mass>(entity);
-        auto &phase = view.get<Components::ParticlePhase>(entity);
+        auto &posA = view.get<Components::Position>(entity);
+        auto &velA = view.get<Components::Velocity>(entity);
+        auto &massA = view.get<Components::Mass>(entity);
+        auto &phaseA = view.get<Components::ParticlePhase>(entity);
+        auto &shapeA = view.get<Components::Shape>(entity);
 
-        double rA = 0.0;
-        if (auto radiusA = registry.try_get<Components::Radius>(entity)) {
-            rA = radiusA->value;
-        }
-
-        // Query region based on particle radius
-        double query_size = (rA * 2.0) * 2.0; // a bit larger region
-        // To ensure we find all candidates, we might need a safe margin
-        // We'll just pick a small region around the particle: 
-        double qx = pos.x - query_size*0.5;
-        double qy = pos.y - query_size*0.5;
+        double query_size = (shapeA.type == Components::ShapeType::Circle) ? (shapeA.size*4.0) : (shapeA.size*4.0);
+        double qx = posA.x - query_size*0.5;
+        double qy = posA.y - query_size*0.5;
 
         std::vector<ParticleInfo> candidates;
         root->query(qx, qy, query_size, candidates);
 
-        // Check collisions with candidates
         for (auto &candidate : candidates) {
             if (candidate.entity == entity) continue; // skip self
 
-            // Retrieve other particle data
             auto &posB = registry.get<Components::Position>(candidate.entity);
             auto &velB = registry.get<Components::Velocity>(candidate.entity);
             auto &massB = registry.get<Components::Mass>(candidate.entity);
             auto &phaseB = registry.get<Components::ParticlePhase>(candidate.entity);
+            auto &shapeB = registry.get<Components::Shape>(candidate.entity);
 
-            double rB = candidate.radius;
-            double combined_radius = rA + rB;
-            if (combined_radius <= 0.0) continue;
+            double dx, dy, dist, min_dist;
+            bool collided = false;
 
-            double dx = posB.x - pos.x;
-            double dy = posB.y - pos.y;
-            double dist_sq = dx*dx + dy*dy;
+            if (shapeA.type == Components::ShapeType::Circle && shapeB.type == Components::ShapeType::Circle) {
+                // circle-circle
+                collided = circleCircleCollision(posA.x, posA.y, shapeA.size, posB.x, posB.y, shapeB.size,
+                                                 dx, dy, dist, min_dist);
+            } else if (shapeA.type == Components::ShapeType::Square && shapeB.type == Components::ShapeType::Square) {
+                // square-square
+                // We don't have a radius-dist concept. We'll just get dx,dy from overlap
+                collided = squareSquareCollision(posA.x, posA.y, shapeA.size,
+                                                 posB.x, posB.y, shapeB.size,
+                                                 dx, dy, dist, min_dist);
+            } else {
+                // circle-square or square-circle
+                // order doesn't matter, just check both ways
+                if (shapeA.type == Components::ShapeType::Circle && shapeB.type == Components::ShapeType::Square) {
+                    collided = circleSquareCollision(posA.x, posA.y, shapeA.size,
+                                                      posB.x, posB.y, shapeB.size,
+                                                      dx, dy, dist, min_dist);
+                    // dx, dy points from circle center to closest point on square, 
+                    // we want it to serve as our normal direction
+                    // It's fine as is for resolving collision.
+                } else {
+                    // square-circle: just swap roles
+                    collided = circleSquareCollision(posB.x, posB.y, shapeB.size,
+                                                      posA.x, posA.y, shapeA.size,
+                                                      dx, dy, dist, min_dist);
+                    // This returns dx,dy from B->A perspective since we swapped roles
+                    // Invert dx, dy to keep consistent perspective (from A to B)
+                    dx = -dx;
+                    dy = -dy;
+                }
+            }
 
-            if (dist_sq < (combined_radius * combined_radius)) {
-                double dist = std::sqrt(dist_sq);
-                if (dist < 1e-9) dist = combined_radius; // avoid div by zero
-                handleCollisionByPhase(pos, vel, mass, phase.phase,
-                                       posB, velB, massB, phaseB.phase,
-                                       dx, dy, dist, combined_radius);
+            if (collided) {
+                // Resolve collision
+                resolveCollision(posA, velA, massA,
+                                 posB, velB, massB,
+                                 phaseA.phase, phaseB.phase,
+                                 dx, dy, dist, min_dist);
             }
         }
     }
 }
 
 void CollisionSystem::update(entt::registry& registry) {
-    // Build quadtree from current particle distribution
     auto root = buildQuadtree(registry);
-
-    // Broad-phase query and collision resolution
     resolveCollisions(registry, root.get());
 }
 

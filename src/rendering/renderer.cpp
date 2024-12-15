@@ -1,5 +1,6 @@
 #include "nbody/rendering/renderer.hpp"
 #include "nbody/core/constants.hpp"
+#include "nbody/components/basic.hpp"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -38,7 +39,6 @@ Renderer::~Renderer() {
 bool Renderer::init() {
     window.create(sf::VideoMode(screenWidth, screenHeight), "N-Body Simulator");
     
-    // Update font path to look in assets/fonts directory
     if (!font.loadFromFile("assets/fonts/arial.ttf")) {
         std::cout << "Failed to load font \"assets/fonts/arial.ttf\"" << std::endl;
         return false;
@@ -84,38 +84,41 @@ Renderer::aggregateParticlesByPixel(const entt::registry& registry) {
 void Renderer::renderParticles(const entt::registry& registry, ColorMapper colorMapper) {
     auto pixelMap = aggregateParticlesByPixel(registry);
 
-    // Draw each particle as a circle with correct radius
-    auto view = registry.view<Components::Position, Components::Radius>();
+    auto view = registry.view<Components::Position, Components::Shape>();
     for (auto entity : view) {
         const auto& pos = view.get<Components::Position>(entity);
-        const auto& radius = view.get<Components::Radius>(entity);
+        const auto& shape = view.get<Components::Shape>(entity);
 
-        // Convert position from meters to pixels
         float px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
         float py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
-        
-        // Convert radius from meters to pixels (minimum 1 pixel)
-        float radiusPixels = static_cast<float>(
-            std::max(1.0, SimulatorConstants::metersToPixels(radius.value))
-        );
 
-        // Create circle shape
-        sf::CircleShape circle(radiusPixels);
-        circle.setPosition(px - radiusPixels, py - radiusPixels); // Center the circle on the position
-        
-        // Get color based on density/temperature/etc at this position
+        // Determine color
         std::pair<int,int> coords(static_cast<int>(px), static_cast<int>(py));
+        sf::Color c = sf::Color::White;
         auto it = pixelMap.find(coords);
         if (it != pixelMap.end()) {
-            circle.setFillColor(colorMapper(it->second));
-        } else {
-            circle.setFillColor(sf::Color::White);
+            c = colorMapper(it->second);
         }
 
-        window.draw(circle);
+        if (shape.type == Components::ShapeType::Circle) {
+            // size = radius
+            float radiusPixels = static_cast<float>(std::max(1.0, SimulatorConstants::metersToPixels(shape.size)));
+            sf::CircleShape circle(radiusPixels);
+            circle.setPosition(px - radiusPixels, py - radiusPixels); 
+            circle.setFillColor(c);
+            window.draw(circle);
+        } else {
+            // Square
+            // size = half side length
+            float halfSidePx = static_cast<float>(SimulatorConstants::metersToPixels(shape.size));
+            float sidePx = halfSidePx * 2.0f;
+            sf::RectangleShape rect(sf::Vector2f(sidePx, sidePx));
+            rect.setPosition(px - halfSidePx, py - halfSidePx);
+            rect.setFillColor(c);
+            window.draw(rect);
+        }
     }
 
-    // Draw UI separator line
     sf::Vertex line[] = {
         sf::Vertex(sf::Vector2f((float)SimulatorConstants::ScreenLength, 0.f), sf::Color::White),
         sf::Vertex(sf::Vector2f((float)SimulatorConstants::ScreenLength, (float)screenHeight), sf::Color::White)

@@ -9,6 +9,7 @@
 #include <random>
 #include <cmath>
 #include <iostream>
+#include "nbody/components/basic.hpp"
 
 ECSSimulator::ECSSimulator() : currentScenario(SimulatorConstants::SimulationType::CELESTIAL_GAS) {}
 
@@ -82,6 +83,8 @@ void ECSSimulator::createCentralBody() {
     registry.emplace<Components::Velocity>(center, 0.0, 0.0);
     registry.emplace<Components::Mass>(center, SimulatorConstants::ParticleMassMean * 100.0);
     registry.emplace<Components::ParticlePhase>(center, Components::Phase::Solid);
+    // Default shape for central body (just make it large circle)
+    registry.emplace<Components::Shape>(center, Components::ShapeType::Circle, 1e7);
 }
 
 double ECSSimulator::calculateKeplerianVelocity(double radius_meters, double central_mass) const {
@@ -156,6 +159,9 @@ void ECSSimulator::createKeplerianDisk() {
         std::normal_distribution<> mass_variation(mass_factor * base_mass, base_mass * 0.1);
         registry.emplace<Components::Mass>(entity, mass_variation(generator));
 
+        // For disk particles: just assign them as small circles
+        registry.emplace<Components::Shape>(entity, Components::ShapeType::Circle, SimulatorConstants::MetersPerPixel * 0.5);
+
         particles_created++;
     }
 }
@@ -163,33 +169,47 @@ void ECSSimulator::createKeplerianDisk() {
 void ECSSimulator::createBouncyBalls() {
     std::default_random_engine generator{static_cast<unsigned int>(time(0))};
     
-    // Create a grid of balls with some spacing
     int balls_per_side = static_cast<int>(std::sqrt(SimulatorConstants::ParticleCount));
     double spacing = SimulatorConstants::UniverseSizeMeters / (balls_per_side + 1);
     
-    // Small random initial velocity (±1 m/s in each direction)
     std::normal_distribution<> velocity_dist(0.0, 1.0);
-    
-    // Mass distribution around 1kg
-    std::normal_distribution<> mass_dist(SimulatorConstants::ParticleMassMean, 
-                                       SimulatorConstants::ParticleMassStdDev);
+    std::normal_distribution<> mass_dist(SimulatorConstants::ParticleMassMean, SimulatorConstants::ParticleMassStdDev);
+
+    // Random size distribution
+    std::uniform_real_distribution<> size_dist(0.05, 0.2); // random sizes between 0.05m and 0.2m
+    // Random shape distribution
+    std::uniform_real_distribution<> shape_dist(0.0, 1.0);
 
     int particles_created = 0;
     for (int i = 0; i < balls_per_side && particles_created < SimulatorConstants::ParticleCount; i++) {
         for (int j = 0; j < balls_per_side && particles_created < SimulatorConstants::ParticleCount; j++) {
-            // Position in meters, offset by spacing to keep away from edges
             double x_m = (i + 1) * spacing;
             double y_m = (j + 1) * spacing;
 
-            // Create entity and add components
             auto entity = registry.create();
             registry.emplace<Components::Position>(entity, x_m, y_m);
             registry.emplace<Components::Velocity>(entity, 
                 velocity_dist(generator), 
                 velocity_dist(generator));
             registry.emplace<Components::Mass>(entity, mass_dist(generator));
-            registry.emplace<Components::Radius>(entity, 0.1);
             registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
+
+            // Decide shape
+            double s = shape_dist(generator);
+            double sz = size_dist(generator);
+            if (s < 0.5) {
+                // Circle
+                // size here is radius
+                registry.emplace<Components::Shape>(entity, Components::ShapeType::Circle, sz);
+                // Also keep the old radius component for rendering fallback if needed
+                registry.emplace<Components::Radius>(entity, sz);
+            } else {
+                // Square
+                // size here is half-side length
+                registry.emplace<Components::Shape>(entity, Components::ShapeType::Square, sz);
+                // For rendering, we won't rely on Radius. We'll handle squares separately in renderer.
+                // No Radius needed, but we can skip Radius for squares or give them a radius as bounding circle if desired.
+            }
 
             particles_created++;
         }
@@ -215,6 +235,9 @@ void ECSSimulator::createIsothermalBox() {
                 registry.emplace<Components::Velocity>(entity, 0.0, 0.0);
                 registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Gas);
                 registry.emplace<Components::Mass>(entity, mass_dist(generator));
+                // Just circles for isothermal box
+                registry.emplace<Components::Shape>(entity, Components::ShapeType::Circle, 0.5);
+
                 particles++;
                 if (particles >= SimulatorConstants::ParticleCount) return;
             }
