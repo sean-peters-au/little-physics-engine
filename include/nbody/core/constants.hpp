@@ -18,6 +18,7 @@ namespace SimulatorConstants {
         BASIC_GRAVITY,
         BARNES_HUT,
         COLLISION,
+        ROTATION,
         SPH,
         GRID_THERMODYNAMICS,
         MOVEMENT

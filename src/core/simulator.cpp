@@ -1,5 +1,6 @@
 #include "nbody/core/simulator.hpp"
 #include "nbody/core/constants.hpp"
+#include "nbody/systems/rotation.hpp"
 #include "nbody/systems/collision.hpp"
 #include "nbody/systems/movement.hpp"
 #include "nbody/systems/barnes_hut.hpp"
@@ -54,6 +55,9 @@ void ECSSimulator::tick() {
         switch (system) {
             case SimulatorConstants::ECSSystem::COLLISION:
                 Systems::CollisionSystem::update(registry);
+                break;
+            case SimulatorConstants::ECSSystem::ROTATION:
+                Systems::RotationSystem::update(registry);
                 break;
             case SimulatorConstants::ECSSystem::BASIC_GRAVITY:
                 Systems::BasicGravitySystem::update(registry);
@@ -187,29 +191,34 @@ void ECSSimulator::createBouncyBalls() {
             double y_m = (j + 1) * spacing;
 
             auto entity = registry.create();
+            double mass_val = mass_dist(generator);
+
             registry.emplace<Components::Position>(entity, x_m, y_m);
-            registry.emplace<Components::Velocity>(entity, 
-                velocity_dist(generator), 
-                velocity_dist(generator));
-            registry.emplace<Components::Mass>(entity, mass_dist(generator));
+            registry.emplace<Components::Velocity>(entity, velocity_dist(generator), velocity_dist(generator));
+            registry.emplace<Components::Mass>(entity, mass_val);
             registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
 
-            // Decide shape
             double s = shape_dist(generator);
             double sz = size_dist(generator);
+
+            double I; // moment of inertia
             if (s < 0.5) {
-                // Circle
-                // size here is radius
+                // Circle: size = radius
                 registry.emplace<Components::Shape>(entity, Components::ShapeType::Circle, sz);
-                // Also keep the old radius component for rendering fallback if needed
                 registry.emplace<Components::Radius>(entity, sz);
+                // Inertia for a solid circle: I = 0.5*m*r²
+                I = 0.5 * mass_val * (sz * sz);
             } else {
-                // Square
-                // size here is half-side length
+                // Square: size = half-side length
                 registry.emplace<Components::Shape>(entity, Components::ShapeType::Square, sz);
-                // For rendering, we won't rely on Radius. We'll handle squares separately in renderer.
-                // No Radius needed, but we can skip Radius for squares or give them a radius as bounding circle if desired.
+                // Inertia for a solid square about center axis: I = (4/3)*m*a² (a = half-side)
+                I = (4.0 / 3.0) * mass_val * (sz * sz);
             }
+
+            // Add angular components
+            registry.emplace<Components::AngularPosition>(entity, 0.0); // start angle = 0
+            registry.emplace<Components::AngularVelocity>(entity, 0.0); // no initial spin
+            registry.emplace<Components::Inertia>(entity, I);
 
             particles_created++;
         }

@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 
-// Example color mappers (if needed)
 static sf::Color densityGrayscale(const Renderer::PixelProperties& props) {
     const double max_density = 100.0;
     uint8_t intensity = static_cast<uint8_t>(
@@ -16,29 +15,16 @@ static sf::Color densityGrayscale(const Renderer::PixelProperties& props) {
     return sf::Color(intensity, intensity, intensity);
 }
 
-static sf::Color temperatureHeatmap(const Renderer::PixelProperties& props) {
-    const double max_temp = 1000.0;
-    double t = std::min(1.0, props.temperature / max_temp);
-
-    uint8_t r = static_cast<uint8_t>(t * 255);
-    uint8_t b = static_cast<uint8_t>((1.0 - t) * 255);
-    uint8_t g = static_cast<uint8_t>(std::min(r, b) / 2);
-
-    return sf::Color(r, g, b);
-}
-
 Renderer::Renderer(int screenWidth, int screenHeight)
     : window(), font(), initialized(false), screenWidth(screenWidth), screenHeight(screenHeight)
 {
 }
 
-Renderer::~Renderer() {
-    // SFML automatically cleans up resources in destructors
-}
+Renderer::~Renderer() {}
 
 bool Renderer::init() {
     window.create(sf::VideoMode(screenWidth, screenHeight), "N-Body Simulator");
-    
+
     if (!font.loadFromFile("assets/fonts/arial.ttf")) {
         std::cout << "Failed to load font \"assets/fonts/arial.ttf\"" << std::endl;
         return false;
@@ -92,28 +78,35 @@ void Renderer::renderParticles(const entt::registry& registry, ColorMapper color
         float px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
         float py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
 
-        // Determine color
-        std::pair<int,int> coords(static_cast<int>(px), static_cast<int>(py));
         sf::Color c = sf::Color::White;
+        std::pair<int,int> coords(static_cast<int>(px), static_cast<int>(py));
         auto it = pixelMap.find(coords);
         if (it != pixelMap.end()) {
             c = colorMapper(it->second);
         }
 
+        double angleDeg = 0.0;
+        if (registry.any_of<Components::AngularPosition>(entity)) {
+            auto &angPos = registry.get<Components::AngularPosition>(entity);
+            angleDeg = (float)(angPos.angle * 180.0 / 3.141592653589793);
+        }
+
         if (shape.type == Components::ShapeType::Circle) {
-            // size = radius
             float radiusPixels = static_cast<float>(std::max(1.0, SimulatorConstants::metersToPixels(shape.size)));
             sf::CircleShape circle(radiusPixels);
-            circle.setPosition(px - radiusPixels, py - radiusPixels); 
+            circle.setOrigin(radiusPixels, radiusPixels);
+            circle.setPosition(px, py);
+            // Rotation doesn't matter visually for a circle
             circle.setFillColor(c);
             window.draw(circle);
         } else {
             // Square
-            // size = half side length
             float halfSidePx = static_cast<float>(SimulatorConstants::metersToPixels(shape.size));
             float sidePx = halfSidePx * 2.0f;
             sf::RectangleShape rect(sf::Vector2f(sidePx, sidePx));
-            rect.setPosition(px - halfSidePx, py - halfSidePx);
+            rect.setOrigin(halfSidePx, halfSidePx);
+            rect.setPosition(px, py);
+            rect.setRotation((float)angleDeg);
             rect.setFillColor(c);
             window.draw(rect);
         }

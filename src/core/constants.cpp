@@ -108,6 +108,7 @@ namespace SimulatorConstants {
                 ActiveSystems = {
                     ECSSystem::COLLISION,
                     ECSSystem::BASIC_GRAVITY,
+                    ECSSystem::ROTATION,
                     ECSSystem::MOVEMENT
                 };
                 std::cout << "Simulation constants initialized for BOUNCY_BALLS:\n";

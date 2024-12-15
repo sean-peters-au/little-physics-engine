@@ -11,7 +11,6 @@ namespace Components {
         Gas
     };
 
-    // New shape types
     enum class ShapeType {
         Circle,
         Square
@@ -32,7 +31,7 @@ namespace Components {
     };
 
     struct Radius {
-        double value;
+        double value; // For backward compatibility if needed
     };
 
     struct ParticlePhase {
@@ -47,13 +46,25 @@ namespace Components {
         double value;
     };
 
-    // New Shape component
-    // size = radius for circles, half-width/half-height for squares
+    // Shape Component
+    // For circle: size = radius
+    // For square: size = half side length
     struct Shape {
         ShapeType type;
-        double size; 
-        // For Circle: size = radius
-        // For Square: size = half side length
+        double size;
+    };
+
+    // Angular components
+    struct AngularPosition {
+        double angle; // radians
+    };
+
+    struct AngularVelocity {
+        double omega; // radians per second
+    };
+
+    struct Inertia {
+        double I; // moment of inertia
     };
 
 } // namespace Components
