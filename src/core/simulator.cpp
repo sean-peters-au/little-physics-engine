@@ -1,5 +1,7 @@
 #include "nbody/core/simulator.hpp"
 #include "nbody/core/constants.hpp"
+#include "nbody/core/profile.hpp"
+
 #include "nbody/systems/sleep.hpp"
 #include "nbody/systems/rotation.hpp"
 #include "nbody/systems/movement.hpp"
@@ -10,6 +12,7 @@
 #include "nbody/systems/sleep.hpp"
 
 // Include the new collision pipeline headers
+#include "nbody/systems/collision/positional_solver_system.hpp"
 #include "nbody/systems/collision/broad_phase_system.hpp"
 #include "nbody/systems/collision/narrow_phase_system.hpp"
 #include "nbody/systems/collision/solid_collision_response_system.hpp"
@@ -85,12 +88,13 @@ void ECSSimulator::tick() {
     for (const auto& system : SimulatorConstants::ActiveSystems) {
         switch (system) {
             case SimulatorConstants::ECSSystem::COLLISION: {
+                PROFILE_SCOPE("Collision");
                 int solverIterations = 5; // try multiple passes
+                std::vector<CandidatePair> candidatePairs;
+                Systems::BroadPhaseSystem::update(registry, candidatePairs);
+                CollisionManifold manifold;
                 for (int i = 0; i < solverIterations; i++) {
-                    std::vector<CandidatePair> candidatePairs;
-                    Systems::BroadPhaseSystem::update(registry, candidatePairs);
-                    
-                    CollisionManifold manifold;
+
                     Systems::NarrowPhaseSystem::update(registry, candidatePairs, manifold);
                     
                     if (manifold.collisions.empty()) {
@@ -106,29 +110,44 @@ void ECSSimulator::tick() {
                     Systems::LiquidCollisionResponseSystem::update(registry, manifold);
                     Systems::GasCollisionResponseSystem::update(registry, manifold);
                 }
+                Systems::PositionalSolverSystem::update(registry, manifold, 2, 0.8, 0.001);
                 break;
             }
-            case SimulatorConstants::ECSSystem::ROTATION:
+            case SimulatorConstants::ECSSystem::ROTATION: {
+                PROFILE_SCOPE("Rotation");
                 Systems::RotationSystem::update(registry);
                 break;
-            case SimulatorConstants::ECSSystem::BASIC_GRAVITY:
+            }
+            case SimulatorConstants::ECSSystem::BASIC_GRAVITY: {
+                PROFILE_SCOPE("Basic Gravity");
                 Systems::BasicGravitySystem::update(registry);
                 break;
-            case SimulatorConstants::ECSSystem::BARNES_HUT:
+            }
+            case SimulatorConstants::ECSSystem::BARNES_HUT: {
+                PROFILE_SCOPE("Barnes Hut");
                 Systems::BarnesHutSystem::update(registry);
                 break;
-            case SimulatorConstants::ECSSystem::SPH:
+            }
+            case SimulatorConstants::ECSSystem::SPH: {
+                PROFILE_SCOPE("SPH");
                 Systems::SPHSystem::update(registry);
                 break;
-            case SimulatorConstants::ECSSystem::GRID_THERMODYNAMICS:
+            }
+            case SimulatorConstants::ECSSystem::GRID_THERMODYNAMICS: {
+                PROFILE_SCOPE("Grid Thermodynamics");
                 Systems::GridThermodynamicsSystem::update(registry);
                 break;
-            case SimulatorConstants::ECSSystem::MOVEMENT:
+            }
+            case SimulatorConstants::ECSSystem::MOVEMENT: {
+                PROFILE_SCOPE("Movement");
                 Systems::MovementSystem::update(registry);
                 break;
-            case SimulatorConstants::ECSSystem::SLEEP:
+            }
+            case SimulatorConstants::ECSSystem::SLEEP: {
+                PROFILE_SCOPE("Sleep");
                 Systems::SleepSystem::update(registry);
                 break;
+            }
         }
     }
 }
@@ -262,6 +281,7 @@ void ECSSimulator::createBouncyBalls() {
             registry.emplace<Components::Mass>(entity, mass_val);
             registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
             registry.emplace<Components::Sleep>(entity);
+            registry.emplace<Components::Material>(entity, 0.001, 0.001);
 
             double s = shape_dist(generator);
             double sz = size_dist(generator);

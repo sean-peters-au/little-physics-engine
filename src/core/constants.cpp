@@ -25,7 +25,7 @@ namespace SimulatorConstants {
     double InitialVelocityFactor;
 
     const unsigned int ScreenLength = 600;
-    const unsigned int StepsPerSecond = 60;
+    const unsigned int StepsPerSecond = 120;
     const unsigned int Threads = 1;
 
     std::vector<ECSSystem> ActiveSystems;
@@ -54,7 +54,7 @@ namespace SimulatorConstants {
 
                 ActiveSystems = {
                     ECSSystem::BARNES_HUT,
-                    ECSSystem::SPH,
+                    // ECSSystem::SPH,
                     ECSSystem::GRID_THERMODYNAMICS,
                     ECSSystem::MOVEMENT
                 };
@@ -109,7 +109,8 @@ namespace SimulatorConstants {
                     ECSSystem::COLLISION,
                     ECSSystem::BASIC_GRAVITY,
                     ECSSystem::ROTATION,
-                    ECSSystem::MOVEMENT
+                    ECSSystem::MOVEMENT,
+                    ECSSystem::SLEEP
                 };
                 std::cout << "Simulation constants initialized for BOUNCY_BALLS:\n";
                 break;

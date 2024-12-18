@@ -1,10 +1,12 @@
 #include <iostream>
 #include <SFML/Graphics.hpp>
+#include <chrono>
 
 #include "nbody/core/simulator.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/rendering/renderer.hpp"
 #include "nbody/components/sim.hpp"
+#include "nbody/core/profile.hpp"
 
 // Helper function to get scenario list with names
 static std::vector<std::pair<SimulatorConstants::SimulationType,std::string>> buildScenarioList() {
@@ -49,7 +51,7 @@ int main(int, char**) {
     updateSimulatorState(simulator, initialScenario);  // Use helper instead of direct calls
     simulator.init();
 
-    const int FPS = 60;
+    const int FPS = 120;
     const int frameDelay = 1000 / FPS; // target milliseconds per frame
 
     sf::Clock fpsClock;
@@ -67,6 +69,8 @@ int main(int, char**) {
     SimulatorConstants::SimulationType highlightedScenario = initialScenario;
     bool highlightPausePlay = false;
     bool highlightReset = false;
+
+    auto lastProfileTime = std::chrono::steady_clock::now();
 
     while(running) {
         // Handle events
@@ -198,6 +202,15 @@ int main(int, char**) {
         // Framerate control (not always necessary with SFML)
         if (frameDelay > dt) {
             sf::sleep(sf::milliseconds((int)(frameDelay - dt)));
+        }
+
+        auto currentTime = std::chrono::steady_clock::now();
+        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - lastProfileTime).count();
+
+        if (elapsedSeconds >= 10) {  // Every 10 seconds of real time
+            Profiling::Profiler::printStats();
+            Profiling::Profiler::reset();
+            lastProfileTime = currentTime;
         }
     }
 

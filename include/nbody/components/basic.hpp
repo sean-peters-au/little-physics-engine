@@ -73,6 +73,11 @@ namespace Components {
         bool asleep = false;
     };
 
+    struct Material {
+        double staticFriction;
+        double dynamicFriction;
+    };
+
 } // namespace Components
 
 #endif

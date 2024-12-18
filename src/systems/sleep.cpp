@@ -1,10 +1,12 @@
 #include "nbody/systems/sleep.hpp"
 #include "nbody/components/basic.hpp"
+
 #include <cmath>
+#include <iostream>
 
 // Thresholds
-static const double LINEAR_SLEEP_THRESHOLD = 0.01;
-static const double ANGULAR_SLEEP_THRESHOLD = 0.01;
+static const double LINEAR_SLEEP_THRESHOLD = 0.5;
+static const double ANGULAR_SLEEP_THRESHOLD = 0.5;
 static const int SLEEP_FRAMES = 60; // after 60 frames of low velocity, sleep
 
 void Systems::SleepSystem::update(entt::registry &registry) {
