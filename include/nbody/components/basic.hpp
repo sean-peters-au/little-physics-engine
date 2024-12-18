@@ -68,6 +68,11 @@ namespace Components {
             : r(r), g(g), b(b) {}
     };
 
+    struct Sleep {
+        int sleepCounter = 0;
+        bool asleep = false;
+    };
+
 } // namespace Components
 
 #endif

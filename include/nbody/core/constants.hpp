@@ -21,7 +21,8 @@ namespace SimulatorConstants {
         ROTATION,
         SPH,
         GRID_THERMODYNAMICS,
-        MOVEMENT
+        MOVEMENT,
+        SLEEP
     };
 
     extern const double Pi;

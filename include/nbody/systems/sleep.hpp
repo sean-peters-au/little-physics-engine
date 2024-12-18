@@ -1,10 +1,10 @@
-#ifndef MOVEMENT_SYSTEM_HPP
-#define MOVEMENT_SYSTEM_HPP
+#ifndef SLEEP_SYSTEM_HPP
+#define SLEEP_SYSTEM_HPP
 
 #include <entt/entt.hpp>
 
 namespace Systems {
-    class MovementSystem {
+    class SleepSystem {
     public:
         static void update(entt::registry &registry);
     };

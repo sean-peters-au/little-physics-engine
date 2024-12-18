@@ -1,11 +1,13 @@
 #include "nbody/core/simulator.hpp"
 #include "nbody/core/constants.hpp"
+#include "nbody/systems/sleep.hpp"
 #include "nbody/systems/rotation.hpp"
 #include "nbody/systems/movement.hpp"
 #include "nbody/systems/barnes_hut.hpp"
 #include "nbody/systems/thermodynamics.hpp"
 #include "nbody/systems/sph.hpp"
 #include "nbody/systems/gravity.hpp"
+#include "nbody/systems/sleep.hpp"
 
 // Include the new collision pipeline headers
 #include "nbody/systems/collision/broad_phase_system.hpp"
@@ -17,11 +19,12 @@
 // Include collision_data.hpp which defines CandidatePair, CollisionManifold, etc.
 #include "nbody/systems/collision/collision_data.hpp"
 
+#include "nbody/components/basic.hpp"
+#include <nbody/math/polygon.hpp>
+
 #include <random>
 #include <cmath>
 #include <iostream>
-#include "nbody/components/basic.hpp"
-#include <nbody/math/polygon.hpp>
 
 ECSSimulator::ECSSimulator() : currentScenario(SimulatorConstants::SimulationType::CELESTIAL_GAS) {}
 
@@ -82,20 +85,27 @@ void ECSSimulator::tick() {
     for (const auto& system : SimulatorConstants::ActiveSystems) {
         switch (system) {
             case SimulatorConstants::ECSSystem::COLLISION: {
-                // New collision pipeline
+                int solverIterations = 5; // try multiple passes
+                for (int i = 0; i < solverIterations; i++) {
+                    std::vector<CandidatePair> candidatePairs;
+                    Systems::BroadPhaseSystem::update(registry, candidatePairs);
+                    
+                    CollisionManifold manifold;
+                    Systems::NarrowPhaseSystem::update(registry, candidatePairs, manifold);
+                    
+                    if (manifold.collisions.empty()) {
+                        // No collisions to solve, break early
+                        break;
+                    }
 
-                // 1. Broad phase
-                std::vector<CandidatePair> candidatePairs;
-                Systems::BroadPhaseSystem::update(registry, candidatePairs);
+                    // Lower restitution further here if needed by scenario
+                    // E.g., no direct code here, but you can tweak restitution in systems
 
-                // 2. Narrow phase (GJK/EPA)
-                CollisionManifold manifold;
-                Systems::NarrowPhaseSystem::update(registry, candidatePairs, manifold);
-
-                // 3. Response systems
-                Systems::SolidCollisionResponseSystem::update(registry, manifold);
-                Systems::LiquidCollisionResponseSystem::update(registry, manifold);
-                Systems::GasCollisionResponseSystem::update(registry, manifold);
+                    // Run collision responses
+                    Systems::SolidCollisionResponseSystem::update(registry, manifold);
+                    Systems::LiquidCollisionResponseSystem::update(registry, manifold);
+                    Systems::GasCollisionResponseSystem::update(registry, manifold);
+                }
                 break;
             }
             case SimulatorConstants::ECSSystem::ROTATION:
@@ -115,6 +125,9 @@ void ECSSimulator::tick() {
                 break;
             case SimulatorConstants::ECSSystem::MOVEMENT:
                 Systems::MovementSystem::update(registry);
+                break;
+            case SimulatorConstants::ECSSystem::SLEEP:
+                Systems::SleepSystem::update(registry);
                 break;
         }
     }
@@ -248,6 +261,7 @@ void ECSSimulator::createBouncyBalls() {
             registry.emplace<Components::Velocity>(entity, velocity_dist(generator), velocity_dist(generator));
             registry.emplace<Components::Mass>(entity, mass_val);
             registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
+            registry.emplace<Components::Sleep>(entity);
 
             double s = shape_dist(generator);
             double sz = size_dist(generator);
@@ -322,3 +336,40 @@ void ECSSimulator::createIsothermalBox() {
     }
 }
 
+void ECSSimulator::createBoundaries() {
+    double size = SimulatorConstants::UniverseSizeMeters;
+
+    auto createWall = [&](double x, double y, double w, double h) {
+        auto wall = registry.create();
+        registry.emplace<Components::Position>(wall, x, y);
+        registry.emplace<Components::Mass>(wall, 1e30); // effectively infinite mass
+        registry.emplace<Components::ParticlePhase>(wall, Components::Phase::Solid);
+
+        PolygonShape poly;
+        poly.type = Components::ShapeType::Square;
+        // Create a rectangle centered at (x,y) of width w and height h
+        // local coords:
+        double halfW = w*0.5;
+        double halfH = h*0.5;
+        poly.vertices = {
+            Vector(-halfW, -halfH),
+            Vector( halfW, -halfH),
+            Vector( halfW,  halfH),
+            Vector(-halfW,  halfH)
+        };
+        registry.emplace<PolygonShape>(wall, poly);
+        registry.emplace<Components::Shape>(wall, Components::ShapeType::Square, std::max(w,h)*0.5);
+
+        // Infinite inertia for a static body isn't needed, no AngularVelocity or Inertia required
+        // Just don't add those for walls.
+    };
+
+    // Create left wall
+    createWall(0.0, size*0.5, 1.0, size); // Very thin vertical wall on left
+    // Right wall
+    createWall(size, size*0.5, 1.0, size);
+    // Bottom wall
+    createWall(size*0.5, 0.0, size, 1.0);
+    // Top wall
+    createWall(size*0.5, size, size, 1.0);
+}

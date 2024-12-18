@@ -175,8 +175,8 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
         DebugStats::updateForce(force);
         
         // Convert to acceleration (F = ma, so a = F/m)
-        double acc_x = -force * (dx / (mass.value * dist));  // Negative for attraction
-        double acc_y = -force * (dy / (mass.value * dist));  // Negative for attraction
+        double acc_x = force * (dx / (mass.value * dist));  // Negative for attraction
+        double acc_y = force * (dy / (mass.value * dist));  // Negative for attraction
         
         // Convert acceleration to pixels/tick and apply time factor
         double dt = SimulatorConstants::SecondsPerTick * 

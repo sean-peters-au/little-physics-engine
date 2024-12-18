@@ -6,6 +6,23 @@
 
 void Systems::SolidCollisionResponseSystem::update(entt::registry &registry, CollisionManifold &manifold) {
     for (auto &col : manifold.collisions) {
+        // Check if either entity is asleep
+        bool asleepA = false;
+        bool asleepB = false;
+        if (registry.any_of<Components::Sleep>(col.a)) {
+            auto &sleepA = registry.get<Components::Sleep>(col.a);
+            asleepA = sleepA.asleep;
+        }
+        if (registry.any_of<Components::Sleep>(col.b)) {
+            auto &sleepB = registry.get<Components::Sleep>(col.b);
+            asleepB = sleepB.asleep;
+        }
+
+        if (asleepA && asleepB) {
+            // Both asleep, skip collision response
+            continue;
+        }
+
         auto &phaseA = registry.get<Components::ParticlePhase>(col.a);
         auto &phaseB = registry.get<Components::ParticlePhase>(col.b);
         if (phaseA.phase != Components::Phase::Solid && phaseB.phase != Components::Phase::Solid) {

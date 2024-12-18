@@ -34,6 +34,8 @@ public:
     entt::registry& getRegistry() { return registry; }
     const entt::registry& getRegistry() const { return registry; }
     SimulatorConstants::SimulationType getCurrentScenario() const { return currentScenario; }
+
+    void createBoundaries();
 };
 
 #endif
