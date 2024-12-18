@@ -22,14 +22,6 @@ protected:
     void SetUp() override {
         // Initialize simulation constants for celestial gas scenario
         SimulatorConstants::initializeConstants(SimulatorConstants::SimulationType::CELESTIAL_GAS);
-        
-        // Print out the constants we're working with
-        std::cout << "Simulation constants:\n"
-                  << "  G: " << SimulatorConstants::RealG << "\n"
-                  << "  Universe size: " << SimulatorConstants::UniverseSizeMeters << "\n"
-                  << "  Seconds per tick: " << SimulatorConstants::SecondsPerTick << "\n"
-                  << "  Time acceleration: " << SimulatorConstants::TimeAcceleration << "\n"
-                  << "  Gravitational softener: " << SimulatorConstants::GravitationalSoftener << "\n";
     }
 };
 

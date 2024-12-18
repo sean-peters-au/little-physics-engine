@@ -9,6 +9,7 @@
 #include <SFML/Graphics.hpp>
 
 #include "nbody/components/basic.hpp"
+#include "nbody/components/sim.hpp"
 #include "nbody/core/constants.hpp"
 
 // Hash for pixel coords
@@ -58,7 +59,8 @@ public:
     void renderFPS(float fps);
 
     // UI rendering
-    void renderUI(bool paused, 
+    void renderUI(const entt::registry& registry, 
+                  bool paused, 
                   SimulatorConstants::SimulationType currentScenario,
                   const std::vector<std::pair<SimulatorConstants::SimulationType,std::string>>& scenarios,
                   bool showPausePlayHighlight,
@@ -73,13 +75,23 @@ public:
     struct UIButton {
         sf::IntRect rect;
         std::string label;
-        SimulatorConstants::SimulationType scenario; // For scenario buttons
-        bool isSpecialButton; // If it's pause/play or reset button
+        bool isSpecialButton;
+        SimulatorConstants::SimulationType scenario;
+        double speedMultiplier;
+
+        UIButton() 
+            : rect()
+            , label()
+            , isSpecialButton(false)
+            , scenario(SimulatorConstants::SimulationType::CELESTIAL_GAS)
+            , speedMultiplier(1.0)
+        {}
     };
 
     std::vector<UIButton> scenarioButtons;
     UIButton pausePlayButton;
     UIButton resetButton;
+    std::vector<UIButton> speedButtons;
 
     sf::RenderWindow& getWindow() { return window; }
 

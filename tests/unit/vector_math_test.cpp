@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "nbody/core/vector_math.hpp"
+#include "nbody/math/vector_math.hpp"
 
 TEST(VectorMathTest, VectorConstruction) {
     Vector v1;  // Default constructor
@@ -64,6 +64,43 @@ TEST(VectorMathTest, VectorMethods) {
     v3.rotate();
     EXPECT_DOUBLE_EQ(v3.x, -1.0);
     EXPECT_DOUBLE_EQ(v3.y, 1.0);
+
+    // Test normalize
+    Vector v4(3.0, 4.0);
+    v4.normalize();
+    EXPECT_DOUBLE_EQ(v4.length(), 1.0);
+
+    // Test cross product
+    Vector v5(1.0, 0.0);
+    Vector v6(0.0, 1.0);
+    EXPECT_DOUBLE_EQ(v5.cross(v6), 1.0);
+
+    // Test perpendicular vector
+    Vector v7(1.0, 0.0);
+    Vector perp_v7 = v7.perp();
+    EXPECT_DOUBLE_EQ(perp_v7.x, 0.0);
+    EXPECT_DOUBLE_EQ(perp_v7.y, 1.0);
+
+    // Test angle between vectors
+    Vector v8(1.0, 0.0);
+    Vector v9(0.0, 1.0);
+    EXPECT_DOUBLE_EQ(v8.angleBetween(v9), M_PI / 2);
+
+    // Test rotate by angle
+    Vector v10(1.0, 0.0);
+    Vector rotated_v10 = v10.rotateByAngle(M_PI / 2);
+    EXPECT_NEAR(rotated_v10.x, 0.0, EPSILON);
+    EXPECT_NEAR(rotated_v10.y, 1.0, EPSILON);
+
+    // Test projection length
+    Vector v11(3.0, 4.0);
+    Vector v12(1.0, 0.0);
+    EXPECT_DOUBLE_EQ(v11.projectLength(v12), 3.0);
+
+    // Test projection onto another vector
+    Vector projected_v11 = v11.projectOnto(v12);
+    EXPECT_DOUBLE_EQ(projected_v11.x, 3.0);
+    EXPECT_DOUBLE_EQ(projected_v11.y, 0.0);
 }
 
 TEST(VectorMathTest, PositionOperations) {

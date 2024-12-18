@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cmath>
 
+#include "nbody/components/sim.hpp"
 #include "nbody/systems/barnes_hut.hpp"
 #include "nbody/core/debug.hpp"
 
@@ -13,6 +14,11 @@ using TimePoint = std::chrono::time_point<Clock>;
 void BarnesHutSystem::update(entt::registry& registry) {
     TimePoint start_time = Clock::now();
     
+    // Get simulator state
+    const auto& state = registry.get<Components::SimulatorState>(
+        registry.view<Components::SimulatorState>().front()
+    );
+    
     // Build the quadtree
     auto root = buildTree(registry);
     auto after_build = Clock::now();
@@ -20,7 +26,7 @@ void BarnesHutSystem::update(entt::registry& registry) {
     // Calculate forces for each particle
     auto view = registry.view<Components::Position, Components::Velocity, Components::Mass>();
     for (auto [entity, pos, vel, mass] : view.each()) {
-        calculateForce(root.get(), entity, pos, vel, mass);
+        calculateForce(root.get(), entity, pos, vel, mass, state);  // Pass simulator state
     }
     auto after_forces = Clock::now();
 
@@ -139,7 +145,8 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
                                    entt::entity entity,
                                    const Components::Position& pos,
                                    Components::Velocity& vel,
-                                   const Components::Mass& mass) {
+                                   const Components::Mass& mass,
+                                   const Components::SimulatorState& state) {
     if (!node || node->total_mass == 0.0) return;
     
     static int frame_count = 0;
@@ -150,7 +157,6 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
     double pos_y_meters = pos.y;
     
     // Calculate distance to center of mass
-    // Note: dx and dy are now from particle to center of mass (not the other way around)
     double dx = pos_x_meters - node->center_of_mass_x;
     double dy = pos_y_meters - node->center_of_mass_y;
     double dist_sq = dx*dx + dy*dy + SimulatorConstants::GravitationalSoftener * SimulatorConstants::GravitationalSoftener;
@@ -169,17 +175,16 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
         DebugStats::updateForce(force);
         
         // Convert to acceleration (F = ma, so a = F/m)
-        // Direction is -dx/r, -dy/r to point toward center of mass
         double acc_x = -force * (dx / (mass.value * dist));  // Negative for attraction
         double acc_y = -force * (dy / (mass.value * dist));  // Negative for attraction
         
         // Convert acceleration to pixels/tick and apply time factor
-        // Using leapfrog integration: v(t + dt/2) = v(t - dt/2) + a(t)dt
-        double time_factor = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
+        double dt = SimulatorConstants::SecondsPerTick * 
+                   state.baseTimeAcceleration * state.timeScale;
+        
         double old_vx = vel.x;
         double old_vy = vel.y;
         
-        double dt = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
         vel.x += acc_x * dt;
         vel.y += acc_y * dt;
         
@@ -200,15 +205,10 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
         }
     } else {
         // Recursively calculate forces from children
-        calculateForce(node->nw.get(), entity, pos, vel, mass);
-        calculateForce(node->ne.get(), entity, pos, vel, mass);
-        calculateForce(node->sw.get(), entity, pos, vel, mass);
-        calculateForce(node->se.get(), entity, pos, vel, mass);
-    }
-    
-    // Output debug info every 60 frames
-    if (frame_count % 6000 == 0) {
-        //DebugStats::printForceStats();
+        calculateForce(node->nw.get(), entity, pos, vel, mass, state);
+        calculateForce(node->ne.get(), entity, pos, vel, mass, state);
+        calculateForce(node->sw.get(), entity, pos, vel, mass, state);
+        calculateForce(node->se.get(), entity, pos, vel, mass, state);
     }
 }
 

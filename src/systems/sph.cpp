@@ -2,6 +2,7 @@
 #include "nbody/core/constants.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sph.hpp"
+#include "nbody/components/sim.hpp"
 #include <cmath>
 #include <algorithm>
 #include <iostream>
@@ -18,6 +19,7 @@ static double default_c_s = 1000.0;    // Speed of sound in m/s, adjust as neede
 static double rest_density = 1e-7;     // Example rest density, tune to your scenario
 
 void SPHSystem::update(entt::registry &registry) {
+
     // Initialize on first run
     if (!sph_initialized) {
         grid_size = SimulatorConstants::GridSize; 
@@ -110,9 +112,18 @@ void SPHSystem::computeForces(entt::registry &registry) {
 }
 
 void SPHSystem::applyForces(entt::registry &registry) {
+    // Get simulator state
+    const auto& state = registry.get<Components::SimulatorState>(
+        registry.view<Components::SimulatorState>().front()
+    );
+
+    // Time step in real seconds using simulator state
+    double dt = SimulatorConstants::SecondsPerTick * 
+               state.baseTimeAcceleration * state.timeScale;
+
     // Apply the computed accelerations to velocities
     auto view = registry.view<Components::Velocity, Components::SPHTemp, Components::Mass>();
-    double dt = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
+
     for (auto [entity, vel, sphTemp, mass] : view.each()) {
         if (mass.value > 0.0) {
             vel.x += (sphTemp.acc_x * dt);

@@ -3,6 +3,7 @@
 
 #include <entt/entt.hpp>
 #include "nbody/components/basic.hpp"
+#include "nbody/components/sim.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/core/debug.hpp"
 
@@ -13,12 +14,18 @@ namespace Systems
     public:
         static void update(entt::registry &registry)
         {
+            // Get simulator state
+            const auto& state = registry.get<Components::SimulatorState>(
+                registry.view<Components::SimulatorState>().front()
+            );
+
             auto view = registry.view<Components::Position, Components::Velocity>();
             static int frame_count = 0;
             frame_count++;
 
-            // Time step in real seconds
-            double dt = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
+            // Time step in real seconds using simulator state
+            double dt = SimulatorConstants::SecondsPerTick * 
+                       state.baseTimeAcceleration * state.timeScale;
 
             // Convert margin to meters
             double margin_m = 5.0 * SimulatorConstants::MetersPerPixel;

@@ -2,6 +2,7 @@
 #define COMPONENTS_BASIC_HPP
 
 #include <cstdint>
+#include "nbody/math/vector_math.hpp" // for Position, Vector
 
 namespace Components {
 
@@ -16,15 +17,9 @@ namespace Components {
         Square
     };
 
-    struct Position {
-        double x;
-        double y;
-    };
-
-    struct Velocity {
-        double x;
-        double y;
-    };
+    // Use the Position and Vector classes from vector_math.hpp
+    using Position = ::Position;
+    using Velocity = ::Vector;
 
     struct Mass {
         double value;
@@ -65,6 +60,12 @@ namespace Components {
 
     struct Inertia {
         double I; // moment of inertia
+    };
+
+    struct Color {
+        uint8_t r, g, b;
+        Color(uint8_t r = 255, uint8_t g = 255, uint8_t b = 255) 
+            : r(r), g(g), b(b) {}
     };
 
 } // namespace Components

@@ -1,6 +1,8 @@
 #include "nbody/rendering/renderer.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/components/basic.hpp"
+#include "nbody/components/sim.hpp"
+
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -78,11 +80,18 @@ void Renderer::renderParticles(const entt::registry& registry, ColorMapper color
         float px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
         float py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
 
-        sf::Color c = sf::Color::White;
-        std::pair<int,int> coords(static_cast<int>(px), static_cast<int>(py));
-        auto it = pixelMap.find(coords);
-        if (it != pixelMap.end()) {
-            c = colorMapper(it->second);
+        // Use particle color if available, otherwise use density/temperature mapping
+        sf::Color c;
+        if (auto* color = registry.try_get<Components::Color>(entity)) {
+            c = sf::Color(color->r, color->g, color->b);
+        } else {
+            std::pair<int,int> coords(static_cast<int>(px), static_cast<int>(py));
+            auto it = pixelMap.find(coords);
+            if (it != pixelMap.end()) {
+                c = colorMapper(it->second);
+            } else {
+                c = sf::Color::White;  // fallback
+            }
         }
 
         double angleDeg = 0.0;
@@ -135,13 +144,15 @@ void Renderer::renderText(const std::string& text, int x, int y, sf::Color color
     window.draw(sfText);
 }
 
-void Renderer::renderUI(bool paused,
-                        SimulatorConstants::SimulationType currentScenario,
-                        const std::vector<std::pair<SimulatorConstants::SimulationType,std::string>>& scenarios,
-                        bool showPausePlayHighlight,
-                        bool showResetHighlight,
-                        SimulatorConstants::SimulationType highlightedScenario) {
+void Renderer::renderUI(const entt::registry& registry,
+                       bool paused,
+                       SimulatorConstants::SimulationType currentScenario,
+                       const std::vector<std::pair<SimulatorConstants::SimulationType,std::string>>& scenarios,
+                       bool showPausePlayHighlight,
+                       bool showResetHighlight,
+                       SimulatorConstants::SimulationType highlightedScenario) {
     scenarioButtons.clear();
+    speedButtons.clear();
 
     int panelX = (int)SimulatorConstants::ScreenLength + 10;
     int panelY = 10;
@@ -188,6 +199,49 @@ void Renderer::renderUI(bool paused,
         renderText("Reset", panelX+5, panelY+5);
     }
     panelY += 50;
+
+    // Speed buttons
+    renderText("Playback Speed:", panelX, panelY, sf::Color::White);
+    panelY += 25;
+
+    const std::vector<std::pair<double, std::string>> speeds = {
+        {0.25, "0.25x"},
+        {0.5, "0.5x"},
+        {1.0, "1x"}
+    };
+
+    for (const auto& speed : speeds) {
+        UIButton btn;
+        btn.rect = sf::IntRect(panelX, panelY, 60, 25);
+        btn.label = speed.second;
+        btn.isSpecialButton = true;
+        btn.speedMultiplier = speed.first;
+
+        sf::RectangleShape btnShape(sf::Vector2f((float)btn.rect.width, (float)btn.rect.height));
+        btnShape.setPosition((float)btn.rect.left, (float)btn.rect.top);
+
+        // Get simulator state from registry
+        const auto& state = registry.get<Components::SimulatorState>(
+            registry.view<Components::SimulatorState>().front()
+        );
+
+        // Highlight current speed based on simulator state
+        if (std::abs(state.timeScale - speed.first) < 0.01) {
+            btnShape.setFillColor(sf::Color(0, 200, 0));
+        } else {
+            btnShape.setFillColor(sf::Color(100, 100, 100));
+        }
+
+        btnShape.setOutlineColor(sf::Color::White);
+        btnShape.setOutlineThickness(1.f);
+        window.draw(btnShape);
+        renderText(btn.label, panelX + 5, panelY + 3);
+
+        speedButtons.push_back(btn);
+        panelY += 35;
+    }
+
+    panelY += 15;  // Extra spacing before scenarios
 
     renderText("Scenarios:", panelX, panelY, sf::Color::White);
     panelY += 20;

@@ -4,6 +4,7 @@
 #include <entt/entt.hpp>
 #include <memory>
 #include "nbody/components/basic.hpp"
+#include "nbody/components/sim.hpp"
 #include "nbody/core/constants.hpp"
 
 namespace Systems {
@@ -56,7 +57,8 @@ namespace Systems {
                                  entt::entity entity,
                                  const Components::Position& pos,
                                  Components::Velocity& vel,
-                                 const Components::Mass& mass);
+                                 const Components::Mass& mass,
+                                 const Components::SimulatorState& state);
     };
 }
 

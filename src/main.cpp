@@ -4,6 +4,7 @@
 #include "nbody/core/simulator.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/rendering/renderer.hpp"
+#include "nbody/components/sim.hpp"
 
 // Helper function to get scenario list with names
 static std::vector<std::pair<SimulatorConstants::SimulationType,std::string>> buildScenarioList() {
@@ -14,10 +15,25 @@ static std::vector<std::pair<SimulatorConstants::SimulationType,std::string>> bu
     return scenarios;
 }
 
+// Helper function to update simulator state when changing scenarios
+void updateSimulatorState(ECSSimulator& simulator, SimulatorConstants::SimulationType scenario) {
+    SimulatorConstants::initializeConstants(scenario);
+    simulator.setScenario(scenario);
+    
+    // Update base time acceleration for new scenario
+    auto& registry = simulator.getRegistry();
+    auto stateView = registry.view<Components::SimulatorState>();
+    if (!stateView.empty()) {
+        auto& state = registry.get<Components::SimulatorState>(stateView.front());
+        state.baseTimeAcceleration = SimulatorConstants::TimeAcceleration;
+    }
+    
+    simulator.reset();
+}
+
 int main(int, char**) {
     // Start with CELESTIAL_GAS scenario
     auto initialScenario = SimulatorConstants::SimulationType::CELESTIAL_GAS;
-    SimulatorConstants::initializeConstants(initialScenario);
 
     Renderer renderer(SimulatorConstants::ScreenLength + 200, SimulatorConstants::ScreenLength);
     if (!renderer.init()) {
@@ -26,7 +42,11 @@ int main(int, char**) {
 
     CoordinateSystem coordSystem;
     ECSSimulator simulator(&coordSystem);
-    simulator.setScenario(initialScenario);
+    
+    // Create simulator state entity
+    auto stateEntity = simulator.getRegistry().create();
+    
+    updateSimulatorState(simulator, initialScenario);  // Use helper instead of direct calls
     simulator.init();
 
     const int FPS = 60;
@@ -107,9 +127,20 @@ int main(int, char**) {
                 for (auto& btn : renderer.scenarioButtons) {
                     if (mouseX >= btn.rect.left && mouseX <= btn.rect.left + btn.rect.width &&
                         mouseY >= btn.rect.top && mouseY <= btn.rect.top + btn.rect.height) {
-                        simulator.setScenario(btn.scenario);
-                        simulator.reset();
+                        updateSimulatorState(simulator, btn.scenario);  // Use helper here too
                         paused = false;
+                        break;
+                    }
+                }
+
+                // Check speed buttons
+                for (const auto& btn : renderer.speedButtons) {
+                    if (btn.rect.contains(mousePos)) {
+                        auto stateView = simulator.getRegistry().view<Components::SimulatorState>();
+                        if (!stateView.empty()) {
+                            auto& state = simulator.getRegistry().get<Components::SimulatorState>(stateView.front());
+                            state.timeScale = btn.speedMultiplier;
+                        }
                         break;
                     }
                 }
@@ -121,16 +152,13 @@ int main(int, char**) {
                     simulator.reset();
                     paused = false;
                 } else if (event.key.code == sf::Keyboard::Num1) {
-                    simulator.setScenario(SimulatorConstants::SimulationType::CELESTIAL_GAS);
-                    simulator.reset();
+                    updateSimulatorState(simulator, SimulatorConstants::SimulationType::CELESTIAL_GAS);
                     paused = false;
                 } else if (event.key.code == sf::Keyboard::Num2) {
-                    simulator.setScenario(SimulatorConstants::SimulationType::ISOTHERMAL_BOX);
-                    simulator.reset();
+                    updateSimulatorState(simulator, SimulatorConstants::SimulationType::ISOTHERMAL_BOX);
                     paused = false;
                 } else if (event.key.code == sf::Keyboard::Num3) {
-                    simulator.setScenario(SimulatorConstants::SimulationType::BOUNCY_BALLS);
-                    simulator.reset();
+                    updateSimulatorState(simulator, SimulatorConstants::SimulationType::BOUNCY_BALLS);
                     paused = false;
                 }
             }
@@ -157,8 +185,13 @@ int main(int, char**) {
         renderer.renderFPS(avgFPS);
 
         // Render UI overlay
-        renderer.renderUI(paused, simulator.getCurrentScenario(), scenarioList,
-                          highlightPausePlay, highlightReset, highlightedScenario);
+        renderer.renderUI(simulator.getRegistry(), 
+                        paused, 
+                        simulator.getCurrentScenario(), 
+                        scenarioList,
+                        highlightPausePlay, 
+                        highlightReset, 
+                        highlightedScenario);
 
         renderer.present();
 

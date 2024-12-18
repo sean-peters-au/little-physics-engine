@@ -1,11 +1,19 @@
 #include "nbody/systems/rotation.hpp"
 #include "nbody/components/basic.hpp"
+#include "nbody/components/sim.hpp"
 #include "nbody/core/constants.hpp"
 
 namespace Systems {
 
 void RotationSystem::update(entt::registry &registry) {
-    double dt = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
+    // Get simulator state
+    const auto& state = registry.get<Components::SimulatorState>(
+        registry.view<Components::SimulatorState>().front()
+    );
+
+    // Time step in real seconds using simulator state
+    double dt = SimulatorConstants::SecondsPerTick * 
+                state.baseTimeAcceleration * state.timeScale;
 
     auto view = registry.view<Components::AngularPosition, Components::AngularVelocity>();
     for (auto [entity, angPos, angVel] : view.each()) {

@@ -1,5 +1,6 @@
 #include "nbody/systems/thermodynamics.hpp"
 #include "nbody/core/constants.hpp"
+#include "nbody/components/sim.hpp"
 #include <chrono>
 #include <iostream>
 #include <cmath>
@@ -18,6 +19,11 @@ static double cell_volume;
 static bool initialized = false;
 
 void GridThermodynamicsSystem::update(entt::registry& registry) {
+    // Get simulator state
+    const auto& state = registry.get<Components::SimulatorState>(
+        registry.view<Components::SimulatorState>().front()
+    );
+
     // Initialize static values if needed
     if (!initialized) {
         cell_size_meters = SimulatorConstants::UniverseSizeMeters / SimulatorConstants::GridSize;
@@ -57,6 +63,10 @@ void GridThermodynamicsSystem::update(entt::registry& registry) {
         int particles_processed = 0;
         int neighbor_checks = 0;
         int moving_particles = 0;
+        
+        // Time step in real seconds using simulator state
+        double dt = SimulatorConstants::SecondsPerTick * 
+                   state.baseTimeAcceleration * state.timeScale;
         
         for (auto [entity, pos, vel, mass] : view.each()) {
             particles_processed++;

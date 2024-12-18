@@ -31,6 +31,7 @@ public:
     void setScenario(SimulatorConstants::SimulationType scenario);
     void reset();
 
+    entt::registry& getRegistry() { return registry; }
     const entt::registry& getRegistry() const { return registry; }
     SimulatorConstants::SimulationType getCurrentScenario() const { return currentScenario; }
 };
