@@ -1,3 +1,14 @@
+/**
+ * @file vector_math.hpp
+ * @brief 2D vector and position mathematics library
+ *
+ * This file provides fundamental 2D geometric primitives and operations:
+ * - Vector class for direction and magnitude calculations
+ * - Position class for point locations in 2D space
+ * - Geometric operations (dot product, cross product, rotations)
+ * - Utility functions for common mathematical operations
+ */
+
 #ifndef VECTOR_MATH_H
 #define VECTOR_MATH_H
 
@@ -5,115 +16,222 @@
 class Vector;
 
 /**
- * Constants
+ * @brief Constants for floating-point comparisons
  */
-constexpr double EPSILON = 1e-9;  /** Threshold for floating point comparisons */
+constexpr double EPSILON = 1e-9;  ///< Threshold for floating point equality tests
 
 /**
- * Utility Functions
+ * @brief Utility function for safe square root computation
+ * 
+ * @param d Input value
+ * @return double Square root of input, warns if input is negative
  */
-/** Safely computes square root, prints warning if input is negative */
 double my_sqrt(double d);
 
-/** Returns true if two doubles are nearly equal within epsilon */
+/**
+ * @brief Compares two doubles for approximate equality
+ * 
+ * @param a First value
+ * @param b Second value
+ * @param epsilon Maximum allowed difference
+ * @return true if |a-b| < epsilon
+ */
 bool nearlyEqual(double a, double b, double epsilon=EPSILON);
 
 /**
- * Position Class
- * Represents a 2D point in space
+ * @brief Represents a 2D point in space
+ * 
+ * Position class is used for absolute locations in 2D space.
+ * Supports basic arithmetic and conversion to/from Vector.
  */
 class Position {
 public:
-    double x;
-    double y;
+    double x;  ///< X coordinate
+    double y;  ///< Y coordinate
 
-    // Constructors
-    /** Constructs a Position at (0,0) */
+    /** @brief Constructs a Position at (0,0) */
     Position();
-    /** Constructs a Position at specified coordinates */
+    
+    /**
+     * @brief Constructs a Position at specified coordinates
+     * @param x X coordinate
+     * @param y Y coordinate
+     */
     Position(double x, double y);
     
-    // Type conversion
-    /** Converts Position to Vector */
+    /** @brief Converts Position to Vector */
     operator Vector() const;
 
-    // Basic arithmetic operators (immutable)
-    /** Returns sum of two positions */
+    /**
+     * @brief Adds two positions
+     * @param p Position to add
+     * @return New position at component-wise sum
+     */
     Position operator+(const Position& p) const;
-    /** Returns difference between two positions */
+    
+    /**
+     * @brief Subtracts two positions
+     * @param p Position to subtract
+     * @return New position at component-wise difference
+     */
     Position operator-(const Position& p) const;
-    /** Returns position scaled by scalar */
+    
+    /**
+     * @brief Scales position by scalar value
+     * @param scalar Scale factor
+     * @return New position with coordinates multiplied by scalar
+     */
     Position operator*(double scalar) const;
-    /** Returns position divided by scalar */
+    
+    /**
+     * @brief Divides position by scalar value
+     * @param scalar Divisor
+     * @return New position with coordinates divided by scalar
+     */
     Position operator/(double scalar) const;
 
-    // Geometric operations (immutable)
-    /** Returns Euclidean distance to another position */
+    /**
+     * @brief Calculates Euclidean distance to another position
+     * @param p Target position
+     * @return Distance between positions
+     */
     double dist(const Position& p) const;
 };
 
 /**
- * Vector Class
- * Represents a 2D direction and magnitude
+ * @brief Represents a 2D vector with direction and magnitude
+ * 
+ * Vector class provides comprehensive 2D vector operations for
+ * physics calculations and geometric algorithms.
  */
 class Vector {
 public:
-    double x;
-    double y;
+    double x;  ///< X component
+    double y;  ///< Y component
 
-    // Constructors
-    /** Constructs a zero vector */
+    /** @brief Constructs a zero vector (0,0) */
     Vector();
-    /** Constructs a vector with given components */
+    
+    /**
+     * @brief Constructs a vector with given components
+     * @param x X component
+     * @param y Y component
+     */
     Vector(double x, double y);
-    /** Constructs a vector from a position */
+    
+    /**
+     * @brief Constructs a vector from a position
+     * @param p Position to convert
+     */
     Vector(const Position& p);
     
-    // Type conversion
-    /** Converts Vector to Position */
+    /** @brief Converts Vector to Position */
     operator Position() const;
 
-    // Basic arithmetic operators (immutable)
-    /** Returns the negative of a vector */
+    /** @brief Returns negation of this vector */
     Vector operator-() const;
-    /** Returns sum of two vectors */
+    
+    /**
+     * @brief Adds two vectors
+     * @param v Vector to add
+     * @return Sum vector
+     */
     Vector operator+(const Vector& v) const;
-    /** Returns difference between two vectors */
+    
+    /**
+     * @brief Subtracts two vectors
+     * @param v Vector to subtract
+     * @return Difference vector
+     */
     Vector operator-(const Vector& v) const;
-    /** Returns vector scaled by scalar */
+    
+    /**
+     * @brief Scales vector by scalar value
+     * @param scalar Scale factor
+     * @return Scaled vector
+     */
     Vector operator*(double scalar) const;
-    /** Returns vector divided by scalar */
+    
+    /**
+     * @brief Divides vector by scalar value
+     * @param scalar Divisor
+     * @return Divided vector
+     */
     Vector operator/(double scalar) const;
 
-    // Geometric operations (immutable)
-    /** Returns a vector rotated 90 degrees clockwise */
+    /**
+     * @brief Rotates vector 90 degrees clockwise
+     * @return Rotated vector
+     */
     Vector rotate() const;
-    /** Returns a vector scaled to specified length, preserving direction */
+    
+    /**
+     * @brief Scales vector to specified length
+     * @param length Target length
+     * @return Vector with same direction but new length
+     */
     Vector scale(double length) const;
-    /** Returns vector magnitude */
+    
+    /** @brief Returns vector magnitude */
     double length() const;
-    /** Returns dot product with another vector */
+    
+    /**
+     * @brief Calculates dot product with another vector
+     * @param v Other vector
+     * @return Dot product value
+     */
     double dotProduct(const Vector& v) const;
-    /** Returns cross product with another vector */
+    
+    /**
+     * @brief Calculates 2D cross product with another vector
+     * @param other Other vector
+     * @return Cross product value (z-component)
+     */
     double cross(const Vector &other) const;
-    /** Returns a perpendicular vector */
+    
+    /** @brief Returns perpendicular vector (rotated 90 degrees) */
     Vector perp() const;
-    /** Returns a normalized vector to unit length */
+    
+    /** @brief Returns normalized vector (length = 1) */
     Vector normalized() const;
-    /** Returns angle between this and another vector in radians */
+    
+    /**
+     * @brief Calculates angle between this and another vector
+     * @param other Other vector
+     * @return Angle in radians
+     */
     double angleBetween(const Vector &other) const;
-    /** Returns this vector rotated by specified angle (in radians) */
+    
+    /**
+     * @brief Rotates vector by specified angle
+     * @param angle Rotation angle in radians
+     * @return Rotated vector
+     */
     Vector rotateByAngle(double angle) const;
-    /** Returns projection length onto another vector */
+    
+    /**
+     * @brief Projects vector length onto another vector
+     * @param onto Vector to project onto
+     * @return Projected length
+     */
     double projectLength(const Vector &onto) const;
-    /** Returns projection of this onto another vector */
+    
+    /**
+     * @brief Projects vector onto another vector
+     * @param onto Vector to project onto
+     * @return Projected vector
+     */
     Vector projectOnto(const Vector &onto) const;
 };
 
 /**
- * Free Functions - Vector Operations
+ * @brief Finds closest point on line segment to a point
+ * 
+ * @param a Start point of line segment
+ * @param b End point of line segment
+ * @param p Point to find closest position to
+ * @return Vector Position of closest point on line segment ab
  */
-/** Returns closest point on line segment ab to point p */
 Vector closestPointOnLine(const Vector &a, const Vector &b, const Vector &p);
 
 #endif

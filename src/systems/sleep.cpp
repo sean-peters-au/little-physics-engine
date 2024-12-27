@@ -5,8 +5,8 @@
 #include <iostream>
 
 // Thresholds
-static const double LINEAR_SLEEP_THRESHOLD = 0.5;
-static const double ANGULAR_SLEEP_THRESHOLD = 0.5;
+static const double LINEAR_SLEEP_THRESHOLD = 0.2;
+static const double ANGULAR_SLEEP_THRESHOLD = 0.2;
 static const int SLEEP_FRAMES = 60; // after 60 frames of low velocity, sleep
 
 void Systems::SleepSystem::update(entt::registry &registry) {
@@ -14,6 +14,9 @@ void Systems::SleepSystem::update(entt::registry &registry) {
     for (auto [entity, vel, phase, mass, sleep] : view.each()) {
         if (phase.phase != Components::Phase::Solid && phase.phase != Components::Phase::Liquid && phase.phase != Components::Phase::Gas) {
             continue; // Only sleep typical bodies
+        }
+        if (registry.all_of<Components::Boundary>(entity)) {
+            continue; // Don't sleep boundaries
         }
 
         // Compute linear speed

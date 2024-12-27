@@ -1,5 +1,6 @@
 #include "nbody/algo/gjk.hpp"
 #include "nbody/math/polygon.hpp"
+
 #include <cmath>
 #include <limits>
 #include <iostream>

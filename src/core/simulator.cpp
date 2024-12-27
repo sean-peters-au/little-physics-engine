@@ -36,34 +36,33 @@ ECSSimulator::ECSSimulator(CoordinateSystem* /*coordSystem*/)
 
 void ECSSimulator::setScenario(SimulatorConstants::SimulationType scenario) {
     currentScenario = scenario;
+    std::cerr << "Scenario set to: " << (int)scenario << std::endl;
 }
 
 void ECSSimulator::reset() {
-    // Store current state entity and component if it exists
-    Components::SimulatorState savedState;  // Use default constructor
+    std::cerr << "Resetting simulator for scenario: " << (int)currentScenario << std::endl;
+    // Store current state if it exists
+    Components::SimulatorState savedState;
     savedState.timeScale = 1.0;
     savedState.baseTimeAcceleration = SimulatorConstants::TimeAcceleration;
-    
+
     auto stateView = registry.view<Components::SimulatorState>();
     if (!stateView.empty()) {
         savedState = registry.get<Components::SimulatorState>(stateView.front());
     }
 
-    // Clear registry and reinitialize constants
+    // Clear and reinit
     registry.clear();
     SimulatorConstants::initializeConstants(currentScenario);
 
-    // Recreate state entity with saved state
+    // Recreate simulator state
     auto stateEntity = registry.create();
     registry.emplace<Components::SimulatorState>(stateEntity, savedState);
 
-    // Initialize scenario
     init();
 }
 
 void ECSSimulator::init() {
-    // Don't clear registry here anymore since reset() handles it
-    
     // Initialize scenario
     switch (currentScenario) {
         case SimulatorConstants::SimulationType::CELESTIAL_GAS:
@@ -77,73 +76,82 @@ void ECSSimulator::init() {
             createBouncyBalls();
             break;
         default:
-            // Fallback
             createIsothermalBox();
             break;
+    }
+
+    // Check that we have a state
+    auto sv = registry.view<Components::SimulatorState>();
+    if (sv.empty()) {
+        std::cerr << "Warning: No SimulatorState after init. Creating a default one." << std::endl;
+        auto stateEntity = registry.create();
+        Components::SimulatorState defaultState;
+        defaultState.timeScale = 1.0;
+        defaultState.baseTimeAcceleration = SimulatorConstants::TimeAcceleration;
+        registry.emplace<Components::SimulatorState>(stateEntity, defaultState);
     }
 }
 
 void ECSSimulator::tick() {
-    // Run systems in the order specified by ActiveSystems
     for (const auto& system : SimulatorConstants::ActiveSystems) {
         switch (system) {
             case SimulatorConstants::ECSSystem::COLLISION: {
                 PROFILE_SCOPE("Collision");
-                int solverIterations = 5; // try multiple passes
+                int solverIterations = 5;
                 std::vector<CandidatePair> candidatePairs;
                 Systems::BroadPhaseSystem::update(registry, candidatePairs);
                 CollisionManifold manifold;
                 for (int i = 0; i < solverIterations; i++) {
-
                     Systems::NarrowPhaseSystem::update(registry, candidatePairs, manifold);
-                    
                     if (manifold.collisions.empty()) {
-                        // No collisions to solve, break early
                         break;
                     }
 
-                    // Lower restitution further here if needed by scenario
-                    // E.g., no direct code here, but you can tweak restitution in systems
-
-                    // Run collision responses
                     Systems::SolidCollisionResponseSystem::update(registry, manifold);
                     Systems::LiquidCollisionResponseSystem::update(registry, manifold);
                     Systems::GasCollisionResponseSystem::update(registry, manifold);
                 }
-                Systems::PositionalSolverSystem::update(registry, manifold, 2, 0.8, 0.001);
+                //Systems::PositionalSolverSystem::update(registry, manifold, 5, 0.8, 0.001);
                 break;
             }
-            case SimulatorConstants::ECSSystem::ROTATION: {
+            case SimulatorConstants::ECSSystem::ROTATION:
+            {
                 PROFILE_SCOPE("Rotation");
                 Systems::RotationSystem::update(registry);
                 break;
             }
-            case SimulatorConstants::ECSSystem::BASIC_GRAVITY: {
+            case SimulatorConstants::ECSSystem::BASIC_GRAVITY:
+            {
                 PROFILE_SCOPE("Basic Gravity");
                 Systems::BasicGravitySystem::update(registry);
                 break;
             }
-            case SimulatorConstants::ECSSystem::BARNES_HUT: {
+            case SimulatorConstants::ECSSystem::BARNES_HUT:
+            {
                 PROFILE_SCOPE("Barnes Hut");
                 Systems::BarnesHutSystem::update(registry);
                 break;
             }
-            case SimulatorConstants::ECSSystem::SPH: {
+            case SimulatorConstants::ECSSystem::SPH:
+            {
                 PROFILE_SCOPE("SPH");
                 Systems::SPHSystem::update(registry);
                 break;
             }
-            case SimulatorConstants::ECSSystem::GRID_THERMODYNAMICS: {
+            case SimulatorConstants::ECSSystem::GRID_THERMODYNAMICS:
+            {
                 PROFILE_SCOPE("Grid Thermodynamics");
                 Systems::GridThermodynamicsSystem::update(registry);
                 break;
             }
-            case SimulatorConstants::ECSSystem::MOVEMENT: {
+            case SimulatorConstants::ECSSystem::MOVEMENT:
+            {
                 PROFILE_SCOPE("Movement");
                 Systems::MovementSystem::update(registry);
                 break;
             }
-            case SimulatorConstants::ECSSystem::SLEEP: {
+            case SimulatorConstants::ECSSystem::SLEEP:
+            {
                 PROFILE_SCOPE("Sleep");
                 Systems::SleepSystem::update(registry);
                 break;
@@ -161,10 +169,7 @@ void ECSSimulator::createCentralBody() {
     registry.emplace<Components::Velocity>(center, 0.0, 0.0);
     registry.emplace<Components::Mass>(center, SimulatorConstants::ParticleMassMean * 100.0);
     registry.emplace<Components::ParticlePhase>(center, Components::Phase::Solid);
-    // Default shape for central body (just make it large circle)
     registry.emplace<Components::Shape>(center, Components::ShapeType::Circle, 1e7);
-
-    // Add bright yellow color for central body
     registry.emplace<Components::Color>(center, 255, 255, 0);
 }
 
@@ -184,6 +189,7 @@ double ECSSimulator::calculateDiskDensity(double radius, double /*max_radius*/) 
 }
 
 void ECSSimulator::createKeplerianDisk() {
+    std::cerr << "Creating Keplerian Disk" << std::endl;
     std::default_random_engine generator{static_cast<unsigned int>(time(0))};
     double center_x_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
     double center_y_m = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
@@ -240,17 +246,16 @@ void ECSSimulator::createKeplerianDisk() {
         std::normal_distribution<> mass_variation(mass_factor * base_mass, base_mass * 0.1);
         registry.emplace<Components::Mass>(entity, mass_variation(generator));
 
-        // For disk particles: just assign them as small circles
         registry.emplace<Components::Shape>(entity, Components::ShapeType::Circle, SimulatorConstants::MetersPerPixel * 0.5);
-
-        // Add blue-white color for gas particles
         registry.emplace<Components::Color>(entity, 150, 150, 255);
 
         particles_created++;
     }
+    std::cerr << "Created " << particles_created << " gas particles." << std::endl;
 }
 
 void ECSSimulator::createBouncyBalls() {
+    std::cerr << "Creating Bouncy Balls" << std::endl;
     std::default_random_engine generator{static_cast<unsigned int>(time(0))};
     
     int balls_per_side = static_cast<int>(std::sqrt(SimulatorConstants::ParticleCount));
@@ -259,13 +264,9 @@ void ECSSimulator::createBouncyBalls() {
     std::normal_distribution<> velocity_dist(0.0, 1.0);
     std::normal_distribution<> mass_dist(SimulatorConstants::ParticleMassMean, SimulatorConstants::ParticleMassStdDev);
 
-    // Random size distribution
     std::uniform_real_distribution<> size_dist(0.05, 0.2);
-    // Random shape distribution
     std::uniform_real_distribution<> shape_dist(0.0, 1.0);
-
-    // Random color distribution (ensuring minimum brightness)
-    std::uniform_int_distribution<> color_dist(100, 255);  // Minimum 100 to avoid too dark colors
+    std::uniform_int_distribution<> color_dist(100, 255);
 
     int particles_created = 0;
     for (int i = 0; i < balls_per_side && particles_created < SimulatorConstants::ParticleCount; i++) {
@@ -286,17 +287,15 @@ void ECSSimulator::createBouncyBalls() {
             double s = shape_dist(generator);
             double sz = size_dist(generator);
 
-            double I; // moment of inertia
+            double I;
             if (s < 0.5)
             {
-                // Circle
                 registry.emplace<Components::Shape>(entity, Components::ShapeType::Circle, sz);
-                registry.emplace<CircleShape>(entity, sz); // Now we have a circle radius stored
-                I = 0.5 * mass_val * (sz * sz); // circle inertia
+                registry.emplace<CircleShape>(entity, sz);
+                I = 0.5 * mass_val * (sz * sz);
             }
             else
             {
-                // Square
                 registry.emplace<Components::Shape>(entity, Components::ShapeType::Square, sz);
                 PolygonShape poly;
                 poly.type = Components::ShapeType::Square;
@@ -306,26 +305,25 @@ void ECSSimulator::createBouncyBalls() {
                     Vector(sz, sz),
                     Vector(-sz, sz)};
                 registry.emplace<PolygonShape>(entity, poly);
-                I = (4.0 / 3.0) * mass_val * (sz * sz); // square inertia
+                I = (4.0 / 3.0) * mass_val * (sz * sz);
             }
-            // Add angular components
-            registry.emplace<Components::AngularPosition>(entity, 0.0); // start angle = 0
+            registry.emplace<Components::AngularPosition>(entity, 0.0);
             registry.emplace<Components::AngularVelocity>(entity, 0.0);
             registry.emplace<Components::Inertia>(entity, I);
 
-            // Add random color
             registry.emplace<Components::Color>(entity, 
-                color_dist(generator),  // r
-                color_dist(generator),  // g
-                color_dist(generator)   // b
-            );
+                color_dist(generator),
+                color_dist(generator),
+                color_dist(generator));
 
             particles_created++;
         }
     }
+    std::cerr << "Created " << particles_created << " bouncy balls." << std::endl;
 }
 
 void ECSSimulator::createIsothermalBox() {
+    std::cerr << "Creating Isothermal Box" << std::endl;
     std::default_random_engine generator{static_cast<unsigned int>(time(0))};
     double box_size = SimulatorConstants::UniverseSizeMeters;
     double spacing = box_size / std::sqrt(SimulatorConstants::ParticleCount);
@@ -345,8 +343,6 @@ void ECSSimulator::createIsothermalBox() {
                 registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Gas);
                 registry.emplace<Components::Mass>(entity, mass_dist(generator));
                 registry.emplace<Components::Shape>(entity, Components::ShapeType::Circle, 0.5);
-
-                // Add cyan-ish color for gas particles
                 registry.emplace<Components::Color>(entity, 0, 200, 200);
 
                 particles++;
@@ -354,42 +350,5 @@ void ECSSimulator::createIsothermalBox() {
             }
         }
     }
-}
-
-void ECSSimulator::createBoundaries() {
-    double size = SimulatorConstants::UniverseSizeMeters;
-
-    auto createWall = [&](double x, double y, double w, double h) {
-        auto wall = registry.create();
-        registry.emplace<Components::Position>(wall, x, y);
-        registry.emplace<Components::Mass>(wall, 1e30); // effectively infinite mass
-        registry.emplace<Components::ParticlePhase>(wall, Components::Phase::Solid);
-
-        PolygonShape poly;
-        poly.type = Components::ShapeType::Square;
-        // Create a rectangle centered at (x,y) of width w and height h
-        // local coords:
-        double halfW = w*0.5;
-        double halfH = h*0.5;
-        poly.vertices = {
-            Vector(-halfW, -halfH),
-            Vector( halfW, -halfH),
-            Vector( halfW,  halfH),
-            Vector(-halfW,  halfH)
-        };
-        registry.emplace<PolygonShape>(wall, poly);
-        registry.emplace<Components::Shape>(wall, Components::ShapeType::Square, std::max(w,h)*0.5);
-
-        // Infinite inertia for a static body isn't needed, no AngularVelocity or Inertia required
-        // Just don't add those for walls.
-    };
-
-    // Create left wall
-    createWall(0.0, size*0.5, 1.0, size); // Very thin vertical wall on left
-    // Right wall
-    createWall(size, size*0.5, 1.0, size);
-    // Bottom wall
-    createWall(size*0.5, 0.0, size, 1.0);
-    // Top wall
-    createWall(size*0.5, size, size, 1.0);
+    std::cerr << "Created " << particles << " isothermal box particles." << std::endl;
 }

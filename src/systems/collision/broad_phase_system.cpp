@@ -43,14 +43,12 @@ struct QuadNode {
         if (is_leaf) {
             // subdivide and redistribute
             subdivide();
-            // Move existing particles into children
             for (auto &part : particles) {
                 insertIntoChild(part);
             }
             particles.clear();
         }
 
-        // Insert new particle into a child
         insertIntoChild(p);
     }
 
@@ -59,7 +57,6 @@ struct QuadNode {
         else if (ne->contains(p.x,p.y)) ne->insert(p);
         else if (sw->contains(p.x,p.y)) sw->insert(p);
         else if (se->contains(p.x,p.y)) se->insert(p);
-        // If none contains, might be edge case at boundary.
     }
 
     void query(double qx, double qy, double qsize, std::vector<ParticleInfo>& found) const {
@@ -87,21 +84,29 @@ struct QuadNode {
     }
 };
 
-// We'll build a quadtree and return candidate pairs
 static std::unique_ptr<QuadNode> buildQuadtree(entt::registry &registry) {
-    double size = SimulatorConstants::UniverseSizeMeters;
-    int capacity = 8;
-    auto root = std::make_unique<QuadNode>(0.0,0.0,size,capacity);
+    // Instead of restricting ourselves to [0,0,size,size],
+    // let's cover a larger area that includes the walls outside the boundary.
+    // For example, if we placed walls at -lineThickness and size+lineThickness,
+    // we can cover an area slightly larger than the universe.
 
+    double size = SimulatorConstants::UniverseSizeMeters;
+    double extra = 500.0; // Some margin to include walls outside normal range
+                          // Adjust this if needed depending on your wall placement.
+
+    // Now the quadtree covers from (-extra,-extra) to (size+extra, size+extra)
+    auto root = std::make_unique<QuadNode>(-extra, -extra, size + 2*extra, 8);
+
+    // Insert ALL entities, including walls, regardless of their position
+    // Remove any conditions on position range
     auto view = registry.view<Components::Position>();
     for (auto e : view) {
-        auto pos = view.get<Components::Position>(e);
-        if (pos.x >=0 && pos.x < size && pos.y >=0 && pos.y < size) {
-            ParticleInfo pinfo { e, pos.x, pos.y };
-            root->insert(pinfo);
-        }
+        const auto &pos = view.get<Components::Position>(e);
+        // Insert all entities (walls included) into the quadtree
+        ParticleInfo pinfo { e, pos.x, pos.y };
+        root->insert(pinfo);
     }
-    return root;
+    return std::move(root);
 }
 
 void Systems::BroadPhaseSystem::update(entt::registry &registry, std::vector<CandidatePair> &candidatePairs) {
@@ -110,8 +115,8 @@ void Systems::BroadPhaseSystem::update(entt::registry &registry, std::vector<Can
 
     auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
     for (auto eA : view) {
-        auto posA = view.get<Components::Position>(eA);
-        double query_size = 1.0; // or based on shape bounding box
+        const auto &posA = view.get<Components::Position>(eA);
+        double query_size = 1.0; 
         double qx = posA.x - query_size*0.5;
         double qy = posA.y - query_size*0.5;
 

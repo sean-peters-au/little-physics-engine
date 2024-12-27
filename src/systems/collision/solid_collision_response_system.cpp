@@ -10,7 +10,6 @@ void Systems::SolidCollisionResponseSystem::update(entt::registry &registry, Col
     const double angularDamp = 0.98;
 
     for (auto &col : manifold.collisions) {
-        // Check if either entity is asleep
         bool asleepA = false;
         bool asleepB = false;
         if (registry.any_of<Components::Sleep>(col.a)) {
@@ -23,7 +22,6 @@ void Systems::SolidCollisionResponseSystem::update(entt::registry &registry, Col
         }
 
         if (asleepA && asleepB) {
-            // Both asleep, skip collision response
             continue;
         }
 
@@ -41,8 +39,9 @@ void Systems::SolidCollisionResponseSystem::update(entt::registry &registry, Col
         auto velB = registry.get<Components::Velocity>(col.b);
         auto &massB = registry.get<Components::Mass>(col.b);
 
-        double invMassA = 1.0/massA.value;
-        double invMassB = 1.0/massB.value;
+        // If mass is huge (1e30), treat as infinite mass:
+        double invMassA = (massA.value > 1e29) ? 0.0 : 1.0/massA.value;
+        double invMassB = (massB.value > 1e29) ? 0.0 : 1.0/massB.value;
         double invSum = invMassA+invMassB;
 
         Vector n = col.normal;
@@ -51,7 +50,7 @@ void Systems::SolidCollisionResponseSystem::update(entt::registry &registry, Col
         Vector relativeVel = velB - velA;
         double normalSpeed = relativeVel.dotProduct(n);
 
-        double restitution = 0.0; // Consider no restitution for stable stacking
+        double restitution = 0.0;
         if (std::fabs(normalSpeed) < 0.5) restitution *= 0.5;
 
         double j = 0.0;
@@ -59,20 +58,16 @@ void Systems::SolidCollisionResponseSystem::update(entt::registry &registry, Col
             j = -(1.0+restitution)*normalSpeed / invSum;
         }
 
-        // Apply normal impulse
         Vector impulse = n * j;
         velA = velA - (impulse * invMassA);
         velB = velB + (impulse * invMassB);
 
-        // Positional correction
         double corr = std::max(penetration - slop,0.0)*baumgarte/invSum;
         Position corrA(n.x*(corr*invMassA), n.y*(corr*invMassA));
         Position corrB(n.x*(corr*invMassB), n.y*(corr*invMassB));
         posA = Position(posA.x - corrA.x, posA.y - corrA.y);
         posB = Position(posB.x + corrB.x, posB.y + corrB.y);
 
-        // Compute friction
-        // Retrieve materials (if any). If not present, assume defaults.
         double staticFrictionA=0.5, dynamicFrictionA=0.3;
         double staticFrictionB=0.5, dynamicFrictionB=0.3;
         if (registry.any_of<Components::Material>(col.a)) {
@@ -86,11 +81,9 @@ void Systems::SolidCollisionResponseSystem::update(entt::registry &registry, Col
             dynamicFrictionB = matB.dynamicFriction;
         }
 
-        // Combine friction (just average for now)
         double combinedStaticFriction = (staticFrictionA + staticFrictionB)*0.5;
         double combinedDynamicFriction = (dynamicFrictionA + dynamicFrictionB)*0.5;
 
-        // Tangent direction
         Vector t = relativeVel - (n * (relativeVel.dotProduct(n)));
         double tLen = t.length();
         if (tLen > EPSILON) {
@@ -100,15 +93,12 @@ void Systems::SolidCollisionResponseSystem::update(entt::registry &registry, Col
         }
 
         double tangentSpeed = relativeVel.dotProduct(t);
-        // If tangent speed is very small, use static friction
         double jt = -tangentSpeed/(invSum);
         double frictionImpulseMagnitude = std::fabs(jt);
 
         if (frictionImpulseMagnitude < j*combinedStaticFriction) {
-            // Static friction can stop relative motion completely
             jt = -tangentSpeed/(invSum);
         } else {
-            // Use dynamic friction
             jt = -j * combinedDynamicFriction * (jt>0?1:-1);
         }
 
@@ -116,7 +106,6 @@ void Systems::SolidCollisionResponseSystem::update(entt::registry &registry, Col
         velA = velA - (frictionImpulse * invMassA);
         velB = velB + (frictionImpulse * invMassB);
 
-        // Angular impulses if needed
         if (registry.all_of<Components::AngularVelocity,Components::Inertia>(col.a) &&
             registry.all_of<Components::AngularVelocity,Components::Inertia>(col.b)) {
             auto &angVelA = registry.get<Components::AngularVelocity>(col.a);

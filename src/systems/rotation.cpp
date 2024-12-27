@@ -1,3 +1,8 @@
+/**
+ * @file rotation.cpp
+ * @brief Implementation of rotational motion system
+ */
+
 #include "nbody/systems/rotation.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sim.hpp"

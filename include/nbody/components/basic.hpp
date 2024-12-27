@@ -78,6 +78,10 @@ namespace Components {
         double dynamicFriction;
     };
 
+    struct Boundary {
+        bool isBoundary = false;
+    };
+
 } // namespace Components
 
 #endif

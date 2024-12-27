@@ -43,7 +43,7 @@ namespace SimulatorConstants {
                 TimeAcceleration = orbital_period / (5.0 * StepsPerSecond) * 20.0; 
                 GridSize = 100;
                 CellSizePixels = static_cast<double>(ScreenLength) / GridSize;
-                ParticleCount = 500;
+                ParticleCount = 1000;
                 ParticleMassMean = 1e22;  
                 ParticleMassStdDev = 1e21;
                 GravitationalSoftener = 2e7;  

@@ -1,11 +1,22 @@
 #include "nbody/math/vector_math.hpp"
 #include "nbody/algo/epa.hpp"
+
 #include <cmath>
 #include <limits>
 #include <iostream>
 #include <optional>
 #include <cassert>
 
+/**
+ * @brief Calculates the perpendicular distance from a line segment to the origin
+ * 
+ * @param a First point of the edge
+ * @param b Second point of the edge
+ * @param[out] normal The normalized perpendicular vector to the edge, pointing away from origin
+ * @return double The perpendicular distance from the edge to the origin
+ * 
+ * @note The normal is always oriented to point away from the origin
+ */
 static double edgeDistance(const Vector &a, const Vector &b, Vector &normal) {
     Vector e = b - a;
     normal = Vector(e.y, -e.x).normalized();
