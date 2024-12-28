@@ -1,31 +1,25 @@
-#ifndef ECS_SIMULATOR_H
-#define ECS_SIMULATOR_H
+#ifndef NBODY_KEPLERIAN_DISK_SCENARIO_HPP
+#define NBODY_KEPLERIAN_DISK_SCENARIO_HPP
 
+#include "nbody/core/i_scenario.hpp"
 #include <entt/entt.hpp>
-#include "nbody/components/components.hpp"
-#include "nbody/core/coordinates.hpp"
 
-class ECSSimulator {
-private:
-    entt::registry registry;
-    // Particle generation functions
-    void createCentralBody();
-    void createKeplerianDisk();
-    
-    // Physics helper functions
-    double calculateKeplerianVelocity(double radius_meters, double central_mass) const;
-    double calculateDiskHeight(double radius, double max_radius) const;
-    double calculateDiskDensity(double radius, double max_radius) const;
-
+/**
+ * @class KeplerianDiskScenario
+ * 
+ * Creates a central body plus an orbiting disk of gas.
+ */
+class KeplerianDiskScenario : public IScenario {
 public:
-    ECSSimulator();
-    explicit ECSSimulator(CoordinateSystem* coordSystem);
-    
-    void init();
-    void tick();
-    
-    // Accessor for the drawer
-    const entt::registry& getRegistry() const { return registry; }
+    KeplerianDiskScenario() = default;
+    ~KeplerianDiskScenario() override = default;
+
+    ScenarioConfig getConfig() const override;
+    void createEntities(entt::registry &registry) const override;
+
+private:
+    void createCentralBody(entt::registry &registry) const;
+    void createKeplerianDisk(entt::registry &registry) const;
 };
 
-#endif
+#endif // NBODY_KEPLERIAN_DISK_SCENARIO_HPP

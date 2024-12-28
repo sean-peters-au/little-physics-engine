@@ -8,209 +8,252 @@
 #include "nbody/components/sim.hpp"
 #include "nbody/core/profile.hpp"
 
-// Helper function to get scenario list with names
-static std::vector<std::pair<SimulatorConstants::SimulationType,std::string>> buildScenarioList() {
-    std::vector<std::pair<SimulatorConstants::SimulationType,std::string>> scenarios;
+/**
+ * @brief Helper: build a scenario list from getAllScenarios()
+ * 
+ * Returns a vector of (SimulationType, scenarioName)
+ */
+static std::vector<std::pair<SimulatorConstants::SimulationType, std::string>> buildScenarioList() {
+    std::vector<std::pair<SimulatorConstants::SimulationType, std::string>> scenarios;
     for (auto s : SimulatorConstants::getAllScenarios()) {
         scenarios.push_back({s, SimulatorConstants::getScenarioName(s)});
     }
     return scenarios;
 }
 
-// Helper function to update simulator state when changing scenarios
-void updateSimulatorState(ECSSimulator& simulator, SimulatorConstants::SimulationType scenario) {
+/**
+ * @brief Helper: apply new scenario and reset simulator
+ * 
+ * This calls initializeConstants(...), updates the baseTimeAcceleration, 
+ * sets the scenario in the simulator, then calls simulator.reset().
+ */
+static void updateSimulatorState(ECSSimulator& simulator,
+                                 SimulatorConstants::SimulationType scenario)
+{
+    // First re-init global constants to safe defaults
     SimulatorConstants::initializeConstants(scenario);
+
+    // Pass the scenario to the simulator
     simulator.setScenario(scenario);
-    
-    // Update base time acceleration for new scenario
+
+    // If we want to update the baseTimeAcceleration inside the simulator’s registry:
     auto& registry = simulator.getRegistry();
     auto stateView = registry.view<Components::SimulatorState>();
     if (!stateView.empty()) {
         auto& state = registry.get<Components::SimulatorState>(stateView.front());
         state.baseTimeAcceleration = SimulatorConstants::TimeAcceleration;
     }
-    
+
+    // Now fully reset the ECS with that scenario
     simulator.reset();
 }
 
 int main(int, char**) {
-    // Start with CELESTIAL_GAS scenario
-    auto initialScenario = SimulatorConstants::SimulationType::CELESTIAL_GAS;
+    // Choose an initial scenario from your enum
+    auto initialScenario = SimulatorConstants::SimulationType::KEPLERIAN_DISK;
 
-    Renderer renderer(SimulatorConstants::ScreenLength + 200, SimulatorConstants::ScreenLength);
+    // Create a larger window: the simulation area plus an extra 200px panel
+    Renderer renderer(SimulatorConstants::ScreenLength + 200,
+                      SimulatorConstants::ScreenLength);
     if (!renderer.init()) {
         return 1;
     }
 
+    // If we have a coordinate system class:
     CoordinateSystem coordSystem;
     ECSSimulator simulator(&coordSystem);
-    
-    // Create simulator state entity
-    auto stateEntity = simulator.getRegistry().create();
-    
-    updateSimulatorState(simulator, initialScenario);  // Use helper instead of direct calls
+
+    // Build scenario list for the UI
+    auto scenarioList = buildScenarioList();
+
+    // Initialize with chosen scenario
+    updateSimulatorState(simulator, initialScenario);
+
     simulator.init();
 
+    // Desired FPS
     const int FPS = 120;
-    const int frameDelay = 1000 / FPS; // target milliseconds per frame
+    const int frameDelay = 1000 / FPS; // in ms
 
-    sf::Clock fpsClock;
-    sf::Clock frameClock;
-    float avgFPS = 0;
+    sf::Clock fpsClock;      // tracks time for fps calc
+    sf::Clock frameClock;    // tracks dt each frame
+    float avgFPS = 0.0f;
     int frameCount = 0;
-    float fpsTimer = 0.0f;
+    float fpsTimer = 0.0f;   // accumulates time for 1-second check
 
     bool running = true;
     bool paused = false;
 
-    auto scenarioList = buildScenarioList();
-
-    // To highlight buttons when hovered or clicked
-    SimulatorConstants::SimulationType highlightedScenario = initialScenario;
+    // For UI highlights
     bool highlightPausePlay = false;
     bool highlightReset = false;
+    SimulatorConstants::SimulationType highlightedScenario =
+        (SimulatorConstants::SimulationType)-1;
 
     auto lastProfileTime = std::chrono::steady_clock::now();
 
-    while(running) {
-        // Handle events
-        sf::Event event;
+    while (running) {
+        // Poll events
         sf::RenderWindow& window = renderer.getWindow();
-
-        // Mouse position for hovering
         sf::Vector2i mousePos = sf::Mouse::getPosition(window);
         int mouseX = mousePos.x;
         int mouseY = mousePos.y;
 
-        // Reset highlights every frame
         highlightPausePlay = false;
         highlightReset = false;
         highlightedScenario = (SimulatorConstants::SimulationType)-1;
 
-        // Update highlight states based on mouse hover
-        // Pause/Play
-        if (mouseX >= renderer.pausePlayButton.rect.left && mouseX <= renderer.pausePlayButton.rect.left + renderer.pausePlayButton.rect.width &&
-            mouseY >= renderer.pausePlayButton.rect.top && mouseY <= renderer.pausePlayButton.rect.top + renderer.pausePlayButton.rect.height) {
+        // For "hover" effect on pause/play
+        if (mouseX >= renderer.pausePlayButton.rect.left &&
+            mouseX <= renderer.pausePlayButton.rect.left + renderer.pausePlayButton.rect.width &&
+            mouseY >= renderer.pausePlayButton.rect.top &&
+            mouseY <= renderer.pausePlayButton.rect.top + renderer.pausePlayButton.rect.height)
+        {
             highlightPausePlay = true;
         }
 
-        // Reset
-        if (mouseX >= renderer.resetButton.rect.left && mouseX <= renderer.resetButton.rect.left + renderer.resetButton.rect.width &&
-            mouseY >= renderer.resetButton.rect.top && mouseY <= renderer.resetButton.rect.top + renderer.resetButton.rect.height) {
+        // For "hover" effect on reset
+        if (mouseX >= renderer.resetButton.rect.left &&
+            mouseX <= renderer.resetButton.rect.left + renderer.resetButton.rect.width &&
+            mouseY >= renderer.resetButton.rect.top &&
+            mouseY <= renderer.resetButton.rect.top + renderer.resetButton.rect.height)
+        {
             highlightReset = true;
         }
 
-        // Scenario buttons
+        // For scenario buttons
         for (auto& btn : renderer.scenarioButtons) {
             if (mouseX >= btn.rect.left && mouseX <= btn.rect.left + btn.rect.width &&
-                mouseY >= btn.rect.top && mouseY <= btn.rect.top + btn.rect.height) {
+                mouseY >= btn.rect.top && mouseY <= btn.rect.top + btn.rect.height)
+            {
                 highlightedScenario = btn.scenario;
                 break;
             }
         }
 
+        sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
                 running = false;
-            } else if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-                // Check button clicks
+            }
+            else if (event.type == sf::Event::MouseButtonPressed &&
+                     event.mouseButton.button == sf::Mouse::Left)
+            {
+                // Click checks
                 // Pause/Play
-                if (mouseX >= renderer.pausePlayButton.rect.left && mouseX <= renderer.pausePlayButton.rect.left + renderer.pausePlayButton.rect.width &&
-                    mouseY >= renderer.pausePlayButton.rect.top && mouseY <= renderer.pausePlayButton.rect.top + renderer.pausePlayButton.rect.height) {
+                if (mouseX >= renderer.pausePlayButton.rect.left &&
+                    mouseX <= renderer.pausePlayButton.rect.left + renderer.pausePlayButton.rect.width &&
+                    mouseY >= renderer.pausePlayButton.rect.top &&
+                    mouseY <= renderer.pausePlayButton.rect.top + renderer.pausePlayButton.rect.height)
+                {
                     paused = !paused;
                 }
-
                 // Reset
-                if (mouseX >= renderer.resetButton.rect.left && mouseX <= renderer.resetButton.rect.left + renderer.resetButton.rect.width &&
-                    mouseY >= renderer.resetButton.rect.top && mouseY <= renderer.resetButton.rect.top + renderer.resetButton.rect.height) {
+                if (mouseX >= renderer.resetButton.rect.left &&
+                    mouseX <= renderer.resetButton.rect.left + renderer.resetButton.rect.width &&
+                    mouseY >= renderer.resetButton.rect.top &&
+                    mouseY <= renderer.resetButton.rect.top + renderer.resetButton.rect.height)
+                {
                     simulator.reset();
                     paused = false;
                 }
 
-                // Scenario change
+                // Scenario selection
                 for (auto& btn : renderer.scenarioButtons) {
-                    if (mouseX >= btn.rect.left && mouseX <= btn.rect.left + btn.rect.width &&
-                        mouseY >= btn.rect.top && mouseY <= btn.rect.top + btn.rect.height) {
-                        updateSimulatorState(simulator, btn.scenario);  // Use helper here too
+                    if (btn.rect.contains(sf::Vector2i(mouseX, mouseY))) {
+                        updateSimulatorState(simulator, btn.scenario);
                         paused = false;
                         break;
                     }
                 }
 
-                // Check speed buttons
-                for (const auto& btn : renderer.speedButtons) {
-                    if (btn.rect.contains(mousePos)) {
-                        auto stateView = simulator.getRegistry().view<Components::SimulatorState>();
-                        if (!stateView.empty()) {
-                            auto& state = simulator.getRegistry().get<Components::SimulatorState>(stateView.front());
-                            state.timeScale = btn.speedMultiplier;
+                // Speed buttons
+                for (auto& btn : renderer.speedButtons) {
+                    if (btn.rect.contains(sf::Vector2i(mouseX, mouseY))) {
+                        auto view = simulator.getRegistry().view<Components::SimulatorState>();
+                        if (!view.empty()) {
+                            auto& st = simulator.getRegistry().get<Components::SimulatorState>(view.front());
+                            st.timeScale = btn.speedMultiplier;
                         }
                         break;
                     }
                 }
-            } else if (event.type == sf::Event::KeyPressed) {
-                // Keyboard shortcuts as fallback
+            }
+            else if (event.type == sf::Event::KeyPressed) {
+                // Keyboard shortcuts
                 if (event.key.code == sf::Keyboard::P) {
                     paused = !paused;
-                } else if (event.key.code == sf::Keyboard::R) {
+                }
+                else if (event.key.code == sf::Keyboard::R) {
                     simulator.reset();
                     paused = false;
-                } else if (event.key.code == sf::Keyboard::Num1) {
-                    updateSimulatorState(simulator, SimulatorConstants::SimulationType::CELESTIAL_GAS);
+                }
+                else if (event.key.code == sf::Keyboard::Num1) {
+                    updateSimulatorState(simulator, SimulatorConstants::SimulationType::KEPLERIAN_DISK);
                     paused = false;
-                } else if (event.key.code == sf::Keyboard::Num2) {
+                }
+                else if (event.key.code == sf::Keyboard::Num2) {
                     updateSimulatorState(simulator, SimulatorConstants::SimulationType::ISOTHERMAL_BOX);
                     paused = false;
-                } else if (event.key.code == sf::Keyboard::Num3) {
-                    updateSimulatorState(simulator, SimulatorConstants::SimulationType::BOUNCY_BALLS);
+                }
+                else if (event.key.code == sf::Keyboard::Num3) {
+                    updateSimulatorState(simulator, SimulatorConstants::SimulationType::RANDOM_POLYGONS);
                     paused = false;
+                }
+                else if (event.key.code == sf::Keyboard::Escape) {
+                    running = false;
                 }
             }
         }
 
-        // Tick simulation if not paused
+        // Step the simulation if not paused
         if (!paused) {
             simulator.tick();
         }
 
+        // Start rendering
         renderer.clear();
         renderer.renderParticles(simulator.getRegistry(), Renderer::whiteColor);
 
-        // FPS calculation
+        // Frame-based FPS measure
         float dt = frameClock.restart().asMilliseconds();
         fpsTimer += dt;
         frameCount++;
         if (fpsTimer >= 1000.0f) {
-            avgFPS = (float)frameCount / (fpsTimer / 1000.0f);
+            avgFPS = float(frameCount) / (fpsTimer / 1000.0f);
             frameCount = 0;
             fpsTimer = 0.0f;
         }
 
         renderer.renderFPS(avgFPS);
 
-        // Render UI overlay
-        renderer.renderUI(simulator.getRegistry(), 
-                        paused, 
-                        simulator.getCurrentScenario(), 
-                        scenarioList,
-                        highlightPausePlay, 
-                        highlightReset, 
-                        highlightedScenario);
+        // UI overlay
+        renderer.renderUI(simulator.getRegistry(),
+                          paused,
+                          // show which scenario is currently "active"
+                          // (In a bigger design you'd track it inside the simulator or scenarioPtr)
+                          // we'll just pass the scenario set earlier, or store it in the simulator
+                          SimulatorConstants::SimulationType::KEPLERIAN_DISK,
+                          scenarioList,
+                          highlightPausePlay,
+                          highlightReset,
+                          highlightedScenario);
 
         renderer.present();
 
-        // Framerate control (not always necessary with SFML)
+        // Attempt frame limit
         if (frameDelay > dt) {
-            sf::sleep(sf::milliseconds((int)(frameDelay - dt)));
+            sf::sleep(sf::milliseconds(static_cast<int>(frameDelay - dt)));
         }
 
-        auto currentTime = std::chrono::steady_clock::now();
-        auto elapsedSeconds = std::chrono::duration_cast<std::chrono::seconds>(currentTime - lastProfileTime).count();
-
-        if (elapsedSeconds >= 10) {  // Every 10 seconds of real time
+        // Print & reset profiler stats every 10s
+        auto now = std::chrono::steady_clock::now();
+        static auto lastStats = now;
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - lastStats).count();
+        if (elapsed >= 10) {
             Profiling::Profiler::printStats();
             Profiling::Profiler::reset();
-            lastProfileTime = currentTime;
+            lastStats = now;
         }
     }
 

@@ -1,20 +1,17 @@
 /**
- * @file movement.hpp
- * @brief Linear motion and boundary collision system
+ * @file movement_system.hpp
+ * @brief System for updating positions based on velocity
  *
  * This system handles:
- * - Position updates based on velocity
- * - Universe boundary collisions with bouncing
- * - Linear and angular velocity damping
- * - Sleep state integration
- * 
+ * - Position updates using velocity
+ * - Skips entities that are asleep
+ *
  * Required components:
  * - Position (to modify)
- * - Velocity (to read/modify)
- * 
+ * - Velocity (to read)
+ *
  * Optional components:
- * - Sleep (to check sleep state)
- * - AngularVelocity (for rotational damping)
+ * - Sleep (to check if entity is asleep)
  */
 
 #ifndef MOVEMENT_SYSTEM_HPP
@@ -25,22 +22,19 @@
 namespace Systems {
 
 /**
- * @brief System that manages linear motion and boundaries
- * 
- * Key parameters:
- * - 5m boundary margin
- * - 0.7 bounce damping
- * - 1% velocity damping per frame
+ * @brief Updates entity positions according to their velocity
+ *
+ * Ignores entities that are marked as asleep.
  */
 class MovementSystem {
 public:
     /**
-     * @brief Updates positions and handles boundary collisions
+     * @brief Updates positions for all non-sleeping entities
      * @param registry EnTT registry containing entities and components
      */
     static void update(entt::registry &registry);
 };
 
-}
+} // namespace Systems
 
-#endif
+#endif 

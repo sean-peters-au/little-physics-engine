@@ -170,7 +170,7 @@ public:
             : rect()
             , label()
             , isSpecialButton(false)
-            , scenario(SimulatorConstants::SimulationType::CELESTIAL_GAS)
+            , scenario(SimulatorConstants::SimulationType::KEPLERIAN_DISK)
             , speedMultiplier(1.0)
         {}
     };
