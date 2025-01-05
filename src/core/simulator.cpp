@@ -13,11 +13,7 @@
 #include "nbody/systems/thermodynamics.hpp"
 #include "nbody/systems/sph.hpp"
 #include "nbody/systems/gravity.hpp"
-#include "nbody/systems/collision/broad_phase_system.hpp"
-#include "nbody/systems/collision/narrow_phase_system.hpp"
-#include "nbody/systems/collision/solid_collision_response_system.hpp"
-#include "nbody/systems/collision/liquid_collision_response_system.hpp"
-#include "nbody/systems/collision/gas_collision_response_system.hpp"
+#include "nbody/systems/rigid_body_collision.hpp"
 #include "nbody/systems/collision/collision_data.hpp"
 
 #include "nbody/components/basic.hpp"
@@ -112,19 +108,7 @@ void ECSSimulator::tick() {
         switch (system) {
         case Systems::SystemType::COLLISION: {
             PROFILE_SCOPE("Collision");
-            int solverIterations = 5;
-            std::vector<CandidatePair> candidatePairs;
-            Systems::BroadPhaseSystem::update(registry, candidatePairs);
-            CollisionManifold manifold;
-            for (int i = 0; i < solverIterations; i++) {
-                Systems::NarrowPhaseSystem::update(registry, candidatePairs, manifold);
-                if (manifold.collisions.empty()) {
-                    break;
-                }
-                Systems::SolidCollisionResponseSystem::update(registry, manifold);
-                Systems::LiquidCollisionResponseSystem::update(registry, manifold);
-                Systems::GasCollisionResponseSystem::update(registry, manifold);
-            }
+            Systems::RigidBodyCollisionSystem::update(registry);
             break;
         }
         case Systems::SystemType::ROTATION: {

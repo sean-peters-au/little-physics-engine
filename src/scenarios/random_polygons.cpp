@@ -79,7 +79,7 @@ ScenarioConfig RandomPolygonsScenario::getConfig() const
     cfg.ParticleMassMean = 1.0;
     cfg.ParticleMassStdDev = 0.1;
     cfg.GravitationalSoftener = 1e-2;
-    cfg.CollisionCoeffRestitution = 0.5;
+    cfg.CollisionCoeffRestitution = 0.1;
     cfg.DragCoeff = 0.0;
     cfg.ParticleDensity = 0.5;
     cfg.InitialVelocityFactor = 1.0;
