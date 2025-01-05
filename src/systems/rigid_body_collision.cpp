@@ -475,10 +475,15 @@ void solveContactConstraints(entt::registry &registry,
         // This is not fully correct for stacking, but enough to allow friction to act.
         double restingN = 0.0;
         if (penetration > 0.0 && std::fabs(normalSpeed) < 0.1) {
-            // approximate combined normal force:
+            // Only apply resting force based on gravity component along normal
             double combinedMass = massA.value + massB.value;
-            // We'll assume half belongs to each or similarly:
-            restingN = combinedMass * gravity; 
+            
+            // Gravity direction is (0, 1)
+            Vector gravityDir(0.0, 1.0);
+            double gravityComponent = std::abs(gravityDir.dotProduct(n));
+            
+            // Scale resting force by how aligned the normal is with gravity
+            restingN = combinedMass * gravity * gravityComponent;
         }
 
         double jTotalNormal = jColl + restingN;  
@@ -557,13 +562,13 @@ void solveContactConstraints(entt::registry &registry,
 
             // collision normal impulse
             double angImpA = rA.cross(impulseNormal);
-            double angImpB = -rB.cross(impulseNormal);
+            double angImpB = rB.cross(impulseNormal);
             angA.omega += angImpA / I_A.I;
             angB.omega += angImpB / I_B.I;
 
             // friction impulse
             double fAngA = rA.cross(frictionImpulse);
-            double fAngB = -rB.cross(frictionImpulse);
+            double fAngB = rB.cross(frictionImpulse);
             angA.omega += fAngA / I_A.I;
             angB.omega += fAngB / I_B.I;
 

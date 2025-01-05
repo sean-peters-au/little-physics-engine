@@ -27,7 +27,12 @@ static constexpr double kSmallShapeMax = 0.25;  // Smaller shapes range
 static constexpr double kLargeShapeMin = 0.3;   // Larger shapes range
 static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
-static constexpr int    kParticleCount = 10;
+static constexpr int    kParticleCount = 50;
+
+static constexpr double kWallStaticFriction = 0.6;
+static constexpr double kWallDynamicFriction = 0.4;
+static constexpr double kParticleStaticFriction = 0.5;
+static constexpr double kParticleDynamicFriction = 0.4;
 
 // Helper: build a regular polygon
 PolygonShape buildRegularPolygon(int sides, double sz)
@@ -125,7 +130,7 @@ static void makeWall(entt::registry &registry,
     sleepC.sleepCounter = 9999999; // large
 
     // A friction or material if needed
-    registry.emplace<Components::Material>(wallEnt, 0.5, 0.4);
+    registry.emplace<Components::Material>(wallEnt, kWallStaticFriction, kWallDynamicFriction);
 
     // Use a rectangle polygon
     PolygonShape poly;
@@ -202,7 +207,7 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
             registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
             registry.emplace<Components::Sleep>(entity);
             // Lower friction
-            registry.emplace<Components::Material>(entity, 0.5, 0.3);
+            registry.emplace<Components::Material>(entity, kParticleStaticFriction, kParticleDynamicFriction);
 
             double sz;
             if (sizeSelector(generator) < kSmallShapeRatio) {

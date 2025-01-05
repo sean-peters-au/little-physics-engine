@@ -30,7 +30,7 @@ void RotationSystem::update(entt::registry &registry) {
         angPos.angle += angVel.omega * dt;
 
         // Angular damping
-        double angularDamping = 0.98; // reduces spin by 2% each frame
+        double angularDamping = 0.98;
         angVel.omega *= angularDamping;
 
         // (Optional) Clamp angular velocity
