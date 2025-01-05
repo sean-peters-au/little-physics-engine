@@ -90,7 +90,7 @@ void Renderer::renderParticles(const entt::registry &registry, ColorMapper color
     for (auto entity : view) {
         // Optionally skip boundary entities or do something special
         if (registry.any_of<Components::Boundary>(entity)) {
-            // continue;
+            
         }
 
         const auto &pos = view.get<Components::Position>(entity);
