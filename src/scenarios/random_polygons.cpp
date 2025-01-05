@@ -27,7 +27,7 @@ static constexpr double kSmallShapeMax = 0.25;  // Smaller shapes range
 static constexpr double kLargeShapeMin = 0.3;   // Larger shapes range
 static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
-static constexpr int    kParticleCount = 5;
+static constexpr int    kParticleCount = 10;
 
 // Helper: build a regular polygon
 PolygonShape buildRegularPolygon(int sides, double sz)
@@ -125,7 +125,7 @@ static void makeWall(entt::registry &registry,
     sleepC.sleepCounter = 9999999; // large
 
     // A friction or material if needed
-    registry.emplace<Components::Material>(wallEnt, 0.9, 0.5);
+    registry.emplace<Components::Material>(wallEnt, 0.5, 0.4);
 
     // Use a rectangle polygon
     PolygonShape poly;
