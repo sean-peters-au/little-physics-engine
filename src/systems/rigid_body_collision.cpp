@@ -16,6 +16,8 @@
  */
 
 #include "nbody/systems/rigid_body_collision.hpp"
+
+#include <iostream>
 #include <memory>
 #include <algorithm>
 #include <cmath>

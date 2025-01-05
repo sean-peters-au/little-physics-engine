@@ -17,14 +17,17 @@
 #include <ctime>
 #include <iostream>
 
-static constexpr double kCirclesFraction     = 0.00;
-static constexpr double kRegularFraction     = 1.00;
-static constexpr double kRandomPolyFraction  = 0.00;
+static constexpr double kCirclesFraction     = 0.25;
+static constexpr double kRegularFraction     = 0.5;
+static constexpr double kRandomPolyFraction  = 0.25;
 
-static constexpr double kMinShapeSize = 0.1;
-static constexpr double kMaxShapeSize = 0.4;
+static constexpr double kSmallShapeRatio = 0.90;
+static constexpr double kSmallShapeMin = 0.1;  // Smaller minimum
+static constexpr double kSmallShapeMax = 0.2;  // Smaller shapes range
+static constexpr double kLargeShapeMin = 0.3;   // Larger shapes range
+static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
-static constexpr int    kParticleCount = 50;
+static constexpr int    kParticleCount = 100;
 
 // Helper: build a regular polygon
 PolygonShape buildRegularPolygon(int sides, double sz)
@@ -78,12 +81,11 @@ ScenarioConfig RandomPolygonsScenario::getConfig() const
     cfg.ParticleMassMean = 1.0;
     cfg.ParticleMassStdDev = 0.1;
     cfg.GravitationalSoftener = 1e-2;
-    cfg.CollisionCoeffRestitution = 0.1;
+    cfg.CollisionCoeffRestitution = 0.0;
     cfg.DragCoeff = 0.0;
     cfg.ParticleDensity = 0.5;
     cfg.InitialVelocityFactor = 1.0;
 
-    // Note: We do NOT add Systems::SystemType::BOUNDARY anymore because we use walls instead
     cfg.activeSystems = {
         Systems::SystemType::COLLISION,
         Systems::SystemType::BASIC_GRAVITY,
@@ -153,7 +155,7 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
     double universeSizeM = SimulatorConstants::UniverseSizeMeters;
 
     // Thin walls: 0.1m thick
-    double wallThickness = 1.1;
+    double wallThickness = 0.1;
     double halfWall = wallThickness * 0.5;
 
     // Left wall
@@ -177,7 +179,9 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
     std::normal_distribution<> velocityDist(0.0, 1.0);
     std::normal_distribution<> massDist(SimulatorConstants::ParticleMassMean,
                                         SimulatorConstants::ParticleMassStdDev);
-    std::uniform_real_distribution<double> sizeDist(kMinShapeSize, kMaxShapeSize);
+    std::uniform_real_distribution<double> smallSizeDist(kSmallShapeMin, kSmallShapeMax);
+    std::uniform_real_distribution<double> largeSizeDist(kLargeShapeMin, kLargeShapeMax);
+    std::uniform_real_distribution<double> sizeSelector(0.0, 1.0); // To choose between small and large
     std::uniform_int_distribution<> colorDist(100, 255);
 
     int created = 0;
@@ -200,7 +204,13 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
             // Lower friction
             registry.emplace<Components::Material>(entity, 0.001, 0.001);
 
-            double sz = sizeDist(generator);
+            double sz;
+            if (sizeSelector(generator) < kSmallShapeRatio) {
+                sz = smallSizeDist(generator);
+            } else {
+                sz = largeSizeDist(generator);
+            }
+
             double I; 
 
             if (cCount < circlesCount) {

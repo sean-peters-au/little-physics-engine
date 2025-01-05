@@ -68,18 +68,17 @@ void ECSSimulator::reset() {
     SimulatorConstants::initializeConstants(chosen);
 
     // Create scenario object
-    // (In real code, you'd switch(chosen) to pick the scenario)
     switch (chosen) {
-    case SimulatorConstants::SimulationType::KEPLERIAN_DISK:
-        scenarioPtr = std::make_unique<KeplerianDiskScenario>();
-        break;
-    case SimulatorConstants::SimulationType::ISOTHERMAL_BOX:
-        scenarioPtr = std::make_unique<IsothermalBoxScenario>();
-        break;
-    case SimulatorConstants::SimulationType::RANDOM_POLYGONS:
-    default:
-        scenarioPtr = std::make_unique<RandomPolygonsScenario>();
-        break;
+        case SimulatorConstants::SimulationType::KEPLERIAN_DISK:
+            scenarioPtr = std::make_unique<KeplerianDiskScenario>();
+            break;
+        case SimulatorConstants::SimulationType::ISOTHERMAL_BOX:
+            scenarioPtr = std::make_unique<IsothermalBoxScenario>();
+            break;
+        case SimulatorConstants::SimulationType::RANDOM_POLYGONS:
+        default:
+            scenarioPtr = std::make_unique<RandomPolygonsScenario>();
+            break;
     }
 
     // Grab config from scenario
