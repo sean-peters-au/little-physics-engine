@@ -17,17 +17,17 @@
 #include <ctime>
 #include <iostream>
 
-static constexpr double kCirclesFraction     = 0.25;
+static constexpr double kCirclesFraction     = 0.15;
 static constexpr double kRegularFraction     = 0.5;
-static constexpr double kRandomPolyFraction  = 0.25;
+static constexpr double kRandomPolyFraction  = 0.35;
 
 static constexpr double kSmallShapeRatio = 0.90;
 static constexpr double kSmallShapeMin = 0.1;  // Smaller minimum
-static constexpr double kSmallShapeMax = 0.2;  // Smaller shapes range
+static constexpr double kSmallShapeMax = 0.25;  // Smaller shapes range
 static constexpr double kLargeShapeMin = 0.3;   // Larger shapes range
 static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
-static constexpr int    kParticleCount = 100;
+static constexpr int    kParticleCount = 5;
 
 // Helper: build a regular polygon
 PolygonShape buildRegularPolygon(int sides, double sz)
@@ -80,19 +80,19 @@ ScenarioConfig RandomPolygonsScenario::getConfig() const
     cfg.ParticleCount = kParticleCount;
     cfg.ParticleMassMean = 1.0;
     cfg.ParticleMassStdDev = 0.1;
-    cfg.GravitationalSoftener = 1e-2;
+    cfg.GravitationalSoftener = 0;
     cfg.CollisionCoeffRestitution = 0.0;
     cfg.DragCoeff = 0.0;
     cfg.ParticleDensity = 0.5;
     cfg.InitialVelocityFactor = 1.0;
 
     cfg.activeSystems = {
-        Systems::SystemType::COLLISION,
         Systems::SystemType::BASIC_GRAVITY,
-        Systems::SystemType::ROTATION,
+        Systems::SystemType::COLLISION,
         Systems::SystemType::DAMPENING,
+        Systems::SystemType::SLEEP,
+        Systems::SystemType::ROTATION,
         Systems::SystemType::MOVEMENT,
-        Systems::SystemType::SLEEP
     };
 
     return cfg;
@@ -125,7 +125,7 @@ static void makeWall(entt::registry &registry,
     sleepC.sleepCounter = 9999999; // large
 
     // A friction or material if needed
-    registry.emplace<Components::Material>(wallEnt, 0.5, 0.3);
+    registry.emplace<Components::Material>(wallEnt, 0.9, 0.5);
 
     // Use a rectangle polygon
     PolygonShape poly;
@@ -202,7 +202,7 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
             registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
             registry.emplace<Components::Sleep>(entity);
             // Lower friction
-            registry.emplace<Components::Material>(entity, 0.001, 0.001);
+            registry.emplace<Components::Material>(entity, 0.5, 0.3);
 
             double sz;
             if (sizeSelector(generator) < kSmallShapeRatio) {

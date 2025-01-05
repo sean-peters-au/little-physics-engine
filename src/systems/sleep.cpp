@@ -5,9 +5,9 @@
 #include <iostream>
 
 // Thresholds
-static const double LINEAR_SLEEP_THRESHOLD = 0.2;
-static const double ANGULAR_SLEEP_THRESHOLD = 0.2;
-static const int SLEEP_FRAMES = 60; // after 60 frames of low velocity, sleep
+static const double LINEAR_SLEEP_THRESHOLD = 0.05;
+static const double ANGULAR_SLEEP_THRESHOLD = 0.05;
+static const int SLEEP_FRAMES = 30; // after 60 frames of low velocity, sleep
 
 void Systems::SleepSystem::update(entt::registry &registry) {
     auto view = registry.view<Components::Velocity, Components::ParticlePhase, Components::Mass, Components::Sleep>();

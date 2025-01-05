@@ -1,23 +1,14 @@
 /**
  * @file rigid_body_collision.cpp
- * @brief Rigid-body collision system supporting arbitrary polygons. The broad-phase
- *        now stores bounding boxes (AABBs) instead of single points, allowing timely
- *        detection of collisions even for large or offset shapes.
+ * @brief Rigid-body collision system supporting arbitrary polygons (and circles)
+ *        via GJK/EPA. Now uses a more accurate method to compute the collision
+ *        contact point by finding the supporting faces of each shape along
+ *        the EPA normal, rather than naively shifting shape centers.
  *
- *        Performance-wise, this solution uses a simple quadtree for bounding boxes,
- *        reducing the risk of “late collision detection” inherent in point-based
- *        approaches. Polygons, circles, or any convex shapes are simply inserted
- *        via an axis-aligned bounding box. During queries, we check overlapping
- *        bounding boxes to gather candidate pairs.
- *
- *        After collecting candidate pairs, we proceed with GJK/EPA (narrow phase)
- *        and finally a collision response system that applies impulses and
- *        positional corrections.
+ *        This helps prevent exaggerated torque/rotation from large contact offsets.
  */
 
 #include "nbody/systems/rigid_body_collision.hpp"
-
-#include <iostream>
 #include <memory>
 #include <algorithm>
 #include <cmath>
@@ -32,258 +23,241 @@
 #include "nbody/math/polygon.hpp"      // For polygon shape
 #include "nbody/systems/collision/collision_data.hpp"
 
-
 namespace {
 
 /**
- * @struct AABB
- * @brief Stores an entity and its bounding box in world coordinates.
+ * @brief For a polygon or circle, compute its world-space vertices.
+ *        (Circles just produce a single vertex at center + radius in the normal direction.)
  */
-struct AABBEntity {
-    entt::entity entity;
-    double minx, miny, maxx, maxy;
-};
-
-/**
- * @brief Helper to check if two bounding boxes overlap.
- */
-bool boxesOverlap(const AABBEntity &a, const AABBEntity &b) {
-    // No overlap if one box is to the left/right or above/below the other
-    if (a.maxx < b.minx || a.minx > b.maxx) return false;
-    if (a.maxy < b.miny || a.miny > b.maxy) return false;
-    return true;
-}
-
-/**
- * @struct BoxNode
- * @brief Quadtree node storing bounding boxes for a subset of entities.
- *
- * Each node covers [x, y, x+size, y+size]. We subdivide if capacity is exceeded
- * and the box can fit entirely in a child region. If not, or if partial coverage,
- * we store it in this node.
- */
-struct BoxNode {
-    double x, y, size;   ///< Node bounding region: [x, y] .. [x+size, y+size]
-    int capacity;
-    bool is_leaf;
-    std::vector<AABBEntity> objects; ///< Bboxes stored at this node
-    std::unique_ptr<BoxNode> nw, ne, sw, se;
-
-    BoxNode(double _x, double _y, double _size, int _capacity)
-        : x(_x), y(_y), size(_size), capacity(_capacity), is_leaf(true) {}
-
-    /**
-     * @brief Node bounding box overlap check vs. an AABBEntity
-     */
-    bool nodeContains(const AABBEntity &bb) const {
-        // Check if the entire bounding box (bb) fits fully inside this node region
-        if (bb.minx >= x && bb.maxx < (x + size) &&
-            bb.miny >= y && bb.maxy < (y + size)) {
-            return true;
-        }
-        return false;
-    }
-
-    bool nodeOverlaps(const AABBEntity &bb) const {
-        // Box for this node is [x, y, x+size, y+size]
-        // We check partial overlap
-        if (bb.maxx < x || bb.minx > (x + size)) return false;
-        if (bb.maxy < y || bb.miny > (y + size)) return false;
-        return true;
-    }
-
-    void subdivide() {
-        double half = size / 2.0;
-        nw = std::make_unique<BoxNode>(x,        y,        half, capacity);
-        ne = std::make_unique<BoxNode>(x+half,   y,        half, capacity);
-        sw = std::make_unique<BoxNode>(x,        y+half,   half, capacity);
-        se = std::make_unique<BoxNode>(x+half,   y+half,   half, capacity);
-        is_leaf = false;
-    }
-
-    /**
-     * @brief Insert an AABB. If it fully fits in a child, push it down; otherwise store here.
-     */
-    void insert(const AABBEntity &bb) {
-        // If bounding box doesn't overlap node at all, skip
-        if (!nodeOverlaps(bb)) {
-            return;
-        }
-        if (is_leaf && (int)objects.size() < capacity) {
-            objects.push_back(bb);
-            return;
-        }
-        if (is_leaf) {
-            // Subdivide and redistribute
-            subdivide();
-            // Move our existing objects into children if they fully fit
-            std::vector<AABBEntity> old = std::move(objects);
-            objects.clear();
-            for (auto &o : old) {
-                if (nodeContains(o)) {
-                    // see if it fully fits in a child
-                    if (nw->nodeContains(o)) nw->insert(o);
-                    else if (ne->nodeContains(o)) ne->insert(o);
-                    else if (sw->nodeContains(o)) sw->insert(o);
-                    else if (se->nodeContains(o)) se->insert(o);
-                    else {
-                        // partial coverage => store here
-                        objects.push_back(o);
-                    }
-                } else {
-                    // partial coverage => store here
-                    objects.push_back(o);
-                }
-            }
-        }
-        // Now try to insert the new one
-        if (nodeContains(bb)) {
-            // see if it fully fits in a child
-            if (nw->nodeContains(bb)) nw->insert(bb);
-            else if (ne->nodeContains(bb)) ne->insert(bb);
-            else if (sw->nodeContains(bb)) sw->insert(bb);
-            else if (se->nodeContains(bb)) se->insert(bb);
-            else {
-                // partial coverage => store here
-                objects.push_back(bb);
-            }
-        } else {
-            // partial coverage => store here
-            objects.push_back(bb);
-        }
-    }
-
-    /**
-     * @brief Query all objects in this node that overlap the query bounding box (qminx etc.).
-     */
-    void query(double qminx, double qminy, double qmaxx, double qmaxy,
-               std::vector<AABBEntity> &found) const
-    {
-        // If node bounding box doesn't overlap query region, skip
-        if (qmaxx < x || qminx > (x + size)) return;
-        if (qmaxy < y || qminy > (y + size)) return;
-
-        // Check local objects
-        for (auto &o : objects) {
-            // Overlap test between query region & object bounding box
-            if (o.maxx < qminx || o.minx > qmaxx) continue;
-            if (o.maxy < qminy || o.miny > qmaxy) continue;
-            found.push_back(o);
-        }
-
-        // If leaf, done
-        if (is_leaf) return;
-
-        // Else descend to children
-        nw->query(qminx, qminy, qmaxx, qmaxy, found);
-        ne->query(qminx, qminy, qmaxx, qmaxy, found);
-        sw->query(qminx, qminy, qmaxx, qmaxy, found);
-        se->query(qminx, qminy, qmaxx, qmaxy, found);
-    }
-};
-
-
-/**
- * @brief Compute the axis-aligned bounding box (AABB) for a single entity (polygon or circle).
- */
-void computeAABB(entt::registry &reg, entt::entity e,
-                 double &minx, double &miny, double &maxx, double &maxy)
+static std::vector<Vector> getWorldVerts(const ShapeData &shape)
 {
-    const auto &pos = reg.get<Components::Position>(e);
-    double angle = 0.0;
-    if (reg.any_of<Components::AngularPosition>(e)) {
-        angle = reg.get<Components::AngularPosition>(e).angle;
+    std::vector<Vector> verts;
+    if (shape.isCircle) {
+        // We'll produce a small set of "sample" vertices for a circle,
+        // or simply treat the circle center as a single "vertex" if we want
+        // a specialized approach. For contact points, we do need the actual edge.
+        // Minimal approach: produce a single vertex "center + normal * radius"
+        // (But that only works if we know the normal. We'll do a general approach with multiple samples.)
+        // For simplicity, let's produce 8 sample vertices around the circle.
+        const int samples = 8;
+        double step = (2.0 * M_PI) / samples;
+        for (int i=0; i<samples; i++) {
+            double angle = i * step + shape.angle; 
+            double cx = shape.pos.x + shape.radius * std::cos(angle);
+            double cy = shape.pos.y + shape.radius * std::sin(angle);
+            verts.push_back(Vector(cx, cy));
+        }
     }
-
-    if (reg.any_of<CircleShape>(e)) {
-        double r = reg.get<CircleShape>(e).radius;
-        minx = pos.x - r;
-        maxx = pos.x + r;
-        miny = pos.y - r;
-        maxy = pos.y + r;
-        return;
+    else {
+        // Polygon => transform each vertex by shape.angle and shape.pos
+        for (auto &v : shape.poly.vertices) {
+            // rotate
+            double rx = (v.x * std::cos(shape.angle)) - (v.y * std::sin(shape.angle));
+            double ry = (v.x * std::sin(shape.angle)) + (v.y * std::cos(shape.angle));
+            // translate
+            double wx = shape.pos.x + rx;
+            double wy = shape.pos.y + ry;
+            verts.push_back(Vector(wx, wy));
+        }
     }
-
-    // Arbitrary polygon => transform each vertex
-    const auto &poly = reg.get<PolygonShape>(e);
-    minx = pos.x; 
-    maxx = pos.x;
-    miny = pos.y;
-    maxy = pos.y;
-
-    for (auto &v : poly.vertices) {
-        double rx = (v.x * std::cos(angle)) - (v.y * std::sin(angle));
-        double ry = (v.x * std::sin(angle)) + (v.y * std::cos(angle));
-        double wx = pos.x + rx;
-        double wy = pos.y + ry;
-
-        if (wx < minx) minx = wx;
-        if (wx > maxx) maxx = wx;
-        if (wy < miny) miny = wy;
-        if (wy > maxy) maxy = wy;
-    }
+    return verts;
 }
 
 /**
- * @brief Build a quadtree for the entire simulation area and insert bounding boxes for each entity.
+ * @brief Find the supporting face (or point) for a shape in a given direction.
+ *
+ * For a polygon, we gather all vertices that are within some tiny epsilon of
+ * the maximum projection onto 'dir'. Those vertices typically define an edge or
+ * a single point if it's a corner. For a circle, we produce up to 2 "support" points
+ * if the shape is discretized (like above), or just one if we prefer.
  */
-std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry) {
-    double size = SimulatorConstants::UniverseSizeMeters;
-    double extra = 500.0; // margin
-    auto root = std::make_unique<BoxNode>(-extra, -extra, size + 2*extra, 8);
-
-    // For all (Position, Mass, ParticlePhase) entities, compute bounding box and insert
-    auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
-    for (auto e : view) {
-        double minx, miny, maxx, maxy;
-        computeAABB(registry, e, minx, miny, maxx, maxy);
-
-        AABBEntity box{ e, minx, miny, maxx, maxy };
-        // Insert bounding box into quadtree
-        root->insert(box);
+static std::vector<Vector> findSupportingFace(const std::vector<Vector> &worldVerts,
+                                              const Vector &dir)
+{
+    // 1) Project all vertices onto dir, track the max dot
+    double maxProj = -1e30;
+    std::vector<double> projVals;
+    projVals.reserve(worldVerts.size());
+    for (auto &w : worldVerts) {
+        double dot = w.dotProduct(dir);
+        projVals.push_back(dot);
+        if (dot > maxProj) {
+            maxProj = dot;
+        }
     }
-    return root;
+
+    // 2) Gather all vertices whose projection is within EPS of maxProj
+    static const double EPS_FACE = 1e-6; 
+    std::vector<Vector> support;
+    support.reserve(4);
+    for (size_t i=0; i<worldVerts.size(); i++) {
+        if (std::fabs(projVals[i] - maxProj) < EPS_FACE) {
+            support.push_back(worldVerts[i]);
+        }
+    }
+
+    // Typically 1 or 2 vertices define the "support edge" for a polygon.
+    // If there's more, it might be a flat side or circle approximation => keep them all.
+    return support;
 }
 
 /**
- * @brief Broad-phase that returns candidate pairs by overlapping bounding boxes.
+ * @brief Given the normal from EPA, find more accurate contact points on each shape
+ *        by gathering the supporting face(s) from shape A in direction +normal,
+ *        and from shape B in direction -normal, then computing the "closest approach"
+ *        between these two edges or sets of points.
+ *
+ * This yields two points contactA, contactB on each shape's boundary, and you can
+ * pick the midpoint as the final contact point. 
  */
-void broadPhase(entt::registry &registry, std::vector<CandidatePair> &pairs) {
-    pairs.clear();
+static void findAccurateContact(const ShapeData &A,
+                                const ShapeData &B,
+                                const Vector &normal, 
+                                double penetration,
+                                Vector &contactA,
+                                Vector &contactB)
+{
+    // 1) Gather all world verts for each shape
+    auto vertsA = getWorldVerts(A);
+    auto vertsB = getWorldVerts(B);
 
-    // Build or rebuild quadtree
-    auto root = buildQuadtree(registry);
+    // 2) Find supporting face on A in direction of +normal
+    auto faceA = findSupportingFace(vertsA,  normal);
+    // 3) Find supporting face on B in direction of -normal
+    auto faceB = findSupportingFace(vertsB,  -normal);
 
-    // For each inserted bounding box, we query the quadtree for potential overlaps
-    // in its bounding region. Then we test for actual box-vs-box overlap.
-    // We only push pairs (eA < eB).
-    std::vector<AABBEntity> found;
-    found.reserve(32);
+    // If either is empty, fallback:
+    if (faceA.empty()) {
+        // fallback: put contact at A's center
+        contactA = Vector(A.pos.x, A.pos.y);
+    }
+    if (faceB.empty()) {
+        // fallback: put contact at B's center
+        contactB = Vector(B.pos.x, B.pos.y);
+    }
 
-    auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
-    for (auto e : view) {
-        double minx, miny, maxx, maxy;
-        computeAABB(registry, e, minx, miny, maxx, maxy);
+    // If we got 1 vertex for A and 1 vertex for B, easy:
+    //   the contact points are basically those points or we offset them by half pen.
+    // If we have edges, we want the closest pair of points between the two edges.
 
-        AABBEntity queryBB { e, minx, miny, maxx, maxy };
+    // For simplicity, let's define a helper function to getClosestPointsBetweenTwoPolylines.
+    // We'll do a minimal version that checks each segment in faceA against each segment in faceB,
+    // and finds the closest pair. If faceA or faceB has 1 point, treat it as a degenerate segment.
 
-        // Query the node for all AABB that overlap [minx..maxx, miny..maxy]
-        found.clear();
-        root->query(minx, miny, maxx, maxy, found);
+    // We'll define them as polylines in ring order (though we might only have 1 or 2 points).
+    // We'll gather the min distance pair. Then we'll clamp if we have circle approximations, etc.
 
-        // For each found, do an actual box overlap test
-        for (auto &f : found) {
-            if (f.entity != e && f.entity > e) {
-                if (boxesOverlap(queryBB, f)) {
-                    pairs.push_back({ e, f.entity });
-                }
+    // Step A: build edges from faceA
+    std::vector<std::pair<Vector,Vector>> edgesA;
+    if (faceA.size() == 1) {
+        edgesA.push_back({faceA[0], faceA[0]});
+    }
+    else {
+        // form consecutive edges
+        for (size_t i=0; i<faceA.size()-1; i++) {
+            edgesA.push_back({ faceA[i], faceA[i+1] });
+        }
+        // if we want them in ring => faceA.back() to faceA.front() if needed, but usually 2 points
+        if (faceA.size() > 2) {
+            edgesA.push_back({ faceA.back(), faceA.front() });
+        }
+    }
+
+    // Step B: build edges from faceB
+    std::vector<std::pair<Vector,Vector>> edgesB;
+    if (faceB.size() == 1) {
+        edgesB.push_back({faceB[0], faceB[0]});
+    }
+    else {
+        for (size_t i=0; i<faceB.size()-1; i++) {
+            edgesB.push_back({ faceB[i], faceB[i+1] });
+        }
+        if (faceB.size() > 2) {
+            edgesB.push_back({ faceB.back(), faceB.front() });
+        }
+    }
+
+    double bestDist = 1e30;
+    Vector bestA(0,0), bestB(0,0);
+
+    // Helper function: closest point from segment [p1..p2] to a point p
+    auto closestPointOnSegment = [](const Vector &p1,
+                                    const Vector &p2,
+                                    const Vector &p) {
+        Vector seg = p2 - p1;
+        double segLen2 = seg.dotProduct(seg);
+        if (segLen2 < 1e-12) {
+            return p1; // degenerate
+        }
+        double t = (p - p1).dotProduct(seg) / segLen2;
+        t = std::max(0.0, std::min(1.0, t));
+        return p1 + seg*(t);
+    };
+
+    // We'll brute force all edges of A vs. all edges of B, computing the closest pair
+    for (auto &ea : edgesA) {
+        Vector A1 = ea.first;
+        Vector A2 = ea.second;
+
+        for (auto &eb : edgesB) {
+            Vector B1 = eb.first;
+            Vector B2 = eb.second;
+
+            // We'll do a standard "closest distance between two line segments" approach.
+            // approach: 
+            //   - parametric approach or do iterative approach
+            //   - for now let's do an easy iteration: pick each end, project to other seg, etc.
+
+            // We'll pick a few candidate pairs:
+            //   1) closest from A1 to segment B1..B2
+            Vector b_closestA1 = closestPointOnSegment(B1, B2, A1);
+            double dA1 = (A1 - b_closestA1).dotProduct(A1 - b_closestA1);
+
+            //   2) closest from A2 to segment B1..B2
+            Vector b_closestA2 = closestPointOnSegment(B1, B2, A2);
+            double dA2 = (A2 - b_closestA2).dotProduct(A2 - b_closestA2);
+
+            //   3) closest from B1 to segment A1..A2
+            Vector a_closestB1 = closestPointOnSegment(A1, A2, B1);
+            double dB1 = (B1 - a_closestB1).dotProduct(B1 - a_closestB1);
+
+            //   4) closest from B2 to segment A1..A2
+            Vector a_closestB2 = closestPointOnSegment(A1, A2, B2);
+            double dB2 = (B2 - a_closestB2).dotProduct(B2 - a_closestB2);
+
+            // pick the minimal among these 4
+            if (dA1 < bestDist) {
+                bestDist = dA1;
+                bestA = A1;
+                bestB = b_closestA1;
+            }
+            if (dA2 < bestDist) {
+                bestDist = dA2;
+                bestA = A2;
+                bestB = b_closestA2;
+            }
+            if (dB1 < bestDist) {
+                bestDist = dB1;
+                bestA = a_closestB1;
+                bestB = B1;
+            }
+            if (dB2 < bestDist) {
+                bestDist = dB2;
+                bestA = a_closestB2;
+                bestB = B2;
             }
         }
     }
+
+    // bestA, bestB are now the closest pair between supporting faces
+    contactA = bestA;  
+    contactB = bestB;  
+    // Some might do further logic to clamp or shift them based on the known penetration,
+    // but this is already a big improvement over naive "pos +/- halfPen."
 }
 
 /**
- * @brief Extract the shape data for GJK/EPA.
+ * @brief Extract shape + transformation from an entity to pass into GJK/EPA.
  */
 ShapeData extractShapeData(entt::registry &reg, entt::entity e) {
     ShapeData sd;
@@ -305,8 +279,217 @@ ShapeData extractShapeData(entt::registry &reg, entt::entity e) {
 }
 
 /**
- * @brief Narrow-phase: for each candidate pair, run GJK/EPA. If collision found,
- *        add to manifold with normal, penetration, contact point.
+ * -------------------------------------------------------------------------
+ * Everything below is the same bounding-box-based broad-phase and collision
+ * system as before, except we replaced how we compute the final contact point
+ * in narrowPhase(...) from EPA results.
+ * -------------------------------------------------------------------------
+ */
+
+/**
+ * @struct AABBEntity
+ * @brief Stores an entity and its bounding box in world coordinates.
+ */
+struct AABBEntity {
+    entt::entity entity;
+    double minx, miny, maxx, maxy;
+};
+
+/**
+ * @brief Check if two bounding boxes overlap.
+ */
+bool boxesOverlap(const AABBEntity &a, const AABBEntity &b) {
+    // No overlap if one is strictly left/right or above/below
+    if (a.maxx < b.minx || a.minx > b.maxx) return false;
+    if (a.maxy < b.miny || a.miny > b.maxy) return false;
+    return true;
+}
+
+/**
+ * @struct BoxNode
+ * @brief Quadtree node storing bounding boxes for performance in broad-phase.
+ */
+struct BoxNode {
+    double x, y, size;
+    int capacity;
+    bool is_leaf;
+    std::vector<AABBEntity> objects;
+    std::unique_ptr<BoxNode> nw, ne, sw, se;
+
+    BoxNode(double _x, double _y, double _size, int _capacity)
+        : x(_x), y(_y), size(_size), capacity(_capacity), is_leaf(true) {}
+
+    bool nodeContains(const AABBEntity &bb) const {
+        // fully inside [x..x+size, y..y+size] ?
+        return (bb.minx >= x && bb.maxx < (x + size) &&
+                bb.miny >= y && bb.maxy < (y + size));
+    }
+
+    bool nodeOverlaps(const AABBEntity &bb) const {
+        // partial overlap check
+        if (bb.maxx < x || bb.minx > (x + size)) return false;
+        if (bb.maxy < y || bb.miny > (y + size)) return false;
+        return true;
+    }
+
+    void subdivide() {
+        double half = size / 2.0;
+        nw = std::make_unique<BoxNode>(x,        y,        half, capacity);
+        ne = std::make_unique<BoxNode>(x+half,   y,        half, capacity);
+        sw = std::make_unique<BoxNode>(x,        y+half,   half, capacity);
+        se = std::make_unique<BoxNode>(x+half,   y+half,   half, capacity);
+        is_leaf = false;
+    }
+
+    void insert(const AABBEntity &bb) {
+        // skip if no overlap
+        if (!nodeOverlaps(bb)) {
+            return;
+        }
+        if (is_leaf && (int)objects.size() < capacity) {
+            objects.push_back(bb);
+            return;
+        }
+        if (is_leaf) {
+            subdivide();
+            // push down existing
+            std::vector<AABBEntity> old = std::move(objects);
+            objects.clear();
+            for (auto &o : old) {
+                if (nodeContains(o)) {
+                    if (nw->nodeContains(o)) nw->insert(o);
+                    else if (ne->nodeContains(o)) ne->insert(o);
+                    else if (sw->nodeContains(o)) sw->insert(o);
+                    else if (se->nodeContains(o)) se->insert(o);
+                    else {
+                        objects.push_back(o);
+                    }
+                } else {
+                    objects.push_back(o);
+                }
+            }
+        }
+
+        if (nodeContains(bb)) {
+            if (nw->nodeContains(bb)) nw->insert(bb);
+            else if (ne->nodeContains(bb)) ne->insert(bb);
+            else if (sw->nodeContains(bb)) sw->insert(bb);
+            else if (se->nodeContains(bb)) se->insert(bb);
+            else {
+                objects.push_back(bb);
+            }
+        } else {
+            objects.push_back(bb);
+        }
+    }
+
+    void query(double qminx, double qminy, double qmaxx, double qmaxy,
+               std::vector<AABBEntity> &found) const
+    {
+        // skip if no overlap
+        if (qmaxx < x || qminx > (x + size)) return;
+        if (qmaxy < y || qminy > (y + size)) return;
+
+        // local
+        for (auto &o : objects) {
+            if (o.maxx < qminx || o.minx > qmaxx) continue;
+            if (o.maxy < qminy || o.miny > qmaxy) continue;
+            found.push_back(o);
+        }
+        if (!is_leaf) {
+            nw->query(qminx, qminy, qmaxx, qmaxy, found);
+            ne->query(qminx, qminy, qmaxx, qmaxy, found);
+            sw->query(qminx, qminy, qmaxx, qmaxy, found);
+            se->query(qminx, qminy, qmaxx, qmaxy, found);
+        }
+    }
+};
+
+/**
+ * @brief Compute bounding box for an entity.
+ */
+static void computeAABB(entt::registry &reg, entt::entity e,
+                        double &minx, double &miny,
+                        double &maxx, double &maxy)
+{
+    const auto &pos = reg.get<Components::Position>(e);
+    double angle = 0.0;
+    if (reg.any_of<Components::AngularPosition>(e)) {
+        angle = reg.get<Components::AngularPosition>(e).angle;
+    }
+
+    if (reg.any_of<CircleShape>(e)) {
+        double r = reg.get<CircleShape>(e).radius;
+        minx = pos.x - r;
+        maxx = pos.x + r;
+        miny = pos.y - r;
+        maxy = pos.y + r;
+        return;
+    }
+
+    const auto &poly = reg.get<PolygonShape>(e);
+    minx = pos.x; 
+    maxx = pos.x;
+    miny = pos.y;
+    maxy = pos.y;
+
+    for (auto &v : poly.vertices) {
+        double rx = (v.x * std::cos(angle)) - (v.y * std::sin(angle));
+        double ry = (v.x * std::sin(angle)) + (v.y * std::cos(angle));
+        double wx = pos.x + rx;
+        double wy = pos.y + ry;
+
+        if (wx < minx) minx = wx;
+        if (wx > maxx) maxx = wx;
+        if (wy < miny) miny = wy;
+        if (wy > maxy) maxy = wy;
+    }
+}
+
+std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry) {
+    double size = SimulatorConstants::UniverseSizeMeters;
+    double extra = 500.0;
+    auto root = std::make_unique<BoxNode>(-extra, -extra, size + 2*extra, 8);
+
+    // Insert bounding boxes
+    auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
+    for (auto e : view) {
+        double minx, miny, maxx, maxy;
+        computeAABB(registry, e, minx, miny, maxx, maxy);
+        AABBEntity box{ e, minx, miny, maxx, maxy };
+        root->insert(box);
+    }
+    return root;
+}
+
+void broadPhase(entt::registry &registry, std::vector<CandidatePair> &pairs) {
+    pairs.clear();
+    auto root = buildQuadtree(registry);
+
+    std::vector<AABBEntity> found;
+    found.reserve(32);
+
+    auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
+    for (auto e : view) {
+        double minx, miny, maxx, maxy;
+        computeAABB(registry, e, minx, miny, maxx, maxy);
+        AABBEntity queryBB { e, minx, miny, maxx, maxy };
+
+        found.clear();
+        root->query(minx, miny, maxx, maxy, found);
+
+        for (auto &f : found) {
+            if (f.entity != e && f.entity > e) {
+                if (boxesOverlap(queryBB, f)) {
+                    pairs.push_back({ e, f.entity });
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @brief GJK/EPA narrow-phase with improved contact point calculation.
  */
 void narrowPhase(entt::registry &registry,
                  const std::vector<CandidatePair> &pairs,
@@ -324,13 +507,11 @@ void narrowPhase(entt::registry &registry,
             auto epaRes = EPA(sdA, sdB, simplex);
             if (epaRes.has_value()) {
                 EPAResult res = epaRes.value();
+                // Instead of naive "pos +/- halfPen", we find the supporting faces in +/- res.normal
+                Vector cA, cB;
+                findAccurateContact(sdA, sdB, res.normal, res.penetration, cA, cB);
 
-                // Approx. contact point
-                Vector cA(sdA.pos.x, sdA.pos.y);
-                Vector cB(sdB.pos.x, sdB.pos.y);
-                Vector halfPen = res.normal * (res.penetration * 0.5);
-                cA = cA - halfPen;
-                cB = cB + halfPen;
+                // Our final contact is midpoint of those support points
                 Vector contact = (cA + cB) * 0.5;
 
                 CollisionInfo info;
@@ -345,10 +526,6 @@ void narrowPhase(entt::registry &registry,
     }
 }
 
-
-/**
- * @brief Collision response for rigid bodies (solid).
- */
 void solidCollisionResponse(entt::registry &registry, CollisionManifold &manifold) {
     const double baumgarte   = 0.5;
     const double slop        = 0.001;
@@ -391,15 +568,9 @@ void solidCollisionResponse(entt::registry &registry, CollisionManifold &manifol
         Vector relVel = velB - velA;
         double normalSpeed = relVel.dotProduct(n);
 
-        // Simple restitution
-        double restitution = 0.0;
-        if (std::fabs(normalSpeed) < 0.5) {
-            restitution *= 0.5;
-        }
-
         double j = 0.0;
         if (normalSpeed < 0) {
-            j = -(1.0 + restitution)* normalSpeed / invSum;
+            j = -(0.5 + SimulatorConstants::CollisionCoeffRestitution)* normalSpeed / invSum;
         }
         Vector impulse = n * j;
 
@@ -415,8 +586,8 @@ void solidCollisionResponse(entt::registry &registry, CollisionManifold &manifol
         posB.y += n.y * (corr * invMassB);
 
         // Friction
-        double staticFrictionA  = 0.5, dynamicFrictionA  = 0.3;
-        double staticFrictionB  = 0.5, dynamicFrictionB  = 0.3;
+        double staticFrictionA  = 5.9, dynamicFrictionA  = 5.3;
+        double staticFrictionB  = 5.9, dynamicFrictionB  = 5.3;
         if (registry.any_of<Components::Material>(col.a)) {
             auto &mA = registry.get<Components::Material>(col.a);
             staticFrictionA  = mA.staticFriction;
@@ -486,7 +657,7 @@ void solidCollisionResponse(entt::registry &registry, CollisionManifold &manifol
             registry.replace<Components::AngularVelocity>(col.b, angB);
         }
 
-        // Write back position + velocity
+        // Write back
         registry.replace<Components::Position>(col.a, posA);
         registry.replace<Components::Position>(col.b, posB);
         registry.replace<Components::Velocity>(col.a, velA);
@@ -495,7 +666,7 @@ void solidCollisionResponse(entt::registry &registry, CollisionManifold &manifol
 }
 
 /**
- * @brief Additional positional solver to reduce lingering penetration.
+ * @brief Additional solver passes to reduce persistent penetration.
  */
 void positionalSolver(entt::registry &registry,
                       CollisionManifold &manifold,
@@ -521,10 +692,10 @@ void positionalSolver(entt::registry &registry,
                 continue;
             }
 
-            double invMassA = (massA.value > 1e29)? 0.0 : ((massA.value>1e-12)? 1.0/massA.value:0.0);
-            double invMassB = (massB.value > 1e29)? 0.0 : ((massB.value>1e-12)? 1.0/massB.value:0.0);
+            double invMassA = (massA.value > 1e29) ? 0.0 : ((massA.value > 1e-12) ? 1.0/massA.value : 0.0);
+            double invMassB = (massB.value > 1e29) ? 0.0 : ((massB.value > 1e-12) ? 1.0/massB.value : 0.0);
             double invSum = invMassA + invMassB;
-            if (invSum<1e-12) continue;
+            if (invSum < 1e-12) continue;
 
             double pen = col.penetration;
             if (pen <= slop) continue;
@@ -556,9 +727,9 @@ namespace Systems {
 /**
  * @class RigidBodyCollisionSystem
  * @brief Single system orchestrating:
- *        (1) broad-phase bounding-box quadtree,
- *        (2) narrow-phase GJK/EPA,
- *        (3) solid collision response,
+ *        (1) bounding-box quadtree broad-phase,
+ *        (2) GJK/EPA narrow-phase,
+ *        (3) improved contact point for collision response,
  *        (4) optional positional solver.
  */
 void RigidBodyCollisionSystem::update(entt::registry &registry,
@@ -567,13 +738,13 @@ void RigidBodyCollisionSystem::update(entt::registry &registry,
                                       double baumgarte,
                                       double slop)
 {
-    // We'll build a new quadtree & run broad-phase each iteration so that
-    // large position shifts can still be caught in subsequent passes.
     std::vector<CandidatePair> candidatePairs;
     candidatePairs.reserve(128);
 
     CollisionManifold manifold;
 
+    // We re-run broadPhase + narrowPhase each iteration so that large position shifts
+    // can be re-detected. 
     for (int i = 0; i < solverIterations; ++i) {
         candidatePairs.clear();
         broadPhase(registry, candidatePairs);
