@@ -14,7 +14,8 @@ namespace Components {
 
     enum class ShapeType {
         Circle,
-        Square
+        Square,
+        Polygon
     };
 
     // Use the Position and Vector classes from vector_math.hpp

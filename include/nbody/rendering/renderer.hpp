@@ -35,18 +35,19 @@ struct PixelCoordHash {
     std::size_t operator()(const std::pair<int, int>& p) const {
         std::size_t h1 = std::hash<int>()(p.first);
         std::size_t h2 = std::hash<int>()(p.second);
-        return h1 ^ (h2 + 0x9e3779b97f4a7c16ULL + (h1<<6) + (h1>>2));
+        // A typical combine approach:
+        return h1 ^ (h2 + 0x9e3779b97f4a7c16ULL + (h1 << 6) + (h1 >> 2));
     }
 };
 
+/**
+ * @class Renderer
+ * @brief Manages rendering of simulation entities, UI, and aggregated visuals
+ */
 class Renderer {
 public:
     /**
-     * @brief Properties for aggregated particles in a pixel
-     * 
-     * Stores accumulated physical properties of all particles that map
-     * to the same screen pixel. Used for density visualization and
-     * temperature-based coloring.
+     * @brief Stores aggregated physical properties of all particles in a given screen pixel
      */
     struct PixelProperties {
         double density = 0.0;      ///< Total density at this pixel
@@ -55,86 +56,75 @@ public:
         int particle_count = 0;    ///< Number of particles in pixel
 
         /**
-         * @brief Adds a particle's properties to the pixel
-         * @param density Particle density component (optional)
-         * @param temp Particle temperature component (optional)
-         * @param mass Particle mass component (optional)
+         * @brief Adds a single particle's contribution to this pixel
          */
-        void add(const Components::Density* density,
+        void add(const Components::Density* dens,
                  const Components::Temperature* temp,
-                 const Components::Mass* mass) {
-            if (density) this->density += density->value;
+                 const Components::Mass* mass)
+        {
+            if (dens) {
+                density += dens->value;
+            }
             if (temp) {
+                // If we have mass, weight the temperature by mass
                 if (mass) {
-                    double weight = mass->value;
-                    this->temperature = (this->temperature * total_mass + temp->value * weight) / (total_mass + weight);
+                    double w = mass->value;
+                    temperature = (temperature * total_mass + temp->value * w) / (total_mass + w);
                 } else {
-                    this->temperature = (this->temperature * particle_count + temp->value) / (particle_count + 1);
+                    // fallback, average by count
+                    temperature = (temperature * particle_count + temp->value) / (particle_count + 1);
                 }
             }
-            if (mass) this->total_mass += mass->value;
+            if (mass) {
+                total_mass += mass->value;
+            }
             particle_count++;
         }
     };
 
-    /** @brief Function type for mapping pixel properties to colors */
+    /** Function type for mapping pixel properties to an sf::Color. */
     using ColorMapper = std::function<sf::Color(const PixelProperties&)>;
-    
-    /** @brief Default color mapper that returns white */
+
+    /** Default color mapper that always returns white. */
     static sf::Color whiteColor(const PixelProperties&) { return sf::Color::White; }
 
     /**
-     * @brief Constructs renderer with specified screen dimensions
-     * @param screenWidth Width of render window in pixels
-     * @param screenHeight Height of render window in pixels
+     * @brief Constructs renderer with given screen dimensions
      */
     Renderer(int screenWidth, int screenHeight);
     ~Renderer();
 
     /**
-     * @brief Initializes SFML window and loads resources
-     * @return true if initialization successful, false otherwise
+     * @brief Initializes SFML window and loads font
+     * @return true if success, false otherwise
      */
     bool init();
 
-    /** @brief Clears screen to black */
+    /** Clears the screen to black */
     void clear();
 
-    /** @brief Presents rendered frame to screen */
+    /** Presents the rendered frame to display */
     void present();
 
     /**
      * @brief Renders all particles in the simulation
-     * @param registry EnTT registry containing entities
-     * @param colorMapper Function to determine particle colors (defaults to white)
+     * @param registry ECS registry containing entities/components
+     * @param colorMapper Optional function to color them by density or temperature
      */
-    void renderParticles(const entt::registry& registry, ColorMapper colorMapper = whiteColor);
+    void renderParticles(const entt::registry& registry,
+                         ColorMapper colorMapper = whiteColor);
 
     /**
-     * @brief Renders FPS counter in top-left corner
-     * @param fps Current frames per second
+     * @brief Renders the current FPS in top-left corner
+     * @param fps The frames-per-second value
      */
     void renderFPS(float fps);
 
     /**
-     * @brief Renders UI elements including buttons and scenario selection
-     * 
-     * Draws:
-     * - Pause/Play button
-     * - Reset button
-     * - Speed control buttons (0.25x, 0.5x, 1x)
-     * - Scenario selection buttons
-     * 
-     * @param registry EnTT registry for simulator state
-     * @param paused Current pause state
-     * @param currentScenario Active scenario type
-     * @param scenarios Available scenario options
-     * @param showPausePlayHighlight Highlight state for pause/play
-     * @param showResetHighlight Highlight state for reset
-     * @param highlightedScenario Currently highlighted scenario
+     * @brief Renders the UI (buttons, scenario list, speed controls, etc.)
      */
-    void renderUI(const entt::registry& registry, 
-                  bool paused, 
+    void renderUI(const entt::registry& registry,
+                  bool paused,
                   SimulatorConstants::SimulationType currentScenario,
                   const std::vector<std::pair<SimulatorConstants::SimulationType,std::string>>& scenarios,
                   bool showPausePlayHighlight,
@@ -142,31 +132,27 @@ public:
                   SimulatorConstants::SimulationType highlightedScenario);
 
     /**
-     * @brief Renders text at specified position
-     * @param text String to render
-     * @param x X coordinate in pixels
-     * @param y Y coordinate in pixels
-     * @param color Text color (defaults to white)
+     * @brief Renders text at an (x,y) in the window
      */
     void renderText(const std::string& text, int x, int y, sf::Color color = sf::Color::White);
 
-    /** @brief Returns initialization state */
+    /** Returns the SFML window so external code can process events, etc. */
+    sf::RenderWindow& getWindow() { return window; }
+
+    /** @brief True if we successfully called init() */
     bool isInitialized() const { return initialized; }
 
     /**
-     * @brief Button representation for UI elements
-     * 
-     * Used for both scenario selection and control buttons (play/pause, reset).
-     * Stores position, label, and type information for each button.
+     * @brief UI button definition for scenario selection or speed toggles
      */
     struct UIButton {
-        sf::IntRect rect;          ///< Button bounds in pixels
-        std::string label;         ///< Button text
-        bool isSpecialButton;      ///< True for control buttons, false for scenarios
-        SimulatorConstants::SimulationType scenario;  ///< Associated scenario type
-        double speedMultiplier;    ///< Time scale multiplier (for speed buttons)
+        sf::IntRect rect;   ///< The bounding rect in screen coords
+        std::string label;  ///< The button text
+        bool isSpecialButton;   ///< Distinguish scenario vs special (play/pause, reset, speed)
+        SimulatorConstants::SimulationType scenario; 
+        double speedMultiplier;
 
-        UIButton() 
+        UIButton()
             : rect()
             , label()
             , isSpecialButton(false)
@@ -175,27 +161,27 @@ public:
         {}
     };
 
-    std::vector<UIButton> scenarioButtons;  ///< List of scenario selection buttons
-    UIButton pausePlayButton;               ///< Play/Pause toggle button
-    UIButton resetButton;                   ///< Reset simulation button
-    std::vector<UIButton> speedButtons;     ///< Time scale control buttons
-
-    /** @brief Access to underlying SFML window */
-    sf::RenderWindow& getWindow() { return window; }
+    // For external code to read the current UI buttons
+    std::vector<UIButton> scenarioButtons;
+    UIButton pausePlayButton;
+    UIButton resetButton;
+    std::vector<UIButton> speedButtons;
 
 private:
+    /** The SFML render window */
     sf::RenderWindow window;
+    /** The font for text rendering */
     sf::Font font;
+    /** Whether we've successfully inited SFML */
     bool initialized;
+    /** Dimensions of the window */
     int screenWidth;
     int screenHeight;
 
     /**
-     * @brief Groups particles by screen pixel for density visualization
-     * @param registry EnTT registry containing particle entities
-     * @return Map of pixel coordinates to aggregated particle properties
+     * @brief Builds a map from pixel -> aggregated properties
      */
-    std::unordered_map<std::pair<int,int>, PixelProperties, PixelCoordHash> 
+    std::unordered_map<std::pair<int,int>, PixelProperties, PixelCoordHash>
     aggregateParticlesByPixel(const entt::registry& registry);
 };
 
