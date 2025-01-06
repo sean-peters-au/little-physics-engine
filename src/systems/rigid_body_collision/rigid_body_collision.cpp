@@ -24,37 +24,29 @@ void RigidBodyCollisionSystem::update(entt::registry &registry,
 {
     using namespace RigidBodyCollision;
 
-    // Create contact manager for this frame
+    // 1) Broad-phase: Quick AABB-based filtering (once per frame)
+    auto candidatePairs = broadPhase(registry);
+
+    // 2) Narrow-phase: Exact collision detection with GJK/EPA (once per frame)
+    auto manifold = narrowPhase(registry, candidatePairs);
+    if (manifold.collisions.empty()) {
+        return;  // Early out if no collisions
+    }
+
+    // 3) Update contact manager (once), which sets up warm-start data
     ContactManager manager;
+    manager.updateContacts(manifold);
 
-    // Multiple velocity solver passes for stability
+    // 4) Multiple velocity solver passes on the same manifold
     for (int pass = 0; pass < solverIterations; pass++) {
-        // 1) Broad-phase: Quick AABB-based filtering
-        auto candidatePairs = broadPhase(registry);
-
-        // 2) Narrow-phase: Exact collision detection with GJK/EPA
-        auto manifold = narrowPhase(registry, candidatePairs);
-
-        if (manifold.collisions.empty()) {
-            break;  // Early exit if no collisions found
-        }
-
-        // 3) Update contact manager and solve velocity constraints
-        manager.updateContacts(manifold);
         ContactSolver::solveContactConstraints(registry, manager, baumgarte, slop);
     }
 
-    // 4) Additional position correction passes if requested
+    // 5) (Optional) Position solver for any residual penetration
     if (positionalSolverIterations > 0) {
-        // Final broad/narrow phase to catch any remaining overlaps
-        auto candidatePairs = broadPhase(registry);
-        auto manifold = narrowPhase(registry, candidatePairs);
-        
-        if (!manifold.collisions.empty()) {
-            PositionSolver::positionalSolver(registry, manifold,
-                                          positionalSolverIterations,
-                                          baumgarte, slop);
-        }
+        PositionSolver::positionalSolver(registry, manifold, 
+                                         positionalSolverIterations,
+                                         baumgarte, slop);
     }
 }
 
