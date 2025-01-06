@@ -38,7 +38,7 @@ public:
      *       position error correction (Baumgarte stabilization)
      */
     static void solveContactConstraints(entt::registry &registry,
-                                      const ContactManager &manager,
+                                      ContactManager &manager,
                                       double baumgarte,
                                       double slop);
 };

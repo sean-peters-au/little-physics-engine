@@ -9,22 +9,40 @@
 #include "nbody/systems/rigid_body_collision/contact_manager.hpp"
 #include <unordered_map>
 #include <algorithm>
+#include <utility>
 
 namespace RigidBodyCollision {
 
 /**
+ * @brief Holds accumulated impulses for warm starting.
+ */
+struct WarmStartData {
+    double normalImpulseAccum  = 0.0;
+    double tangentImpulseAccum = 0.0;
+};
+
+/**
+ * @brief Helper function to always sort the entity pair so (smaller, larger).
+ * This ensures consistent lookups in the map.
+ */
+static std::pair<entt::entity, entt::entity> sortEntityPair(entt::entity a, entt::entity b)
+{
+    return (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
+}
+
+/**
  * @brief Private implementation of contact persistence storage
- *
- * Currently maintains only the latest manifold, but designed to be
- * extended with persistent contact mapping and warm-start data.
  */
 class ContactManager::ContactData
 {
 public:
     CollisionManifold latestManifold;  ///< Most recent collision data
 
-    // Future extension point:
-    // std::unordered_map<uint64_t, WarmStartData> persistentContacts;
+    /**
+     * @brief Stores warm-start impulse accumulators keyed by entity pair.
+     *        Key is always sorted so (A, B) has A < B.
+     */
+    std::unordered_map<std::pair<entt::entity, entt::entity>, WarmStartData> persistentContacts;
 
     ContactData() = default;
     ~ContactData() = default;
@@ -48,16 +66,35 @@ ContactManager::~ContactManager()
 
 /**
  * @brief Merge or replace the old manifold with the new collisions from narrowPhase.
- *        For now, we just store the new data directly and discard the old.
+ *        Also cleans up stale warm-start data (if a collision no longer exists).
  */
 void ContactManager::updateContacts(const CollisionManifold &manifold)
 {
+    // 1) Copy the new manifold
     m_data->latestManifold = manifold;
+
+    // 2) Build a temporary set of active pairs in this new manifold
+    std::unordered_map<std::pair<entt::entity, entt::entity>, bool> activePairs;
+    for (auto &col : manifold.collisions) {
+        auto sortedPair = sortEntityPair(col.a, col.b);
+        activePairs[sortedPair] = true;
+    }
+
+    // 3) Remove stale entries from persistentContacts
+    //    (i.e., collisions that no longer appear in the new manifold)
+    for (auto it = m_data->persistentContacts.begin(); it != m_data->persistentContacts.end(); )
+    {
+        if (activePairs.find(it->first) == activePairs.end()) {
+            it = m_data->persistentContacts.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 /**
  * @brief Return the collisions from the last narrow phase.
- *        Currently a direct pass-through with no merging or impulse accumulation.
+ *        Currently a direct pass-through with no geometric merging.
  */
 const CollisionManifold &ContactManager::getCurrentManifold() const
 {
@@ -65,17 +102,15 @@ const CollisionManifold &ContactManager::getCurrentManifold() const
 }
 
 /**
- * @brief Return the list of references to each contact for the solver, 
- *        including any previously accumulated impulses (if we had them).
+ * @brief Return the list of references to each contact for the solver,
+ *        initializing them with any previously accumulated impulses for warm-start.
  */
-const std::vector<ContactRef> &ContactManager::getContactsForSolver()
+std::vector<ContactRef> &ContactManager::getContactsForSolver()
 {
     // Clear the old cache first
     m_contactsCache.clear();
 
-    // Translate each CollisionInfo => ContactRef
-    // (In a more advanced version, you would use your map to retrieve 
-    //  old impulses for each contact.)
+    // Translate each CollisionInfo => ContactRef and look up warm-start impulses
     for (auto &col : m_data->latestManifold.collisions) {
         ContactRef c;
         c.a = col.a;
@@ -84,9 +119,16 @@ const std::vector<ContactRef> &ContactManager::getContactsForSolver()
         c.contactPoint = col.contactPoint;
         c.penetration = col.penetration;
 
-        // Warm-start impulses are not supported yet, so zero them
-        c.normalImpulseAccum  = 0.0;
-        c.tangentImpulseAccum = 0.0;
+        // See if we have stored impulses for this pair
+        auto sortedPair = sortEntityPair(c.a, c.b);
+        auto it = m_data->persistentContacts.find(sortedPair);
+        if (it != m_data->persistentContacts.end()) {
+            c.normalImpulseAccum  = it->second.normalImpulseAccum;
+            c.tangentImpulseAccum = it->second.tangentImpulseAccum;
+        } else {
+            c.normalImpulseAccum  = 0.0;
+            c.tangentImpulseAccum = 0.0;
+        }
 
         m_contactsCache.push_back(c);
     }
@@ -95,25 +137,35 @@ const std::vector<ContactRef> &ContactManager::getContactsForSolver()
 }
 
 /**
- * @brief Let the solver's results be recorded. 
- *        (For now, we do nothing because we haven't implemented persistent impulses.)
+ * @brief Let the solver's results be recorded for next-frame warm-starting.
+ *        Here we copy updated impulse accumulators back into our persistent store.
  */
 void ContactManager::applySolverResults(const std::vector<ContactRef> &results)
 {
-    // If we had a persistent store, we would copy out the impulses 
-    // back into the appropriate data structures keyed by (entityA, entityB).
-    (void)results; // do nothing
+    for (auto &c : results) {
+        auto sortedPair = sortEntityPair(c.a, c.b);
+        WarmStartData &wsd = m_data->persistentContacts[sortedPair];
+        wsd.normalImpulseAccum  = c.normalImpulseAccum;
+        wsd.tangentImpulseAccum = c.tangentImpulseAccum;
+    }
 }
 
 /**
  * @brief Cleanup stale contacts if entities have disappeared, etc.
- *        Currently a no-op.
+ *        We also remove from our persistent store if the ECS says they're invalid.
  */
 void ContactManager::cleanupStaleContacts(entt::registry &registry)
 {
-    // In a more advanced version, you would scan your stored 
-    // contact pairs and remove entries whose entities are no longer valid.
-    (void)registry; // no-op
+    for (auto it = m_data->persistentContacts.begin(); it != m_data->persistentContacts.end(); )
+    {
+        auto eA = it->first.first;
+        auto eB = it->first.second;
+        if (!registry.valid(eA) || !registry.valid(eB)) {
+            it = m_data->persistentContacts.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 } // namespace RigidBodyCollision

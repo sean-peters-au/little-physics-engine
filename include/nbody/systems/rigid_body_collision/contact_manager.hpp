@@ -73,7 +73,7 @@ public:
      * @brief Retrieves current contacts with warm-start data for the solver
      * @return Reference to the contact list
      */
-    const std::vector<ContactRef> &getContactsForSolver();
+    std::vector<ContactRef> &getContactsForSolver();
 
     /**
      * @brief Stores solver results for next-frame warm-starting

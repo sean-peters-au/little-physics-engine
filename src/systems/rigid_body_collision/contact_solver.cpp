@@ -17,22 +17,102 @@
 namespace RigidBodyCollision {
 
 void ContactSolver::solveContactConstraints(entt::registry &registry,
-                                            const ContactManager &manager,
-                                            double /*baumgarte*/,
-                                            double /*slop*/)
+                                          ContactManager &manager,
+                                          double baumgarte,
+                                          double slop)
 {
     PROFILE_SCOPE("ContactSolver");
     const double angularDamping = 0.98;
 
-    const auto &manifold = manager.getCurrentManifold();
-    auto &collisions = manifold.collisions;
-    if (collisions.empty()) {
-        return;
+    // Get mutable contacts since we need to modify the impulse accumulators
+    auto &contacts = manager.getContactsForSolver();
+
+    //--------------------------------------------------------------------------
+    // Warm Start: Apply the accumulated impulses from previous frames/passes
+    //--------------------------------------------------------------------------
+    for (auto &c : contacts) {
+        if (!registry.valid(c.a) || !registry.valid(c.b)) {
+            continue;
+        }
+
+        // Get physics components
+        auto &massA = registry.get<Components::Mass>(c.a);
+        auto &massB = registry.get<Components::Mass>(c.b);
+
+        bool hasRotA = registry.all_of<Components::AngularVelocity, Components::Inertia>(c.a);
+        bool hasRotB = registry.all_of<Components::AngularVelocity, Components::Inertia>(c.b);
+
+        // Handle infinite mass
+        double invMassA = (massA.value > 1e29) ? 0.0 : (1.0 / massA.value);
+        double invMassB = (massB.value > 1e29) ? 0.0 : (1.0 / massB.value);
+
+        // Apply the normal and friction impulses to the linear velocity
+        auto velA = registry.get<Components::Velocity>(c.a);
+        auto velB = registry.get<Components::Velocity>(c.b);
+
+        // Scale the accumulated impulses BEFORE applying them
+        double warmStartScale = 0.05;
+        double scaledNormalImpulse = c.normalImpulseAccum * warmStartScale;
+        double scaledTangentImpulse = c.tangentImpulseAccum * warmStartScale;
+
+        // Normal impulse
+        Vector Pn = c.normal * scaledNormalImpulse;
+        velA = velA - (Pn * invMassA);
+        velB = velB + (Pn * invMassB);
+
+        // Tangential impulse
+        Vector t(-c.normal.y, c.normal.x);  // Perpendicular to normal
+        Vector Pf = t * scaledTangentImpulse;
+
+        velA = velA - (Pf * invMassA);
+        velB = velB + (Pf * invMassB);
+
+        // Write back updated linear velocities (after warm start)
+        registry.replace<Components::Velocity>(c.a, velA);
+        registry.replace<Components::Velocity>(c.b, velB);
+
+        // Warm start for angular velocity
+        if (hasRotA) {
+            auto &angA = registry.get<Components::AngularVelocity>(c.a);
+            auto &I_A  = registry.get<Components::Inertia>(c.a);
+            auto posA = registry.get<Components::Position>(c.a);
+            Vector rA = Vector(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
+
+            // The cross product for normal impulse
+            double crossN_A = rA.cross(Pn) / I_A.I;
+            angA.omega -= crossN_A;
+
+            // The cross product for friction impulse
+            double crossT_A = rA.cross(Pf) / I_A.I;
+            angA.omega -= crossT_A;
+
+            angA.omega *= angularDamping;
+            registry.replace<Components::AngularVelocity>(c.a, angA);
+        }
+
+        if (hasRotB) {
+            auto &angB = registry.get<Components::AngularVelocity>(c.b);
+            auto &I_B  = registry.get<Components::Inertia>(c.b);
+            auto posB = registry.get<Components::Position>(c.b);
+            Vector rB = Vector(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
+
+            double crossN_B = rB.cross(Pn) / I_B.I;
+            angB.omega += crossN_B;
+
+            double crossT_B = rB.cross(Pf) / I_B.I;
+            angB.omega += crossT_B;
+
+            angB.omega *= angularDamping;
+            registry.replace<Components::AngularVelocity>(c.b, angB);
+        }
     }
 
+    //--------------------------------------------------------------------------
+    // Main solver iterations (unchanged logic from original)
+    //--------------------------------------------------------------------------
     const int solverIterations = 10;
     for (int iter = 0; iter < solverIterations; iter++) {
-        for (auto &c : collisions) {
+        for (auto &c : contacts) {
             if (!registry.valid(c.a) || !registry.valid(c.b)) {
                 continue;
             }
@@ -55,7 +135,7 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
             }
 
             // ----------------------------
-            // 1) Normal Impulse (unchanged)
+            // 1) Normal Impulse
             // ----------------------------
             Vector n = c.normal;
             Vector relVel = velB - velA;
@@ -66,8 +146,16 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
             // Prevent pulling if shapes are separating
             jn = std::max(0.0, jn);
 
+            // Accumulate normal impulse
+            double oldNormalImpulse = c.normalImpulseAccum;
+            double newNormalImpulse = oldNormalImpulse + jn;
+            c.normalImpulseAccum = newNormalImpulse;
+
+            // The actual impulse to apply this iteration is the increment
+            double dJn = newNormalImpulse - oldNormalImpulse;
+            Vector Pn = n * dJn;
+
             // Apply normal impulse to linear velocities
-            Vector Pn = n * jn;
             velA = velA - (Pn * invMassA);
             velB = velB + (Pn * invMassB);
 
@@ -76,8 +164,7 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
             registry.replace<Components::Velocity>(c.b, velB);
 
             // Angular response to normal impulse
-            if (registry.all_of<Components::AngularVelocity, Components::Inertia>(c.a))
-            {
+            if (hasRotA) {
                 auto &angA = registry.get<Components::AngularVelocity>(c.a);
                 auto &I_A  = registry.get<Components::Inertia>(c.a);
                 auto posA = registry.get<Components::Position>(c.a);
@@ -88,8 +175,7 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                 registry.replace<Components::AngularVelocity>(c.a, angA);
             }
 
-            if (registry.all_of<Components::AngularVelocity, Components::Inertia>(c.b))
-            {
+            if (hasRotB) {
                 auto &angB = registry.get<Components::AngularVelocity>(c.b);
                 auto &I_B  = registry.get<Components::Inertia>(c.b);
                 auto posB = registry.get<Components::Position>(c.b);
@@ -101,18 +187,13 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
             }
 
             // ----------------------------
-            // 2) Friction Impulse (modified to use contact velocities)
+            // 2) Friction Impulse
             // ----------------------------
-            // Re-fetch (in case the normal impulse changed them):
             velA = registry.get<Components::Velocity>(c.a);
             velB = registry.get<Components::Velocity>(c.b);
 
-            // We'll compute the contact-point velocities for friction only:
-            //   vA_contact = velA + (omegaA x rA)
-            //   vB_contact = velB + (omegaB x rB)
             Vector vA_contact = velA;
             Vector vB_contact = velB;
-
             Vector rA(0.0, 0.0), rB(0.0, 0.0);
             double wA = 0.0, wB = 0.0;
 
@@ -121,7 +202,6 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                 auto posA = registry.get<Components::Position>(c.a);
                 rA = Vector(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
                 wA = angA.omega;
-                // 2D cross(omegaA, rA) => Vector(-omega*ry, omega*rx)
                 vA_contact = vA_contact + Vector(-wA * rA.y, wA * rA.x);
             }
             if (hasRotB) {
@@ -142,11 +222,17 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
 
                 double jt = -(relVelContact.dotProduct(tDir)) / invSum;
                 double mu = 0.3; // friction coefficient
-                double frictionLimit = mu * jn;
+                double frictionLimit = mu * (c.normalImpulseAccum);
 
                 // Clamp friction to Coulomb limit
-                double jtClamped = std::max(-frictionLimit, std::min(frictionLimit, jt));
-                Vector Pf = tDir * jtClamped;
+                double oldTangentImpulse = c.tangentImpulseAccum;
+                double targetTangentImpulse = oldTangentImpulse + jt;
+                double newTangentImpulse = std::max(-frictionLimit, std::min(frictionLimit, targetTangentImpulse));
+                c.tangentImpulseAccum = newTangentImpulse;
+
+                // The actual impulse to apply in this iteration
+                double dJt = newTangentImpulse - oldTangentImpulse;
+                Vector Pf = tDir * dJt;
 
                 // Apply friction impulses to linear velocities
                 velA = velA - (Pf * invMassA);
@@ -174,8 +260,11 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
             // Store updated linear velocities
             registry.replace<Components::Velocity>(c.a, velA);
             registry.replace<Components::Velocity>(c.b, velB);
-        } // end for each collision
-    } // end iterations
+        } // end for each contact
+    } // end solver iterations
+
+    // Write back final impulses so they can be used in future frames/passes
+    manager.applySolverResults(contacts);
 }
 
 } // namespace RigidBodyCollision
