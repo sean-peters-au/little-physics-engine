@@ -1,3 +1,8 @@
+/**
+ * @file rigid_body_collision.cpp
+ * @brief Implementation of the main collision system pipeline
+ */
+
 #include <vector>
 
 #include "nbody/systems/rigid_body_collision/rigid_body_collision.hpp"
@@ -19,41 +24,38 @@ void RigidBodyCollisionSystem::update(entt::registry &registry,
 {
     using namespace RigidBodyCollision;
 
-    // We create a contact manager (later, you might store it persistently)
+    // Create contact manager for this frame
     ContactManager manager;
 
-    // Multiple passes for velocity solver
+    // Multiple velocity solver passes for stability
     for (int pass = 0; pass < solverIterations; pass++) {
-        // 1) Broad-phase
+        // 1) Broad-phase: Quick AABB-based filtering
         auto candidatePairs = broadPhase(registry);
 
-        // 2) Narrow-phase => find collisions
+        // 2) Narrow-phase: Exact collision detection with GJK/EPA
         auto manifold = narrowPhase(registry, candidatePairs);
 
         if (manifold.collisions.empty()) {
-            break; // No collisions => done
+            break;  // Early exit if no collisions found
         }
 
-        // 3) Update contact manager (no-op for now), then solve
+        // 3) Update contact manager and solve velocity constraints
         manager.updateContacts(manifold);
-
-        // 4) Velocity solver (split impulse)
         ContactSolver::solveContactConstraints(registry, manager, baumgarte, slop);
     }
 
-    // 5) Extra positional passes if desired
+    // 4) Additional position correction passes if requested
     if (positionalSolverIterations > 0) {
-        // do final broad-phase + narrow-phase for leftover overlaps
+        // Final broad/narrow phase to catch any remaining overlaps
         auto candidatePairs = broadPhase(registry);
         auto manifold = narrowPhase(registry, candidatePairs);
+        
         if (!manifold.collisions.empty()) {
             PositionSolver::positionalSolver(registry, manifold,
-                                             positionalSolverIterations,
-                                             baumgarte, slop);
+                                          positionalSolverIterations,
+                                          baumgarte, slop);
         }
     }
-
-    // Optionally manager.cleanupStaleContacts(registry);
 }
 
 } // namespace Systems

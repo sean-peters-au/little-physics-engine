@@ -1,3 +1,8 @@
+/**
+ * @file broadphase.cpp
+ * @brief Implementation of quadtree-based broad-phase collision detection
+ */
+
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -7,24 +12,35 @@
 #include "nbody/core/constants.hpp"
 #include "nbody/math/polygon.hpp"
 #include "nbody/systems/rigid_body_collision/collision_data.hpp"
+#include "nbody/core/profile.hpp"
 
 namespace RigidBodyCollision
 {
 
-// ------------------------------------------------------------------
-// Minimal structures used internally by the quadtree
-
+/**
+ * @brief Entity data with its axis-aligned bounding box
+ */
 struct AABBEntity {
     entt::entity entity;
     double minx, miny, maxx, maxy;
 };
 
+/**
+ * @brief Tests if two AABBs overlap
+ */
 static bool boxesOverlap(const AABBEntity &a, const AABBEntity &b) {
     if (a.maxx < b.minx || a.minx > b.maxx) return false;
     if (a.maxy < b.miny || a.miny > b.maxy) return false;
     return true;
 }
 
+/**
+ * @brief A node in the quadtree spatial partitioning structure
+ * 
+ * Each node represents a square region of space that can either:
+ * - Be a leaf containing up to 'capacity' objects
+ * - Be subdivided into four child nodes (NW, NE, SW, SE)
+ */
 struct BoxNode {
     double x, y, size;
     int capacity;
@@ -35,17 +51,26 @@ struct BoxNode {
     BoxNode(double _x, double _y, double _size, int _capacity)
         : x(_x), y(_y), size(_size), capacity(_capacity), is_leaf(true) {}
 
+    /**
+     * @brief Tests if an AABB is fully contained within this node
+     */
     bool nodeContains(const AABBEntity &bb) const {
         return (bb.minx >= x && bb.maxx < (x + size) &&
                 bb.miny >= y && bb.maxy < (y + size));
     }
 
+    /**
+     * @brief Tests if an AABB overlaps this node's region
+     */
     bool nodeOverlaps(const AABBEntity &bb) const {
         if (bb.maxx < x || bb.minx > x+size) return false;
         if (bb.maxy < y || bb.miny > y+size) return false;
         return true;
     }
 
+    /**
+     * @brief Subdivides a leaf node into four children
+     */
     void subdivide() {
         double half = size / 2.0;
         nw = std::make_unique<BoxNode>(x,       y,       half, capacity);
@@ -55,6 +80,13 @@ struct BoxNode {
         is_leaf = false;
     }
 
+    /**
+     * @brief Inserts an AABB into the quadtree
+     * 
+     * If the node is full, it will be subdivided and objects redistributed
+     * to the appropriate child nodes. Objects that span multiple children
+     * remain in the parent node.
+     */
     void insert(const AABBEntity &bb) {
         if (!nodeOverlaps(bb)) return;
 
@@ -91,6 +123,9 @@ struct BoxNode {
         }
     }
 
+    /**
+     * @brief Finds all AABBs that overlap with the query region
+     */
     void query(double qminx, double qminy, double qmaxx, double qmaxy,
                std::vector<AABBEntity> &found) const
     {
@@ -106,13 +141,17 @@ struct BoxNode {
             nw->query(qminx, qminy, qmaxx, qmaxy, found);
             ne->query(qminx, qminy, qmaxx, qmaxy, found);
             sw->query(qminx, qminy, qmaxx, qmaxy, found);
-            se->query(qminx, qminy, qmaxy, qmaxy, found); // minor bug in original
+            se->query(qminx, qminy, qmaxx, qmaxy, found);
         }
     }
 };
 
-// ------------------------------------------------------------------
-// Helper: compute AABB for an entity (circle or polygon)
+/**
+ * @brief Computes the AABB for an entity's shape (circle or polygon)
+ * 
+ * Takes into account the entity's position and rotation to compute
+ * a world-space axis-aligned bounding box.
+ */
 static void computeAABB(entt::registry &reg, entt::entity e,
                         double &minx, double &miny,
                         double &maxx, double &maxy)
@@ -148,8 +187,13 @@ static void computeAABB(entt::registry &reg, entt::entity e,
     }
 }
 
-// ------------------------------------------------------------------
-// Build the quadtree root
+/**
+ * @brief Constructs a quadtree containing all collidable entities
+ * 
+ * Creates a root node slightly larger than the universe size and
+ * inserts AABBs for all entities with Position, Mass, and ParticlePhase
+ * components.
+ */
 static std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry) {
     double size = SimulatorConstants::UniverseSizeMeters;
     double extra = 500.0; // some buffer
@@ -165,19 +209,19 @@ static std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry) {
     return root;
 }
 
-// ------------------------------------------------------------------
-// The public broadPhase function
 std::vector<CandidatePair> broadPhase(entt::registry &registry)
 {
-    std::vector<CandidatePair> pairs;
-    pairs.reserve(128);
-
+    PROFILE_SCOPE("Broadphase");
+    // Build the quadtree spatial partitioning structure
     auto root = buildQuadtree(registry);
-
+    
+    std::vector<CandidatePair> pairs;
     std::vector<AABBEntity> found;
+    pairs.reserve(128);
     found.reserve(64);
 
-    // For each entity, query
+    // For each entity, find potential collision partners by querying
+    // the quadtree with its AABB
     auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
     for (auto e : view) {
         double minx, miny, maxx, maxy;

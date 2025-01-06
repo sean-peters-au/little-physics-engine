@@ -1,165 +1,181 @@
-#include <cmath>
-
-#include <entt/entt.hpp>
+/**
+ * @file contact_solver.cpp
+ * @brief Implementation of velocity-based collision constraint solver
+ *
+ * Implements an iterative impulse solver that resolves collisions through
+ * velocity corrections, handling both normal response and friction effects.
+ */
 
 #include "nbody/systems/rigid_body_collision/contact_solver.hpp"
+#include <iostream>
+#include <cmath>
+#include <entt/entt.hpp>
 #include "nbody/components/basic.hpp"
 #include "nbody/core/constants.hpp"
-#include "nbody/math/vector_math.hpp"
-#include "nbody/systems/rigid_body_collision/collision_data.hpp"
+#include "nbody/core/profile.hpp"
 
-namespace RigidBodyCollision
-{
+namespace RigidBodyCollision {
 
 void ContactSolver::solveContactConstraints(entt::registry &registry,
                                             const ContactManager &manager,
                                             double /*baumgarte*/,
                                             double /*slop*/)
 {
-    const double angularDamp = 0.98;
-    const double gravity = 9.8;
+    PROFILE_SCOPE("ContactSolver");
+    const double angularDamping = 0.98;
 
-    // Get all collisions
     const auto &manifold = manager.getCurrentManifold();
+    auto &collisions = manifold.collisions;
+    if (collisions.empty()) {
+        return;
+    }
 
-    for (auto &col : manifold.collisions) {
-        if (!registry.valid(col.a) || !registry.valid(col.b)) continue;
+    const int solverIterations = 10;
+    for (int iter = 0; iter < solverIterations; iter++) {
+        for (auto &c : collisions) {
+            if (!registry.valid(c.a) || !registry.valid(c.b)) {
+                continue;
+            }
 
-        bool asleepA = false, asleepB = false;
-        if (registry.any_of<Components::Sleep>(col.a)) {
-            asleepA = registry.get<Components::Sleep>(col.a).asleep;
-        }
-        if (registry.any_of<Components::Sleep>(col.b)) {
-            asleepB = registry.get<Components::Sleep>(col.b).asleep;
-        }
-        if (asleepA && asleepB) continue;
+            // Get physics components
+            auto &massA = registry.get<Components::Mass>(c.a);
+            auto &massB = registry.get<Components::Mass>(c.b);
+            auto velA = registry.get<Components::Velocity>(c.a);
+            auto velB = registry.get<Components::Velocity>(c.b);
 
-        auto &phaseA = registry.get<Components::ParticlePhase>(col.a);
-        auto &phaseB = registry.get<Components::ParticlePhase>(col.b);
-        if (phaseA.phase != Components::Phase::Solid && phaseB.phase != Components::Phase::Solid)
-            continue;
+            bool hasRotA = registry.all_of<Components::AngularVelocity, Components::Inertia>(c.a);
+            bool hasRotB = registry.all_of<Components::AngularVelocity, Components::Inertia>(c.b);
 
-        auto posA  = registry.get<Components::Position>(col.a);
-        auto velA  = registry.get<Components::Velocity>(col.a);
-        auto &massA = registry.get<Components::Mass>(col.a);
+            // Handle infinite mass bodies (invMass = 0)
+            double invMassA = (massA.value > 1e29) ? 0.0 : (1.0 / massA.value);
+            double invMassB = (massB.value > 1e29) ? 0.0 : (1.0 / massB.value);
+            double invSum = invMassA + invMassB;
+            if (invSum < 1e-12) {
+                continue;
+            }
 
-        auto posB  = registry.get<Components::Position>(col.b);
-        auto velB  = registry.get<Components::Velocity>(col.b);
-        auto &massB = registry.get<Components::Mass>(col.b);
+            // ----------------------------
+            // 1) Normal Impulse (unchanged)
+            // ----------------------------
+            Vector n = c.normal;
+            Vector relVel = velB - velA;
+            double vn = relVel.dotProduct(n);
 
-        double invMassA = (massA.value > 1e29)? 0.0 : 1.0/massA.value;
-        double invMassB = (massB.value > 1e29)? 0.0 : 1.0/massB.value;
-        double invSum   = invMassA + invMassB;
-        if (invSum < 1e-12) continue;
+            // No restitution in this code
+            double jn = -vn / invSum;
+            // Prevent pulling if shapes are separating
+            jn = std::max(0.0, jn);
 
-        Vector n = col.normal;
-        double penetration = col.penetration;
+            // Apply normal impulse to linear velocities
+            Vector Pn = n * jn;
+            velA = velA - (Pn * invMassA);
+            velB = velB + (Pn * invMassB);
 
-        // Normal impulse
-        Vector relVel = velB - velA;
-        double normalSpeed = relVel.dotProduct(n);
+            // Store updated linear velocities now, so angular code can see them
+            registry.replace<Components::Velocity>(c.a, velA);
+            registry.replace<Components::Velocity>(c.b, velB);
 
-        double restitution = 0.0;
-        double jColl = 0.0;
-        if (normalSpeed < 0) {
-            jColl = -(1.0 + restitution)* normalSpeed / invSum;
-        }
+            // Angular response to normal impulse
+            if (registry.all_of<Components::AngularVelocity, Components::Inertia>(c.a))
+            {
+                auto &angA = registry.get<Components::AngularVelocity>(c.a);
+                auto &I_A  = registry.get<Components::Inertia>(c.a);
+                auto posA = registry.get<Components::Position>(c.a);
+                Vector rA = Vector(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
+                double crossA = rA.cross(Pn) / I_A.I;
+                angA.omega -= crossA;
+                angA.omega *= angularDamping;
+                registry.replace<Components::AngularVelocity>(c.a, angA);
+            }
 
-        // “resting normal” hack (like mg-based friction anchor)
-        double restingN = 0.0;
-        if (penetration > 0.0 && std::fabs(normalSpeed) < 0.1) {
-            double combinedMass = massA.value + massB.value;
-            Vector gravityDir(0.0, 1.0);
-            double gravityComponent = std::fabs(gravityDir.dotProduct(n));
-            restingN = combinedMass * gravity * gravityComponent;
-        }
+            if (registry.all_of<Components::AngularVelocity, Components::Inertia>(c.b))
+            {
+                auto &angB = registry.get<Components::AngularVelocity>(c.b);
+                auto &I_B  = registry.get<Components::Inertia>(c.b);
+                auto posB = registry.get<Components::Position>(c.b);
+                Vector rB = Vector(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
+                double crossB = rB.cross(Pn) / I_B.I;
+                angB.omega += crossB;
+                angB.omega *= angularDamping;
+                registry.replace<Components::AngularVelocity>(c.b, angB);
+            }
 
-        double jTotalNormal = jColl + restingN;
-        if (jTotalNormal < 0) jTotalNormal = 0;
+            // ----------------------------
+            // 2) Friction Impulse (modified to use contact velocities)
+            // ----------------------------
+            // Re-fetch (in case the normal impulse changed them):
+            velA = registry.get<Components::Velocity>(c.a);
+            velB = registry.get<Components::Velocity>(c.b);
 
-        Vector impulseNormal = n * jColl;
-        velA = velA - (impulseNormal * invMassA);
-        velB = velB + (impulseNormal * invMassB);
+            // We'll compute the contact-point velocities for friction only:
+            //   vA_contact = velA + (omegaA x rA)
+            //   vB_contact = velB + (omegaB x rB)
+            Vector vA_contact = velA;
+            Vector vB_contact = velB;
 
-        // friction
-        double staticFrictionA  = 0.5, dynamicFrictionA  = 0.3;
-        double staticFrictionB  = 0.5, dynamicFrictionB  = 0.3;
-        if (registry.any_of<Components::Material>(col.a)) {
-            auto &mA = registry.get<Components::Material>(col.a);
-            staticFrictionA  = mA.staticFriction;
-            dynamicFrictionA = mA.dynamicFriction;
-        }
-        if (registry.any_of<Components::Material>(col.b)) {
-            auto &mB = registry.get<Components::Material>(col.b);
-            staticFrictionB  = mB.staticFriction;
-            dynamicFrictionB = mB.dynamicFriction;
-        }
-        double combinedStaticFriction  = 0.5*(staticFrictionA + staticFrictionB);
-        double combinedDynamicFriction = 0.5*(dynamicFrictionA + dynamicFrictionB);
+            Vector rA(0.0, 0.0), rB(0.0, 0.0);
+            double wA = 0.0, wB = 0.0;
 
-        double jRef = jTotalNormal;
-        Vector tangent = relVel - n*(relVel.dotProduct(n));
-        double tLen = tangent.length();
-        if (tLen > 1e-9) {
-            tangent = tangent / tLen;
-        } else {
-            tangent = Vector(0,0);
-        }
+            if (hasRotA) {
+                auto &angA = registry.get<Components::AngularVelocity>(c.a);
+                auto posA = registry.get<Components::Position>(c.a);
+                rA = Vector(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
+                wA = angA.omega;
+                // 2D cross(omegaA, rA) => Vector(-omega*ry, omega*rx)
+                vA_contact = vA_contact + Vector(-wA * rA.y, wA * rA.x);
+            }
+            if (hasRotB) {
+                auto &angB = registry.get<Components::AngularVelocity>(c.b);
+                auto posB = registry.get<Components::Position>(c.b);
+                rB = Vector(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
+                wB = angB.omega;
+                vB_contact = vB_contact + Vector(-wB * rB.y, wB * rB.x);
+            }
 
-        double tangentialSpeed = relVel.dotProduct(tangent);
-        double jt = -tangentialSpeed / invSum;
-        double frictionImpulseMag = std::fabs(jt);
+            // Tangential (friction) relative velocity at the contact
+            Vector relVelContact = vB_contact - vA_contact;
+            Vector vt = relVelContact - n * (relVelContact.dotProduct(n));
+            double vtLen = vt.length();
+            if (vtLen > 1e-9) {
+                // Tangential direction
+                Vector tDir = vt / vtLen;
 
-        double frictionLimit = jRef * combinedStaticFriction;
-        if (frictionImpulseMag < frictionLimit) {
-            // static friction
-            jt = -tangentialSpeed / invSum;
-        } else {
-            double dynFric = jRef * combinedDynamicFriction;
-            jt = -(jt > 0 ? dynFric : -dynFric);
-        }
+                double jt = -(relVelContact.dotProduct(tDir)) / invSum;
+                double mu = 0.3; // friction coefficient
+                double frictionLimit = mu * jn;
 
-        Vector frictionImpulse = tangent * jt;
-        velA = velA - (frictionImpulse * invMassA);
-        velB = velB + (frictionImpulse * invMassB);
+                // Clamp friction to Coulomb limit
+                double jtClamped = std::max(-frictionLimit, std::min(frictionLimit, jt));
+                Vector Pf = tDir * jtClamped;
 
-        // Angular impulses
-        if (registry.all_of<Components::AngularVelocity, Components::Inertia>(col.a) &&
-            registry.all_of<Components::AngularVelocity, Components::Inertia>(col.b)) {
+                // Apply friction impulses to linear velocities
+                velA = velA - (Pf * invMassA);
+                velB = velB + (Pf * invMassB);
 
-            auto &angA = registry.get<Components::AngularVelocity>(col.a);
-            auto &I_A  = registry.get<Components::Inertia>(col.a);
-            auto &angB = registry.get<Components::AngularVelocity>(col.b);
-            auto &I_B  = registry.get<Components::Inertia>(col.b);
+                // Angular friction
+                if (hasRotA) {
+                    auto &angA = registry.get<Components::AngularVelocity>(c.a);
+                    auto &I_A  = registry.get<Components::Inertia>(c.a);
+                    double crossA = rA.cross(Pf) / I_A.I;
+                    angA.omega -= crossA;
+                    angA.omega *= angularDamping;
+                    registry.replace<Components::AngularVelocity>(c.a, angA);
+                }
+                if (hasRotB) {
+                    auto &angB = registry.get<Components::AngularVelocity>(c.b);
+                    auto &I_B  = registry.get<Components::Inertia>(c.b);
+                    double crossB = rB.cross(Pf) / I_B.I;
+                    angB.omega += crossB;
+                    angB.omega *= angularDamping;
+                    registry.replace<Components::AngularVelocity>(c.b, angB);
+                }
+            }
 
-            Vector c = col.contactPoint;  // world contact
-            Vector pA(posA.x, posA.y);
-            Vector pB(posB.x, posB.y);
-
-            Vector rA = c - pA;
-            Vector rB = c - pB;
-
-            double angImpA = rA.cross(impulseNormal);
-            double angImpB = rB.cross(impulseNormal);
-            angA.omega += angImpA / I_A.I;
-            angB.omega += angImpB / I_B.I;
-
-            double fAngA = rA.cross(frictionImpulse);
-            double fAngB = rB.cross(frictionImpulse);
-            angA.omega += fAngA / I_A.I;
-            angB.omega += fAngB / I_B.I;
-
-            // damping
-            angA.omega *= angularDamp;
-            angB.omega *= angularDamp;
-            registry.replace<Components::AngularVelocity>(col.a, angA);
-            registry.replace<Components::AngularVelocity>(col.b, angB);
-        }
-
-        // store updated velocities
-        registry.replace<Components::Velocity>(col.a, velA);
-        registry.replace<Components::Velocity>(col.b, velB);
-    } // end for collisions
+            // Store updated linear velocities
+            registry.replace<Components::Velocity>(c.a, velA);
+            registry.replace<Components::Velocity>(c.b, velB);
+        } // end for each collision
+    } // end iterations
 }
 
 } // namespace RigidBodyCollision

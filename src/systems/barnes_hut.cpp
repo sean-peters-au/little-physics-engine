@@ -34,16 +34,6 @@ void BarnesHutSystem::update(entt::registry& registry) {
         }
         calculateForce(root.get(), entity, pos, vel, mass, state);
     }
-    auto after_forces = Clock::now();
-
-    static int frame_count = 0;
-    frame_count++;
-    if (frame_count % 60 == 0) {
-        std::cout << "Barnes-Hut timing (ms): Build "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(after_build - start_time).count()
-                  << " Forces "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(after_forces - after_build).count() << "\n";
-    }
 }
 
 std::unique_ptr<BarnesHutSystem::QuadTreeNode> BarnesHutSystem::buildTree(const entt::registry& registry) {

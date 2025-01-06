@@ -1,6 +1,10 @@
+/**
+ * @file narrowphase.cpp
+ * @brief Implementation of GJK/EPA-based detailed collision detection
+ */
+
 #include <cmath>
 #include <vector>
-
 #include <entt/entt.hpp>
 
 #include "nbody/systems/rigid_body_collision/narrowphase.hpp"
@@ -11,12 +15,16 @@
 #include "nbody/core/constants.hpp"
 #include "nbody/math/vector_math.hpp"
 #include "nbody/math/polygon.hpp"
+#include "nbody/core/profile.hpp"
 
-namespace RigidBodyCollision
-{
+namespace RigidBodyCollision {
 
-// ------------------------------------------------------------------
-// Extract shape data from ECS entity (used by GJK/EPA)
+/**
+ * @brief Extracts shape data from an entity for GJK/EPA processing
+ * 
+ * Combines position, rotation, and shape information (circle or polygon)
+ * into a unified format for collision detection algorithms.
+ */
 static ShapeData extractShapeData(entt::registry &reg, entt::entity e) {
     ShapeData sd;
     sd.pos = reg.get<Components::Position>(e);
@@ -35,13 +43,16 @@ static ShapeData extractShapeData(entt::registry &reg, entt::entity e) {
     return sd;
 }
 
-// ------------------------------------------------------------------
-// Single “findAccurateContact” fallback for circle or simple approach
-static std::vector<Vector> getWorldVerts(const ShapeData &shape)
-{
+/**
+ * @brief Generates world-space vertices for a shape
+ * 
+ * For circles: Creates an octagonal approximation
+ * For polygons: Transforms local vertices to world space
+ */
+static std::vector<Vector> getWorldVerts(const ShapeData &shape) {
     std::vector<Vector> verts;
     if (shape.isCircle) {
-        // approximate circle by sampling
+        // Approximate circle with 8-point polygon
         const int samples = 8;
         double step = (2.0 * M_PI) / samples;
         for (int i=0; i<samples; i++) {
@@ -51,7 +62,7 @@ static std::vector<Vector> getWorldVerts(const ShapeData &shape)
             verts.push_back(Vector(cx, cy));
         }
     } else {
-        // transform polygon vertices
+        // Transform polygon vertices to world space
         for (auto &v : shape.poly.vertices) {
             double rx = v.x * std::cos(shape.angle) - v.y * std::sin(shape.angle);
             double ry = v.x * std::sin(shape.angle) + v.y * std::cos(shape.angle);
@@ -63,19 +74,23 @@ static std::vector<Vector> getWorldVerts(const ShapeData &shape)
     return verts;
 }
 
-// fallback for circle-or-limited approach
+/**
+ * @brief Computes accurate contact points for a collision
+ * 
+ * Uses supporting vertices along the collision normal to determine
+ * the actual contact points between shapes.
+ */
 static void findAccurateContact(const ShapeData &A,
-                                const ShapeData &B,
-                                const Vector &normal,
-                                double /*penetration*/,
-                                Vector &contactA,
-                                Vector &contactB)
+                              const ShapeData &B,
+                              const Vector &normal,
+                              double /*penetration*/,
+                              Vector &contactA,
+                              Vector &contactB)
 {
-    // We'll sample the “supporting face” in +normal for A, and in -normal for B
-    auto getMaxDot = [&](const ShapeData &S, const Vector &dir){
+    // Find deepest points using support mapping
+    auto getMaxDot = [&](const ShapeData &S, const Vector &dir) {
         auto wv = getWorldVerts(S);
         if (wv.empty()) {
-            // fallback
             return Vector(S.pos.x, S.pos.y);
         }
         double bestVal = -1e30;
@@ -90,6 +105,7 @@ static void findAccurateContact(const ShapeData &A,
         return bestPt;
     };
 
+    // Get deepest points along collision normal
     Vector supA = getMaxDot(A,  normal);
     Vector supB = getMaxDot(B, -normal);
 
@@ -97,15 +113,18 @@ static void findAccurateContact(const ShapeData &A,
     contactB = supB;
 }
 
-// ------------------------------------------------------------------
-// For polygon–polygon, we might do a “build manifold” approach, but
-// for now, we do single contact approach from original code
+/**
+ * @brief Creates collision info from contact points
+ * 
+ * Builds the final collision information structure using the
+ * computed contact points and collision normal.
+ */
 static CollisionInfo buildSingleContact(entt::entity eA,
-                                        entt::entity eB,
-                                        const ShapeData &A,
-                                        const ShapeData &B,
-                                        const Vector &n,
-                                        double penetration)
+                                      entt::entity eB,
+                                      const ShapeData &A,
+                                      const ShapeData &B,
+                                      const Vector &n,
+                                      double penetration)
 {
     Vector cA, cB;
     findAccurateContact(A, B, n, penetration, cA, cB);
@@ -120,32 +139,34 @@ static CollisionInfo buildSingleContact(entt::entity eA,
     return info;
 }
 
-// ------------------------------------------------------------------
-// The main narrowPhase
 CollisionManifold narrowPhase(entt::registry &registry,
-                              const std::vector<CandidatePair> &pairs)
+                             const std::vector<CandidatePair> &pairs)
 {
+    PROFILE_SCOPE("NarrowPhase");
+
     CollisionManifold manifold;
     manifold.clear();
 
+    // Process each candidate pair from broad-phase
     for (auto &cp : pairs) {
         if (!registry.valid(cp.eA) || !registry.valid(cp.eB)) continue;
 
+        // Extract shape data for GJK/EPA
         auto sdA = extractShapeData(registry, cp.eA);
         auto sdB = extractShapeData(registry, cp.eB);
 
-        // GJK
+        // Run GJK to detect intersection
         Simplex simplex;
         if (GJKIntersect(sdA, sdB, simplex)) {
-            // EPA
+            // Run EPA to get contact information
             auto epaRes = EPA(sdA, sdB, simplex);
             if (epaRes.has_value()) {
                 EPAResult res = epaRes.value();
-                // single contact
+                // Build contact info for solver
                 auto contact = buildSingleContact(cp.eA, cp.eB,
-                                                  sdA, sdB,
-                                                  res.normal,
-                                                  res.penetration);
+                                               sdA, sdB,
+                                               res.normal,
+                                               res.penetration);
                 manifold.collisions.push_back(contact);
             }
         }

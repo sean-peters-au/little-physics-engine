@@ -1,54 +1,73 @@
-#include <algorithm>
-#include <cmath>
+/**
+ * @file position_solver.cpp
+ * @brief Implementation of position-based penetration correction
+ */
 
 #include "nbody/systems/rigid_body_collision/position_solver.hpp"
+#include <algorithm>
+#include <entt/entt.hpp>
 #include "nbody/components/basic.hpp"
-#include "nbody/core/constants.hpp"
+#include "nbody/core/profile.hpp"
 
-namespace RigidBodyCollision
-{
+namespace RigidBodyCollision {
 
 void PositionSolver::positionalSolver(entt::registry &registry,
-                                      const CollisionManifold &manifold,
-                                      int iterations,
-                                      double baumgarte,
-                                      double slop)
+                                    const CollisionManifold &manifold,
+                                    int iterations,
+                                    double baumgarte,
+                                    double slop)
 {
-    for (int i=0; i<iterations; i++) {
-        for (auto &col : manifold.collisions) {
-            if (!registry.valid(col.a) || !registry.valid(col.b)) continue;
-            if (!registry.all_of<Components::Position, Components::Mass, Components::ParticlePhase>(col.a)) continue;
-            if (!registry.all_of<Components::Position, Components::Mass, Components::ParticlePhase>(col.b)) continue;
+    PROFILE_SCOPE("PositionSolver");
 
-            auto &phaseA = registry.get<Components::ParticlePhase>(col.a);
-            auto &phaseB = registry.get<Components::ParticlePhase>(col.b);
-            if (phaseA.phase != Components::Phase::Solid && phaseB.phase != Components::Phase::Solid) {
+    // Multiple iterations help with stability and stacking
+    for (int i = 0; i < iterations; i++) {
+        for (auto &c : manifold.collisions) {
+            // Skip invalid or deleted entities
+            if (!registry.valid(c.a) || !registry.valid(c.b)) continue;
+
+            // Ensure entities have required components
+            if (!registry.all_of<Components::Position, Components::Mass, 
+                               Components::ParticlePhase>(c.a)) continue;
+            if (!registry.all_of<Components::Position, Components::Mass, 
+                               Components::ParticlePhase>(c.b)) continue;
+
+            // Only correct positions for solid phase particles
+            auto &phaseA = registry.get<Components::ParticlePhase>(c.a);
+            auto &phaseB = registry.get<Components::ParticlePhase>(c.b);
+            if (phaseA.phase != Components::Phase::Solid && 
+                phaseB.phase != Components::Phase::Solid) {
                 continue;
             }
 
-            auto &massA = registry.get<Components::Mass>(col.a);
-            auto &massB = registry.get<Components::Mass>(col.b);
-            auto posA = registry.get<Components::Position>(col.a);
-            auto posB = registry.get<Components::Position>(col.b);
+            // Get physics components
+            auto &massA = registry.get<Components::Mass>(c.a);
+            auto &massB = registry.get<Components::Mass>(c.b);
+            auto posA = registry.get<Components::Position>(c.a);
+            auto posB = registry.get<Components::Position>(c.b);
 
-            double invMassA = (massA.value>1e29)? 0.0 : ((massA.value>1e-12)? 1.0/massA.value:0.0);
-            double invMassB = (massB.value>1e29)? 0.0 : ((massB.value>1e-12)? 1.0/massB.value:0.0);
+            // Handle infinite mass bodies
+            double invMassA = (massA.value > 1e29) ? 0.0 : (1.0 / massA.value);
+            double invMassB = (massB.value > 1e29) ? 0.0 : (1.0 / massB.value);
             double invSum = invMassA + invMassB;
-            if (invSum<1e-12) continue;
+            if (invSum < 1e-12) continue;  // Both bodies are static
 
-            double pen = col.penetration;
+            // Apply position correction only if penetration exceeds slop
+            double pen = c.penetration;
             if (pen <= slop) continue;
 
+            // Calculate correction magnitude based on penetration
             double corr = std::max(pen - slop, 0.0) * baumgarte / invSum;
-            auto n = col.normal;
+            auto n = c.normal;
 
+            // Apply mass-weighted position adjustments
             posA.x -= n.x * corr * invMassA;
             posA.y -= n.y * corr * invMassA;
             posB.x += n.x * corr * invMassB;
             posB.y += n.y * corr * invMassB;
 
-            registry.replace<Components::Position>(col.a, posA);
-            registry.replace<Components::Position>(col.b, posB);
+            // Update positions in registry
+            registry.replace<Components::Position>(c.a, posA);
+            registry.replace<Components::Position>(c.b, posB);
         }
     }
 }

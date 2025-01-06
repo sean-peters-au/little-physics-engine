@@ -74,6 +74,24 @@ PolygonShape buildRandomPolygon(std::default_random_engine &gen, double sz)
     return poly;
 }
 
+double calculatePolygonInertia(const std::vector<Vector>& vertices, double mass) {
+    double numerator = 0.0;
+    double denominator = 0.0;
+    
+    int n = vertices.size();
+    for (int i = 0; i < n; i++) {
+        int j = (i + 1) % n;
+        double cross = vertices[i].cross(vertices[j]);
+        numerator += cross * (vertices[i].dotProduct(vertices[i]) + 
+                            vertices[i].dotProduct(vertices[j]) + 
+                            vertices[j].dotProduct(vertices[j]));
+        denominator += cross;
+    }
+    
+    // For a polygon with uniform density
+    return (mass * numerator) / (6.0 * denominator);
+}
+
 ScenarioConfig RandomPolygonsScenario::getConfig() const
 {
     ScenarioConfig cfg;
@@ -222,10 +240,10 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
             double I; 
 
             if (cCount < circlesCount) {
-                // Circle
+                // Circle - use disc formula
                 registry.emplace<Components::Shape>(entity, Components::ShapeType::Circle, sz);
                 registry.emplace<CircleShape>(entity, sz);
-                I = 0.5 * mass_val * (sz * sz);
+                I = 0.5 * mass_val * (sz * sz);  // Correct for circles
                 cCount++;
             }
             else if (rCount < regularCount) {
@@ -237,7 +255,8 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
                 registry.emplace<Components::Shape>(entity, Components::ShapeType::Polygon, sz);
                 registry.emplace<PolygonShape>(entity, poly);
 
-                I = 0.5 * mass_val * (sz * sz);
+                // Calculate proper moment of inertia for the polygon
+                I = calculatePolygonInertia(poly.vertices, mass_val);
                 rCount++;
             }
             else {
@@ -246,7 +265,8 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
                 registry.emplace<Components::Shape>(entity, Components::ShapeType::Polygon, sz);
                 registry.emplace<PolygonShape>(entity, poly);
 
-                I = 0.5 * mass_val * (sz * sz);
+                // Calculate proper moment of inertia for the polygon
+                I = calculatePolygonInertia(poly.vertices, mass_val);
                 randCount++;
             }
 

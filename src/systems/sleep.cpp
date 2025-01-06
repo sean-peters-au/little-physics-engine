@@ -6,7 +6,7 @@
 
 // Thresholds
 static const double LINEAR_SLEEP_THRESHOLD = 0.5;
-static const double ANGULAR_SLEEP_THRESHOLD = 1.0;
+static const double ANGULAR_SLEEP_THRESHOLD = 0.5;
 static const int SLEEP_FRAMES = 60;
 
 void Systems::SleepSystem::update(entt::registry &registry) {
