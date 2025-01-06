@@ -24,7 +24,7 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                                             double /*slop*/)
 {
     PROFILE_SCOPE("ContactSolver");
-    const double angularDamping = 0.985;
+    const double angularDamping = 0.999;
     const double frictionCoeff  = 0.3;  // global friction for demonstration
 
     // Retrieve contacts (with warm-start impulses) from the manager
@@ -180,7 +180,7 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
             registry.replace<Components::Velocity>(c.a, velA);
             registry.replace<Components::Velocity>(c.b, velB);
 
-            // Calculate both contact point velocities
+            // Calculate both contact point velocities and effective mass matrix
             Vector vA_contact = velA;
             Vector vB_contact = velB;
             Vector rA(0.0, 0.0), rB(0.0, 0.0);
@@ -208,18 +208,32 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
             if (vtLen > 1e-9) {
                 Vector tDir = vt / vtLen;
 
-                double jt = -(relVelContact.dotProduct(tDir)) / invSum;
+                // Calculate effective mass for rotation
+                double raCrossN = rA.cross(tDir);
+                double rbCrossN = rB.cross(tDir);
+                double angularMass = 0.0;
+                if (hasRotA) angularMass += (raCrossN * raCrossN) / registry.get<Components::Inertia>(c.a).I;
+                if (hasRotB) angularMass += (rbCrossN * rbCrossN) / registry.get<Components::Inertia>(c.b).I;
+                
+                // Total effective mass for the constraint
+                double effectiveMass = invSum + angularMass;
+                if (effectiveMass < 1e-12) continue;
+
+                // Calculate impulse considering both linear and angular constraints
+                double jt = -(relVelContact.dotProduct(tDir)) / effectiveMass;
                 double frictionLimit = frictionCoeff * std::fabs(c.normalImpulseAccum);
 
+                // Ensure friction impulse respects Coulomb limit
                 double oldTangentImpulse = c.tangentImpulseAccum;
                 double targetTangentImpulse = oldTangentImpulse + jt;
-                double newTangentImpulse = std::max(-frictionLimit,
-                                                    std::min(frictionLimit, targetTangentImpulse));
+                double newTangentImpulse = std::max(-frictionLimit, 
+                                                   std::min(frictionLimit, targetTangentImpulse));
                 c.tangentImpulseAccum = newTangentImpulse;
 
                 double dJt = newTangentImpulse - oldTangentImpulse;
                 Vector Pf = tDir * dJt;
 
+                // Apply impulses to both linear and angular motion simultaneously
                 velA = velA - (Pf * invMassA);
                 velB = velB + (Pf * invMassB);
 

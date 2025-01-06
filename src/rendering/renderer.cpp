@@ -167,6 +167,26 @@ void Renderer::renderParticles(const entt::registry &registry) {
                 circle.setPosition(px, py);
                 circle.setFillColor(fillColor);
                 window.draw(circle);
+
+                // Add rotation indicator
+                float indicatorRadius = std::max(1.0f, radiusPixels * 0.2f);  // 20% of main circle
+                sf::CircleShape indicator(indicatorRadius);
+                // set the colour to a slightly darker shade than the main circle (don't go below zero)
+                indicator.setFillColor(sf::Color(std::max(0, fillColor.r - 50), std::max(0, fillColor.g - 50), std::max(0, fillColor.b - 50)));  // Dark indicator
+                
+                // Position the indicator on the edge of the main circle
+                double angle = 0.0;
+                if (registry.any_of<Components::AngularPosition>(entity)) {
+                    angle = registry.get<Components::AngularPosition>(entity).angle;
+                }
+                
+                // Calculate indicator position: main circle center + rotated radius vector
+                float indicatorX = px + (radiusPixels - indicatorRadius * 2) * std::cos(angle);
+                float indicatorY = py + (radiusPixels - indicatorRadius * 2) * std::sin(angle);
+                
+                indicator.setOrigin(indicatorRadius, indicatorRadius);
+                indicator.setPosition(indicatorX, indicatorY);
+                window.draw(indicator);
             } else {
                 // Let's assume shape.type == Square or something similar
                 float halfSide = (float)SimulatorConstants::metersToPixels(shape.size);

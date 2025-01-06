@@ -166,8 +166,6 @@ static void makeWall(entt::registry &registry,
 
     // Angular data (irrelevant for a static wall, but required)
     registry.emplace<Components::AngularPosition>(wallEnt, 0.0);
-    registry.emplace<Components::AngularVelocity>(wallEnt, 0.0);
-    registry.emplace<Components::Inertia>(wallEnt, 0.0);
 
     // Give the walls a distinct color (e.g. dark gray)
     registry.emplace<Components::Color>(wallEnt, 60, 60, 60);
