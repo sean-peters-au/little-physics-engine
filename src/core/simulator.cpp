@@ -13,8 +13,8 @@
 #include "nbody/systems/thermodynamics.hpp"
 #include "nbody/systems/sph.hpp"
 #include "nbody/systems/gravity.hpp"
-#include "nbody/systems/rigid_body_collision.hpp"
-#include "nbody/systems/collision/collision_data.hpp"
+#include "nbody/systems/rigid_body_collision/rigid_body_collision.hpp"
+#include "nbody/systems/rigid_body_collision/collision_data.hpp"
 
 #include "nbody/components/basic.hpp"
 #include <nbody/math/polygon.hpp>

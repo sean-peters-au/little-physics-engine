@@ -1,10 +1,12 @@
 #ifndef COLLISION_DATA_HPP
 #define COLLISION_DATA_HPP
 
+#include <vector>
+
 #include <entt/entt.hpp>
+
 #include "nbody/math/vector_math.hpp"
 #include "nbody/components/basic.hpp"
-#include <vector>
 
 // CandidatePair used by broad phase and narrow phase
 struct CandidatePair {
