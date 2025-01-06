@@ -27,7 +27,7 @@ static constexpr double kSmallShapeMax = 0.25;  // Smaller shapes range
 static constexpr double kLargeShapeMin = 0.3;   // Larger shapes range
 static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
-static constexpr int    kParticleCount = 50;
+static constexpr int    kParticleCount = 10;
 
 static constexpr double kFloorStaticFriction = 0.6;
 static constexpr double kFloorDynamicFriction = 0.4;

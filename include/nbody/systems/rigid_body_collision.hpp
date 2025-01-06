@@ -34,7 +34,7 @@ namespace Systems {
         static void update(entt::registry &registry,
                            int solverIterations = 5,
                            int positionalSolverIterations = 2,
-                           double baumgarte = 0.5,
+                           double baumgarte = 0.1,
                            double slop = 0.001);
     };
 
