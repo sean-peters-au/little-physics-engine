@@ -175,7 +175,6 @@ static void makeWall(entt::registry &registry,
 
 void RandomPolygonsScenario::createEntities(entt::registry &registry) const
 {
-    std::cerr << "Creating Random Polygons scenario...\n";
     std::default_random_engine generator{static_cast<unsigned int>(time(0))};
 
     double universeSizeM = SimulatorConstants::UniverseSizeMeters;

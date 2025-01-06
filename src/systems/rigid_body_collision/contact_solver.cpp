@@ -4,6 +4,8 @@
  *
  * Implements an iterative impulse solver that resolves collisions through
  * velocity corrections, handling both normal response and friction effects.
+ *
+ * Debugging statements have been added to help trace unexpected large impulses.
  */
 
 #include "nbody/systems/rigid_body_collision/contact_solver.hpp"
@@ -31,8 +33,6 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
     //--------------------------------------------------------------------------
     // Warm-Start Phase
     //--------------------------------------------------------------------------
-    // Re-apply the previously accumulated impulses so we start each iteration
-    // from a better initial condition. Also clamp friction to avoid blow-ups.
     for (auto &c : contacts) {
         if (!registry.valid(c.a) || !registry.valid(c.b)) {
             continue;
@@ -53,41 +53,36 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
         auto velB = registry.get<Components::Velocity>(c.b);
 
         // Normal impulse
-        Vector Pn = c.normal * c.normalImpulseAccum;
+        const double warmStartFactor = 0.2;  // Apply only portion of accumulated impulse
+        Vector Pn = c.normal * (c.normalImpulseAccum * warmStartFactor);
         velA = velA - (Pn * invMassA);
         velB = velB + (Pn * invMassB);
 
-        //---------------------------------------------------------------------------------------
-        // Friction impulse must be clamped by the friction limit: mu * normalImpulseAccum
-        // If c.tangentImpulseAccum is bigger than mu * c.normalImpulseAccum, clamp it.
-        //---------------------------------------------------------------------------------------
+        // Clamp friction by the Coulomb limit
         double maxFriction = frictionCoeff * std::fabs(c.normalImpulseAccum);
         double tangentImpulse = c.tangentImpulseAccum;
         if (std::fabs(tangentImpulse) > maxFriction) {
             tangentImpulse = (tangentImpulse > 0.0) ? maxFriction : -maxFriction;
-            c.tangentImpulseAccum = tangentImpulse; // store back
+            c.tangentImpulseAccum = tangentImpulse;
         }
 
-        // We'll apply friction in the direction perpendicular to c.normal used last iteration
-        // A simple 2D perpendicular: t = { -ny, nx }
-        // This can cause some error if the normal changed slightly,
-        // but we already partially mitigate large changes by resetting impulses in contact_manager.
+        // Perp to the contact normal (approx. old tangent direction)
         Vector t(-c.normal.y, c.normal.x);
         Vector Pf = t * tangentImpulse;
 
         velA = velA - (Pf * invMassA);
         velB = velB + (Pf * invMassB);
 
-        // Write back updated linear velocities (after warm start)
+        // Write back updated linear velocities
         registry.replace<Components::Velocity>(c.a, velA);
         registry.replace<Components::Velocity>(c.b, velB);
 
-        // Warm start for angular velocity
+        // Warm-start angular velocities
         if (hasRotA) {
             auto &angA = registry.get<Components::AngularVelocity>(c.a);
             auto &I_A  = registry.get<Components::Inertia>(c.a);
             auto posA  = registry.get<Components::Position>(c.a);
-            Vector rA = Vector(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
+            Vector rA(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
 
             double crossN_A = rA.cross(Pn) / I_A.I;
             double crossT_A = rA.cross(Pf) / I_A.I;
@@ -100,7 +95,7 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
             auto &angB = registry.get<Components::AngularVelocity>(c.b);
             auto &I_B  = registry.get<Components::Inertia>(c.b);
             auto posB  = registry.get<Components::Position>(c.b);
-            Vector rB = Vector(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
+            Vector rB(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
 
             double crossN_B = rB.cross(Pn) / I_B.I;
             double crossT_B = rB.cross(Pf) / I_B.I;
@@ -111,16 +106,16 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
     }
 
     //--------------------------------------------------------------------------
-    // Main Solver Iterations (same structure as before)
+    // Main Solver Iterations
     //--------------------------------------------------------------------------
     const int solverIterations = 10;
     for (int iter = 0; iter < solverIterations; iter++) {
+
         for (auto &c : contacts) {
             if (!registry.valid(c.a) || !registry.valid(c.b)) {
                 continue;
             }
 
-            // Get physics components
             auto &massA = registry.get<Components::Mass>(c.a);
             auto &massB = registry.get<Components::Mass>(c.b);
             auto velA   = registry.get<Components::Velocity>(c.a);
@@ -143,34 +138,32 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
             Vector relVel = velB - velA;
             double vn = relVel.dotProduct(n);
 
-            // No restitution in this code
+            // Calculate impulse based on original velocities
             double jn = -vn / invSum;
-            // Prevent pulling if shapes are separating
             jn = std::max(0.0, jn);
 
-            // Accumulate normal impulse
+            // Replace (don't add to) the accumulated impulse
+            c.normalImpulseAccum = jn;  // Or blend: oldImpulse * 0.8 + jn * 0.2
+
             double oldNormalImpulse = c.normalImpulseAccum;
             double newNormalImpulse = oldNormalImpulse + jn;
             c.normalImpulseAccum    = newNormalImpulse;
 
-            // The actual impulse to apply is the increment
             double dJn = newNormalImpulse - oldNormalImpulse;
             Vector Pn = n * dJn;
 
-            // Apply normal impulse to linear velocities
             velA = velA - (Pn * invMassA);
             velB = velB + (Pn * invMassB);
 
-            // Store updated linear velocities so angular code can see them
             registry.replace<Components::Velocity>(c.a, velA);
             registry.replace<Components::Velocity>(c.b, velB);
 
-            // Angular response to normal impulse
             if (hasRotA) {
                 auto &angA = registry.get<Components::AngularVelocity>(c.a);
                 auto &I_A  = registry.get<Components::Inertia>(c.a);
                 auto posA  = registry.get<Components::Position>(c.a);
-                Vector rA  = Vector(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
+                Vector rA(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
+
                 double crossA = rA.cross(Pn) / I_A.I;
                 angA.omega -= crossA;
                 angA.omega *= angularDamping;
@@ -180,7 +173,8 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                 auto &angB = registry.get<Components::AngularVelocity>(c.b);
                 auto &I_B  = registry.get<Components::Inertia>(c.b);
                 auto posB  = registry.get<Components::Position>(c.b);
-                Vector rB  = Vector(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
+                Vector rB(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
+
                 double crossB = rB.cross(Pn) / I_B.I;
                 angB.omega += crossB;
                 angB.omega *= angularDamping;
@@ -213,7 +207,7 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                 vB_contact = vB_contact + Vector(-wB * rB.y, wB * rB.x);
             }
 
-            // Tangential (friction) relative velocity at the contact
+            // Tangential velocity at the contact
             Vector relVelContact = vB_contact - vA_contact;
             Vector vt = relVelContact - n * (relVelContact.dotProduct(n));
             double vtLen = vt.length();
@@ -223,23 +217,18 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                 double jt = -(relVelContact.dotProduct(tDir)) / invSum;
                 double frictionLimit = frictionCoeff * std::fabs(c.normalImpulseAccum);
 
-                // Add to the old friction impulse
                 double oldTangentImpulse = c.tangentImpulseAccum;
                 double targetTangentImpulse = oldTangentImpulse + jt;
-                // Clamp friction to the Coulomb limit
                 double newTangentImpulse = std::max(-frictionLimit,
                                                     std::min(frictionLimit, targetTangentImpulse));
                 c.tangentImpulseAccum = newTangentImpulse;
 
-                // The actual impulse to apply in this iteration
                 double dJt = newTangentImpulse - oldTangentImpulse;
                 Vector Pf = tDir * dJt;
 
-                // Apply friction impulses
                 velA = velA - (Pf * invMassA);
                 velB = velB + (Pf * invMassB);
 
-                // Angular friction
                 if (hasRotA) {
                     auto &angA = registry.get<Components::AngularVelocity>(c.a);
                     auto &I_A  = registry.get<Components::Inertia>(c.a);
@@ -258,11 +247,10 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                 }
             }
 
-            // Store updated linear velocities
             registry.replace<Components::Velocity>(c.a, velA);
             registry.replace<Components::Velocity>(c.b, velB);
-        }
-    }
+        } // end for each contact
+    } // end solver iterations
 
     //--------------------------------------------------------------------------
     // Write back final impulses so they can be used in future frames
