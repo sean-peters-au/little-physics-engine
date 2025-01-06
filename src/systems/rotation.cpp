@@ -22,7 +22,7 @@ void RotationSystem::update(entt::registry &registry) {
 
     auto view = registry.view<Components::AngularPosition, Components::AngularVelocity>();
     for (auto [entity, angPos, angVel] : view.each()) {
-        if (registry.all_of<Components::Boundary>(entity)) {
+        if (registry.any_of<Components::Boundary>(entity)) {
             continue; // Don't rotate boundaries
         }
 

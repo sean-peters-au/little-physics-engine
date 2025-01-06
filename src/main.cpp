@@ -178,6 +178,19 @@ int main(int, char**) {
                         break;
                     }
                 }
+
+                // Color scheme buttons
+                for (auto& btn : renderer.colorSchemeButtons) {
+                    if (btn.rect.contains(sf::Vector2i(mouseX, mouseY))) {
+                        if (btn.label == "Default") 
+                            renderer.setColorScheme(Renderer::ColorScheme::DEFAULT);
+                        else if (btn.label == "Sleep") 
+                            renderer.setColorScheme(Renderer::ColorScheme::SLEEP);
+                        else if (btn.label == "Temperature") 
+                            renderer.setColorScheme(Renderer::ColorScheme::TEMPERATURE);
+                        break;
+                    }
+                }
             }
             else if (event.type == sf::Event::KeyPressed) {
                 // Keyboard shortcuts
@@ -213,7 +226,7 @@ int main(int, char**) {
 
         // Start rendering
         renderer.clear();
-        renderer.renderParticles(simulator.getRegistry(), Renderer::whiteColor);
+        renderer.renderParticles(simulator.getRegistry());
 
         // Frame-based FPS measure
         float dt = frameClock.restart().asMilliseconds();

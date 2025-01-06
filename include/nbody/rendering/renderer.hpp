@@ -54,13 +54,16 @@ public:
         double temperature = 0.0;  ///< Mass-weighted average temperature
         double total_mass = 0.0;   ///< Sum of particle masses
         int particle_count = 0;    ///< Number of particles in pixel
+        bool is_asleep = false;
+        bool has_temperature = false;
 
         /**
          * @brief Adds a single particle's contribution to this pixel
          */
         void add(const Components::Density* dens,
                  const Components::Temperature* temp,
-                 const Components::Mass* mass)
+                 const Components::Mass* mass,
+                 const Components::Sleep* sleep)
         {
             if (dens) {
                 density += dens->value;
@@ -77,6 +80,12 @@ public:
             }
             if (mass) {
                 total_mass += mass->value;
+            }
+            if (sleep) {
+                is_asleep = sleep->asleep;
+            }
+            if (temp) {
+                has_temperature = true;
             }
             particle_count++;
         }
@@ -111,8 +120,7 @@ public:
      * @param registry ECS registry containing entities/components
      * @param colorMapper Optional function to color them by density or temperature
      */
-    void renderParticles(const entt::registry& registry,
-                         ColorMapper colorMapper = whiteColor);
+    void renderParticles(const entt::registry& registry);
 
     /**
      * @brief Renders the current FPS in top-left corner
@@ -166,6 +174,25 @@ public:
     UIButton pausePlayButton;
     UIButton resetButton;
     std::vector<UIButton> speedButtons;
+
+    enum class ColorScheme {
+        DEFAULT,    // Use entity's color component
+        SLEEP,      // Green for awake, red for sleeping
+        TEMPERATURE // Blue -> Red temperature gradient
+    };
+
+    ColorScheme currentColorScheme = ColorScheme::DEFAULT;
+
+    void setColorScheme(ColorScheme scheme) { currentColorScheme = scheme; }
+    ColorScheme getColorScheme() const { return currentColorScheme; }
+
+    // Add to store color scheme buttons like we do for speed buttons
+    std::vector<UIButton> colorSchemeButtons;
+
+    // Add these static color mappers:
+    static sf::Color defaultColorMapper(const PixelProperties& props);
+    static sf::Color sleepColorMapper(const PixelProperties& props);
+    static sf::Color temperatureColorMapper(const PixelProperties& props);
 
 private:
     /** The SFML render window */

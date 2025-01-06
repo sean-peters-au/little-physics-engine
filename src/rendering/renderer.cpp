@@ -72,27 +72,37 @@ Renderer::aggregateParticlesByPixel(const entt::registry &registry)
             auto *dens = registry.try_get<Components::Density>(entity);
             auto *temp = registry.try_get<Components::Temperature>(entity);
             auto *mass = registry.try_get<Components::Mass>(entity);
+            auto *sleep = registry.try_get<Components::Sleep>(entity);
 
             auto &pixProps = pixelMap[{px, py}];
-            pixProps.add(dens, temp, mass);
+            pixProps.add(dens, temp, mass, sleep);
         }
     }
 
     return pixelMap;
 }
 
-void Renderer::renderParticles(const entt::registry &registry, ColorMapper colorMapper) {
+void Renderer::renderParticles(const entt::registry &registry) {
+    ColorMapper mapper;
+    switch (currentColorScheme) {
+        case ColorScheme::SLEEP:
+            mapper = sleepColorMapper;
+            break;
+        case ColorScheme::TEMPERATURE:
+            mapper = temperatureColorMapper;
+            break;
+        case ColorScheme::DEFAULT:
+        default:
+            mapper = defaultColorMapper;
+            break;
+    }
+    
     // Build the pixel aggregator for fallback coloring if entity lacks a Components::Color
     auto pixelMap = aggregateParticlesByPixel(registry);
 
     // Now draw each entity
     auto view = registry.view<Components::Position, Components::Shape>();
     for (auto entity : view) {
-        // Optionally skip boundary entities or do something special
-        if (registry.any_of<Components::Boundary>(entity)) {
-            
-        }
-
         const auto &pos = view.get<Components::Position>(entity);
         const auto &shape = view.get<Components::Shape>(entity);
 
@@ -101,14 +111,16 @@ void Renderer::renderParticles(const entt::registry &registry, ColorMapper color
 
         // Determine fill color
         sf::Color fillColor;
-        if (auto *colComp = registry.try_get<Components::Color>(entity)) {
-            fillColor = sf::Color(colComp->r, colComp->g, colComp->b);
+        if (currentColorScheme == ColorScheme::DEFAULT && registry.any_of<Components::Color>(entity)) {
+            // In DEFAULT scheme, use entity's color component if it exists
+            const auto& colComp = registry.get<Components::Color>(entity);
+            fillColor = sf::Color(colComp.r, colComp.g, colComp.b);
         } else {
-            // fallback color from the aggregated pixel data
+            // Otherwise use the color mapper
             std::pair<int,int> coords((int)px, (int)py);
             auto it = pixelMap.find(coords);
             if (it != pixelMap.end()) {
-                fillColor = colorMapper(it->second);
+                fillColor = mapper(it->second);
             } else {
                 fillColor = sf::Color::White; // default
             }
@@ -303,6 +315,42 @@ void Renderer::renderUI(const entt::registry &registry,
     }
 
     panelY += 20;
+    renderText("Color Scheme:", panelX, panelY, sf::Color::White);
+    panelY += 25;
+
+    const std::vector<std::pair<ColorScheme, std::string>> schemes = {
+        {ColorScheme::DEFAULT, "Default"},
+        {ColorScheme::SLEEP, "Sleep"},
+        {ColorScheme::TEMPERATURE, "Temperature"}
+    };
+
+    colorSchemeButtons.clear();
+    for (auto& scheme : schemes) {
+        UIButton btn;
+        btn.rect = sf::IntRect(panelX, panelY, 100, 25);
+        btn.label = scheme.second;
+        btn.isSpecialButton = true;
+
+        sf::RectangleShape shape(sf::Vector2f(btn.rect.width, btn.rect.height));
+        shape.setPosition(btn.rect.left, btn.rect.top);
+
+        if (currentColorScheme == scheme.first) {
+            shape.setFillColor(sf::Color(0, 200, 0));
+        } else {
+            shape.setFillColor(sf::Color(100, 100, 100));
+        }
+
+        shape.setOutlineColor(sf::Color::White);
+        shape.setOutlineThickness(1.f);
+        window.draw(shape);
+
+        renderText(btn.label, panelX + 5, panelY + 3);
+
+        colorSchemeButtons.push_back(btn);
+        panelY += 35;
+    }
+
+    panelY += 20;
     renderText("Scenarios:", panelX, panelY, sf::Color::White);
     panelY += 30;
 
@@ -340,4 +388,29 @@ void Renderer::renderUI(const entt::registry &registry,
         scenarioButtons.push_back(btn);
         panelY += 40;
     }
+}
+
+sf::Color Renderer::defaultColorMapper(const PixelProperties& props) {
+    return sf::Color::White; // fallback if no color component
+}
+
+sf::Color Renderer::sleepColorMapper(const PixelProperties& props) {
+    if (props.particle_count == 0) return sf::Color::White;
+    return props.is_asleep ? sf::Color(200, 50, 50) : sf::Color(50, 200, 50);
+}
+
+sf::Color Renderer::temperatureColorMapper(const PixelProperties& props) {
+    if (props.particle_count == 0 || !props.has_temperature) 
+        return sf::Color(128, 128, 128); // grey for no temperature
+    
+    // Temperature range from cold (blue) to hot (red)
+    const double min_temp = 0.0;
+    const double max_temp = 100.0;
+    double t = (props.temperature - min_temp) / (max_temp - min_temp);
+    t = std::max(0.0, std::min(1.0, t));
+    
+    // Blue (0,0,255) -> Red (255,0,0)
+    uint8_t r = static_cast<uint8_t>(255 * t);
+    uint8_t b = static_cast<uint8_t>(255 * (1.0 - t));
+    return sf::Color(r, 0, b);
 }

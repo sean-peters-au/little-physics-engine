@@ -29,10 +29,12 @@ static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
 static constexpr int    kParticleCount = 50;
 
-static constexpr double kWallStaticFriction = 0.6;
-static constexpr double kWallDynamicFriction = 0.4;
-static constexpr double kParticleStaticFriction = 0.5;
-static constexpr double kParticleDynamicFriction = 0.4;
+static constexpr double kFloorStaticFriction = 0.6;
+static constexpr double kFloorDynamicFriction = 0.4;
+static constexpr double kWallStaticFriction = 0.2;
+static constexpr double kWallDynamicFriction = 0.1;
+static constexpr double kParticleStaticFriction = 0.3;
+static constexpr double kParticleDynamicFriction = 0.1;
 
 // Helper: build a regular polygon
 PolygonShape buildRegularPolygon(int sides, double sz)
@@ -109,7 +111,8 @@ ScenarioConfig RandomPolygonsScenario::getConfig() const
  */
 static void makeWall(entt::registry &registry,
                      double cx, double cy,
-                     double halfW, double halfH)
+                     double halfW, double halfH,
+                     double staticFriction, double dynamicFriction)
 {
     auto wallEnt = registry.create();
 
@@ -130,7 +133,7 @@ static void makeWall(entt::registry &registry,
     sleepC.sleepCounter = 9999999; // large
 
     // A friction or material if needed
-    registry.emplace<Components::Material>(wallEnt, kWallStaticFriction, kWallDynamicFriction);
+    registry.emplace<Components::Material>(wallEnt, staticFriction, dynamicFriction);
 
     // Use a rectangle polygon
     PolygonShape poly;
@@ -164,13 +167,13 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
     double halfWall = wallThickness * 0.5;
 
     // Left wall
-    makeWall(registry, 0.0, universeSizeM*0.5, halfWall, universeSizeM*0.5);
+    makeWall(registry, 0.0, universeSizeM*0.5, halfWall, universeSizeM*0.5, kWallStaticFriction, kWallDynamicFriction);
     // Right wall
-    makeWall(registry, universeSizeM, universeSizeM*0.5, halfWall, universeSizeM*0.5);
+    makeWall(registry, universeSizeM, universeSizeM*0.5, halfWall, universeSizeM*0.5, kWallStaticFriction, kWallDynamicFriction);
     // Top wall
-    makeWall(registry, universeSizeM*0.5, 0.0, universeSizeM*0.5, halfWall);
+    makeWall(registry, universeSizeM*0.5, 0.0, universeSizeM*0.5, halfWall, kWallStaticFriction, kWallDynamicFriction);
     // Bottom wall
-    makeWall(registry, universeSizeM*0.5, universeSizeM, universeSizeM*0.5, halfWall);
+    makeWall(registry, universeSizeM*0.5, universeSizeM, universeSizeM*0.5, halfWall, kFloorStaticFriction, kFloorDynamicFriction);
 
     // Now create circles/polygons as before
     int totalParticles = SimulatorConstants::ParticleCount;
