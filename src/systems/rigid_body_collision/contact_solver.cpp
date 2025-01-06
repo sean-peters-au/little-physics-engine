@@ -86,7 +86,7 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
 
             double crossN_A = rA.cross(Pn) / I_A.I;
             double crossT_A = rA.cross(Pf) / I_A.I;
-            angA.omega -= (crossN_A + crossT_A);
+            angA.omega -= (crossN_A + crossT_A) * warmStartFactor;
             angA.omega *= angularDamping;
             registry.replace<Components::AngularVelocity>(c.a, angA);
         }
@@ -99,7 +99,7 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
 
             double crossN_B = rB.cross(Pn) / I_B.I;
             double crossT_B = rB.cross(Pf) / I_B.I;
-            angB.omega += (crossN_B + crossT_B);
+            angB.omega += (crossN_B + crossT_B) * warmStartFactor;
             angB.omega *= angularDamping;
             registry.replace<Components::AngularVelocity>(c.b, angB);
         }
@@ -164,6 +164,16 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                 auto posA  = registry.get<Components::Position>(c.a);
                 Vector rA(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
 
+                Vector vA_contact = velA;
+                if (std::abs(angA.omega) > 1e-6) {  // Only if significant rotation
+                    vA_contact = vA_contact + Vector(-angA.omega * rA.y, angA.omega * rA.x);
+                }
+                
+                // Use total contact point velocity for impulse calculation
+                relVel = vB_contact - vA_contact;
+                vn = relVel.dotProduct(n);
+                
+                // Then apply rotational impulse
                 double crossA = rA.cross(Pn) / I_A.I;
                 angA.omega -= crossA;
                 angA.omega *= angularDamping;
