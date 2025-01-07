@@ -96,6 +96,20 @@ public:
      * @return Distance between positions
      */
     double dist(const Position& p) const;
+
+    /**
+     * @brief Adds another position to this one
+     * @param p Position to add
+     * @return Reference to this position
+     */
+    Position& operator+=(const Position& p);
+    
+    /**
+     * @brief Subtracts another position from this one
+     * @param p Position to subtract
+     * @return Reference to this position
+     */
+    Position& operator-=(const Position& p);
 };
 
 /**
@@ -222,6 +236,20 @@ public:
      * @return Projected vector
      */
     Vector projectOnto(const Vector &onto) const;
+
+    /**
+     * @brief Adds another vector to this one
+     * @param v Vector to add
+     * @return Reference to this vector
+     */
+    Vector& operator+=(const Vector& v);
+    
+    /**
+     * @brief Subtracts another vector from this one
+     * @param v Vector to subtract
+     * @return Reference to this vector
+     */
+    Vector& operator-=(const Vector& v);
 };
 
 /**

@@ -45,6 +45,19 @@ double Position::dist(const Position& p) const {
 	return my_sqrt(dx * dx + dy * dy);
 }
 
+// Position operators
+Position& Position::operator+=(const Position& p) {
+    this->x += p.x;
+    this->y += p.y;
+    return *this;
+}
+
+Position& Position::operator-=(const Position& p) {
+    this->x -= p.x;
+    this->y -= p.y;
+    return *this;
+}
+
 // Vector
 
 Vector::Vector() : x(0), y(0) {}
@@ -151,4 +164,17 @@ Vector closestPointOnLine(const Vector &a, const Vector &b, const Vector &p) {
   double t = ((p.x - a.x)*ab.x + (p.y - a.y)*ab.y) / denom;
   t = std::max(0.0,std::min(1.0,t));
   return Vector(a.x + ab.x*t, a.y + ab.y*t);
+}
+
+// Vector operators
+Vector& Vector::operator+=(const Vector& v) {
+    this->x += v.x;
+    this->y += v.y;
+    return *this;
+}
+
+Vector& Vector::operator-=(const Vector& v) {
+    this->x -= v.x;
+    this->y -= v.y;
+    return *this;
 }
