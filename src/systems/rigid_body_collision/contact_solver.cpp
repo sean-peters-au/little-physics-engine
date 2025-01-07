@@ -12,6 +12,7 @@
 #include <cmath>
 #include <entt/entt.hpp>
 #include "nbody/components/basic.hpp"
+#include "nbody/math/polygon.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/core/profile.hpp"
 
@@ -46,8 +47,14 @@ static void applyAngularImpulse(entt::registry &registry,
                                 double factor,
                                 double angularDamping)
 {
-    std::cout << "applyAngularImpulse" << std::endl;
     if (!canRotate(registry, entity)) return;
+    
+    // Don't even process if impulse is zero
+    if (impulse.length() < 1e-10) {
+        std::cout << "Skipping zero impulse" << std::endl;
+        return;
+    }
+    
     auto &angVel  = registry.get<Components::AngularVelocity>(entity);
     auto &inertia = registry.get<Components::Inertia>(entity);
 
@@ -58,11 +65,75 @@ static void applyAngularImpulse(entt::registry &registry,
     std::cout << "sign: " << sign << std::endl;
     std::cout << "factor: " << factor << std::endl;
     std::cout << "angularDamping: " << angularDamping << std::endl;
-    angVel.omega += sign * crossTerm * factor;
-    angVel.omega *= angularDamping;
-    std::cout << "angVel.omega: " << angVel.omega << std::endl;
+    
+    if (std::fabs(crossTerm) > 1e-10) {
+        std::cout << "before omega: " << angVel.omega << std::endl;
+        angVel.omega += sign * crossTerm * factor;
+        angVel.omega *= angularDamping;
+        std::cout << "after omega: " << angVel.omega << std::endl;
+        registry.replace<Components::AngularVelocity>(entity, angVel);
+    }
+}
 
-    registry.replace<Components::AngularVelocity>(entity, angVel);
+static bool isGroundContact(const entt::registry &registry, const ContactRef &c) {
+    Vector up(0.0, 1.0);
+    double dotUp = c.normal.dotProduct(up);
+    return (isInfiniteMass(registry, c.a) ^ isInfiniteMass(registry, c.b)) && 
+           (dotUp < -0.7);
+}
+
+static entt::entity getMovingBody(const entt::registry &registry, const ContactRef &c) {
+    return isInfiniteMass(registry, c.a) ? c.b : c.a;
+}
+
+static Vector getContactToCOM(const entt::registry &registry, 
+                            const ContactRef &c,
+                            entt::entity movingBody) {
+    auto pos = registry.get<Components::Position>(movingBody);
+    return Vector(c.contactPoint.x - pos.x, c.contactPoint.y - pos.y);
+}
+
+static double calculateStabilityMetric(const Vector &r, const Vector &normal) {
+    Vector comProjection = r - normal * r.dotProduct(normal);
+    return comProjection.dotProduct(normal.rotate());
+}
+
+static double calculateTippingTorque(const entt::registry &registry,
+                                   entt::entity movingBody,
+                                   const Vector &contactPoint,
+                                   const Vector &r,
+                                   const Vector &normal) {
+    double massVal = registry.get<Components::Mass>(movingBody).value;
+    double angle = registry.get<Components::AngularPosition>(movingBody).angle;
+    
+    // Vector pointing down (gravity direction)
+    Vector gravityDir(0.0, -1.0);
+    Vector gravityForce = gravityDir * (massVal * Gravity);
+    
+    // Project COM onto ground plane
+    Vector comProjection = r - normal * r.dotProduct(normal);
+    double stabilityOnEdge = comProjection.dotProduct(normal.rotate());
+    
+    // If COM is nearly over the contact point, no torque
+    if (std::fabs(stabilityOnEdge) < 0.01) {
+        std::cout << "  COM nearly over contact - no torque" << std::endl;
+        return 0.0;
+    }
+    
+    // Calculate torque ONLY from horizontal offset
+    // This is key: vertical offset shouldn't contribute to tipping!
+    double horizontalLeverArm = stabilityOnEdge;
+    double torque = massVal * Gravity * horizontalLeverArm;
+    
+    std::cout << "Tipping calculation for entity " << (uint32_t)movingBody << ":" << std::endl;
+    std::cout << "  contact point: " << contactPoint.x << ", " << contactPoint.y << std::endl;
+    std::cout << "  COM offset r: " << r.x << ", " << r.y << std::endl;
+    std::cout << "  horizontal lever arm: " << horizontalLeverArm << std::endl;
+    std::cout << "  mass: " << massVal << std::endl;
+    std::cout << "  current angle: " << angle << " rad" << std::endl;
+    std::cout << "  base torque: " << torque << std::endl;
+    
+    return torque;
 }
 
 static void warmStartContact(entt::registry &registry,
@@ -118,8 +189,7 @@ static void solveNormalImpulse(entt::registry &registry,
                                ContactRef &c,
                                double invMassA,
                                double invMassB,
-                               double invSum,
-                               double angularDamping)
+                               double invSum)
 {
     auto velA = registry.get<Components::Velocity>(c.a);
     auto velB = registry.get<Components::Velocity>(c.b);
@@ -139,12 +209,14 @@ static void solveNormalImpulse(entt::registry &registry,
     double dJn = newNormalImpulse - oldNormalImpulse;
     Vector Pn = n * dJn;
 
-    // Apply impulse
-    velA -= Pn * invMassA;
-    velB += Pn * invMassB;
+    // Only apply impulses if they're significant
+    if (std::fabs(dJn) > 1e-10) {
+        velA -= Pn * invMassA;
+        velB += Pn * invMassB;
 
-    registry.replace<Components::Velocity>(c.a, velA);
-    registry.replace<Components::Velocity>(c.b, velB);
+        registry.replace<Components::Velocity>(c.a, velA);
+        registry.replace<Components::Velocity>(c.b, velB);
+    }
 }
 
 static void solveFrictionImpulse(entt::registry &registry,
@@ -157,174 +229,88 @@ static void solveFrictionImpulse(entt::registry &registry,
 {
     auto velA = registry.get<Components::Velocity>(c.a);
     auto velB = registry.get<Components::Velocity>(c.b);
-
     auto posA = registry.get<Components::Position>(c.a);
     auto posB = registry.get<Components::Position>(c.b);
 
     Vector rA(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
     Vector rB(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
 
-    // Build local contact velocities
+    // Build contact point velocities
     Vector velA_contact = velA;
+    Vector velB_contact = velB;
     if (canRotate(registry, c.a)) {
         double wA = registry.get<Components::AngularVelocity>(c.a).omega;
         velA_contact += Vector(-wA * rA.y, wA * rA.x);
     }
-    Vector velB_contact = velB;
     if (canRotate(registry, c.b)) {
         double wB = registry.get<Components::AngularVelocity>(c.b).omega;
         velB_contact += Vector(-wB * rB.y, wB * rB.x);
     }
 
-    std::cout << "velA_contact: " << velA_contact.x << ", " << velA_contact.y << std::endl;
-    std::cout << "velB_contact: " << velB_contact.x << ", " << velB_contact.y << std::endl;
-
     Vector n = c.normal;
-    std::cout << "n: " << n.x << ", " << n.y << std::endl;
     Vector relVelContact = velB_contact - velA_contact;
     Vector vt = relVelContact - n * relVelContact.dotProduct(n);
     double vtLen = vt.length();
-    if (vtLen < 1e-9) {
-        std::cout << "No tangential motion => no friction" << std::endl;
-        return;
-    }
-    Vector tDir = vt / vtLen;
 
-    // Effective mass (linear + rotational)
+    // Calculate effective mass for friction
     double angularMass = 0.0;
     if (canRotate(registry, c.a)) {
         auto &IA = registry.get<Components::Inertia>(c.a);
-        double raCrossT = rA.cross(tDir);
+        double raCrossT = rA.cross(vt.normalized());
         angularMass += (raCrossT * raCrossT) / IA.I;
     }
     if (canRotate(registry, c.b)) {
         auto &IB = registry.get<Components::Inertia>(c.b);
-        double rbCrossT = rB.cross(tDir);
+        double rbCrossT = rB.cross(vt.normalized());
         angularMass += (rbCrossT * rbCrossT) / IB.I;
     }
     double effectiveMass = invSum + angularMass;
-    if (effectiveMass < 1e-12) {
-        std::cout << "Both infinite or near zero mass => skip" << std::endl;
-        return;
+
+    // Calculate friction impulse
+    double jt = 0.0;
+    if (vtLen > 1e-9) {
+        Vector tDir = vt / vtLen;
+        jt = -(relVelContact.dotProduct(tDir)) / effectiveMass;
     }
 
-    // Ideal friction impulse
-    double jt = -(relVelContact.dotProduct(tDir)) / effectiveMass;
-    std::cout << "jt: " << jt << std::endl;
-
-    // Base friction limit from collision impulse
+    // Calculate friction limit
     double frictionLimit = frictionCoeff * std::fabs(c.normalImpulseAccum);
-    std::cout << "frictionLimit: " << frictionLimit << std::endl;
-
-    // mg-based fallback logic (only if exactly one body is infinite & contact is truly supporting)
-    bool infA = isInfiniteMass(registry, c.a);
-    bool infB = isInfiniteMass(registry, c.b);
-    std::cout << "infA: " << infA << ", infB: " << infB << std::endl;
-
-    if ((infA ^ infB)) {
-        Vector up(0.0, 1.0);
-        double dotUp = std::fabs(n.dotProduct(up));
-        // Get the finite body
-        entt::entity finiteBody = infA ? c.b : c.a;
-        double massVal = registry.get<Components::Mass>(finiteBody).value;
+    
+    // For ground contacts, ensure minimum friction from mg
+    if (isGroundContact(registry, c)) {
+        auto movingBody = getMovingBody(registry, c);
+        double massVal = registry.get<Components::Mass>(movingBody).value;
         double mg = massVal * Gravity;
-
-        // If normalImpulse is truly supporting a big fraction of mg, apply fallback
-        // E.g. if normalImpulse > 0.1 * mg => it's pinned enough to floor.
-        if (dotUp > 0.7 && frictionLimit < 1e-9 && vtLen > 1e-9) {
-            double normalImpulseVal = std::fabs(c.normalImpulseAccum);
-            if (normalImpulseVal > 0.1 * mg) {
-                std::cout << "mg-based fallback" << std::endl;
-                double normalForce = mg;
-                frictionLimit = frictionCoeff * normalForce;
-            } else {
-                std::cout << "Skipping mg-based fallback; normalImpulse too small." << std::endl;
-            }
-        }
+        frictionLimit = std::max(frictionLimit, frictionCoeff * mg);
     }
 
-    // Also clamp friction by how much is needed to bring vt to zero
-    double neededImpulse = effectiveMass * vtLen;
-    std::cout << "neededImpulse: " << neededImpulse << std::endl;
-    frictionLimit = std::min(frictionLimit, neededImpulse);
-    std::cout << "frictionLimit: " << frictionLimit << std::endl;
-
+    // Apply impulse with limits
     double oldTangentImpulse = c.tangentImpulseAccum;
-    double targetTangentImpulse = oldTangentImpulse + jt;
-    double newTangentImpulse = std::max(-frictionLimit,
-                                        std::min(frictionLimit, targetTangentImpulse));
+    double newTangentImpulse = oldTangentImpulse + jt;
+    newTangentImpulse = std::max(-frictionLimit, 
+                                std::min(frictionLimit, newTangentImpulse));
+    
     c.tangentImpulseAccum = newTangentImpulse;
-    std::cout << "newTangentImpulse: " << newTangentImpulse << std::endl;
     double dJt = newTangentImpulse - oldTangentImpulse;
-    std::cout << "dJt: " << dJt << std::endl;
-    Vector Pf = tDir * dJt;
-    std::cout << "Pf: " << Pf.x << ", " << Pf.y << std::endl;
+    Vector Pf = vt.normalized() * dJt;
 
-    // If Pf dot vt > 0 => friction is adding velocity => zero it
-    if (vt.dotProduct(Pf) > 1e-12) {
-        std::cout << "Pf·vt > 0 => friction adds velocity => zero it" << std::endl;
-        Pf = Vector(0,0);
-        c.tangentImpulseAccum = oldTangentImpulse;
-        dJt = 0.0;
-    }
+    // Only apply angular impulses if we actually have a friction force
+    if (std::fabs(dJt) > 1e-10) {
+        Vector Pf = vt.normalized() * dJt;
+        
+        // Apply to linear velocity
+        velA -= Pf * invMassA;
+        velB += Pf * invMassB;
 
-    velA -= Pf * invMassA;
-    velB += Pf * invMassB;
-    std::cout << "velA: " << velA.x << ", " << velA.y << std::endl;
-    std::cout << "velB: " << velB.x << ", " << velB.y << std::endl;
+        registry.replace<Components::Velocity>(c.a, velA);
+        registry.replace<Components::Velocity>(c.b, velB);
 
-    registry.replace<Components::Velocity>(c.a, velA);
-    registry.replace<Components::Velocity>(c.b, velB);
-
-    applyAngularImpulse(registry, c.a, rA, Pf, -1.0, 1.0, angularDamping);
-    applyAngularImpulse(registry, c.b, rB, Pf, +1.0, 1.0, angularDamping);
-
-    // Rolling friction with sign clamp
-    if (canRotate(registry, c.a)) {
-        std::cout << "canRotate(registry, c.a)" << std::endl;
-        double wA = registry.get<Components::AngularVelocity>(c.a).omega;
-        if (std::fabs(wA) > RollingVelocityThresh) {
-            std::cout << "wA > RollingVelocityThresh" << std::endl;
-            auto &inertiaA = registry.get<Components::Inertia>(c.a);
-            auto &angVelA  = registry.get<Components::AngularVelocity>(c.a);
-            double sign = (wA > 0.0) ? -1.0 : +1.0;
-            double dOmega = (RollingFrictionCoeff * registry.get<Components::Mass>(c.a).value * Gravity * 0.5)
-                            / inertiaA.I;
-
-            // If applying sign*dOmega would overshoot zero, clamp to zero
-            if (std::fabs(dOmega) > std::fabs(wA)) {
-                dOmega = wA * (-1.0); 
-            }
-
-            std::cout << "angVelA.omega += sign * dOmega: " << (sign * dOmega) << std::endl;
-            angVelA.omega += sign * dOmega;
-            angVelA.omega *= angularDamping;
-            std::cout << "angVelA.omega: " << angVelA.omega << std::endl;
-            registry.replace<Components::AngularVelocity>(c.a, angVelA);
-        }
-    }
-    if (canRotate(registry, c.b)) {
-        std::cout << "canRotate(registry, c.b)" << std::endl;
-        double wB = registry.get<Components::AngularVelocity>(c.b).omega;
-        if (std::fabs(wB) > RollingVelocityThresh) {
-            std::cout << "wB > RollingVelocityThresh" << std::endl;
-            auto &inertiaB = registry.get<Components::Inertia>(c.b);
-            auto &angVelB  = registry.get<Components::AngularVelocity>(c.b);
-            double sign = (wB > 0.0) ? -1.0 : +1.0;
-            double dOmega = (RollingFrictionCoeff * registry.get<Components::Mass>(c.b).value * Gravity * 0.5)
-                            / inertiaB.I;
-
-            // If applying sign*dOmega would overshoot zero, clamp to zero
-            if (std::fabs(dOmega) > std::fabs(wB)) {
-                dOmega = wB * (-1.0);
-            }
-
-            std::cout << "angVelB.omega += sign * dOmega: " << (sign * dOmega) << std::endl;
-            angVelB.omega += sign * dOmega;
-            angVelB.omega *= angularDamping;
-            std::cout << "angVelB.omega: " << angVelB.omega << std::endl;
-            registry.replace<Components::AngularVelocity>(c.b, angVelB);
-        }
+        // Apply to angular velocity only if we have a real impulse
+        std::cout << "\nApplying friction impulse to entity " << (uint32_t)c.a << ":" << std::endl;
+        applyAngularImpulse(registry, c.a, rA, Pf, -1.0, 1.0, angularDamping);
+        
+        std::cout << "\nApplying friction impulse to entity " << (uint32_t)c.b << ":" << std::endl;
+        applyAngularImpulse(registry, c.b, rB, Pf, +1.0, 1.0, angularDamping);
     }
 }
 
@@ -339,13 +325,62 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
 
     auto &contacts = manager.getContactsForSolver();
 
-    // Reset accumulated impulses at start of physics step
+    // ONCE PER FRAME: Calculate tipping forces
+    std::vector<std::pair<entt::entity, double>> tippingForces;
+    for (auto &c : contacts) {
+        if (!isGroundContact(registry, c)) {
+            std::cout << "Not ground contact, skipping..." << std::endl;
+            continue;
+        }
+        
+        auto movingBody = getMovingBody(registry, c);
+        if (!canRotate(registry, movingBody)) {
+            std::cout << "Body cannot rotate, skipping..." << std::endl;
+            continue;
+        }
+
+        Vector r = getContactToCOM(registry, c, movingBody);
+        double stabilityMetric = calculateStabilityMetric(r, c.normal);
+        
+        std::cout << "\nStability check for entity " << (uint32_t)movingBody << ":" << std::endl;
+        std::cout << "  r: " << r.x << ", " << r.y << std::endl;
+        std::cout << "  normal: " << c.normal.x << ", " << c.normal.y << std::endl;
+        std::cout << "  stabilityMetric: " << stabilityMetric << std::endl;
+        
+        if (std::fabs(stabilityMetric) > 1e-9) {
+            double torque = calculateTippingTorque(registry, movingBody, 
+                                                 c.contactPoint,  // Pass actual contact point
+                                                 r, c.normal);
+            double dt = SimulatorConstants::SecondsPerTick;
+            double I = registry.get<Components::Inertia>(movingBody).I;
+            double dOmega = (torque / I) * dt;
+            
+            // Limit maximum angular velocity
+            auto &currentAngVel = registry.get<Components::AngularVelocity>(movingBody);
+            double maxOmega = 2.0 * M_PI;  // Max 1 rotation per second
+            if (std::fabs(currentAngVel.omega + dOmega) > maxOmega) {
+                dOmega = (dOmega > 0 ? 1 : -1) * (maxOmega - std::fabs(currentAngVel.omega));
+            }
+            
+            std::cout << "  Angular velocity change:" << std::endl;
+            std::cout << "    inertia: " << I << std::endl;
+            std::cout << "    dt: " << dt << std::endl;
+            std::cout << "    current omega: " << currentAngVel.omega << std::endl;
+            std::cout << "    dOmega: " << dOmega << std::endl;
+            std::cout << "    new omega will be: " << (currentAngVel.omega + dOmega) << std::endl;
+            
+            tippingForces.push_back({movingBody, dOmega});
+        }
+    }
+
+    // Reset accumulated impulses
     for (auto &c : contacts) {
         c.normalImpulseAccum = 0.0;
         c.tangentImpulseAccum = 0.0;
     }
 
-    // Warm start using previous frame's impulses
+    // Warm start
+    std::cout << "\nWarm starting contacts..." << std::endl;
     for (auto &c : contacts) {
         warmStartContact(registry, c, frictionCoeff, angularDamping);
     }
@@ -353,30 +388,33 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
     // Solve iterations
     const int solverIterations = 10;
     for (int iter = 0; iter < solverIterations; iter++) {
+        std::cout << "\nSolver iteration " << iter << std::endl;
         for (auto &c : contacts) {
-            if (!registry.valid(c.a) || !registry.valid(c.b)) {
-                continue;
-            }
+            if (!registry.valid(c.a) || !registry.valid(c.b)) continue;
 
             auto &massA = registry.get<Components::Mass>(c.a);
             auto &massB = registry.get<Components::Mass>(c.b);
             double invMassA = (massA.value > 1e29) ? 0.0 : (1.0 / massA.value);
             double invMassB = (massB.value > 1e29) ? 0.0 : (1.0 / massB.value);
             double invSum   = invMassA + invMassB;
-            if (invSum < 1e-12) {
-                continue;
-            }
+            if (invSum < 1e-12) continue;
 
-            // Store impulses for this iteration
-            double oldNormalImpulse = c.normalImpulseAccum;
-            solveNormalImpulse(registry, c, invMassA, invMassB, invSum, angularDamping);
-            
-            // Use total accumulated normal impulse for friction calculation
+            solveNormalImpulse(registry, c, invMassA, invMassB, invSum);
             solveFrictionImpulse(registry, c, invMassA, invMassB, invSum, frictionCoeff, angularDamping);
         }
     }
 
-    // Store final impulses for next frame's warm start
+    // ONCE PER FRAME: Apply tipping forces
+    std::cout << "\nApplying tipping forces..." << std::endl;
+    for (const auto& [entity, dOmega] : tippingForces) {
+        auto &angVel = registry.get<Components::AngularVelocity>(entity);
+        std::cout << "  Entity " << (uint32_t)entity << ":" << std::endl;
+        std::cout << "    before omega: " << angVel.omega << std::endl;
+        angVel.omega += dOmega;
+        std::cout << "    after omega: " << angVel.omega << std::endl;
+        registry.replace<Components::AngularVelocity>(entity, angVel);
+    }
+
     manager.applySolverResults(contacts);
 }
 
