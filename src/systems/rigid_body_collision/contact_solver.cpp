@@ -131,27 +131,20 @@ static void solveNormalImpulse(entt::registry &registry,
     double jn = -vn / invSum;
     jn = std::max(0.0, jn);
 
+    // Accumulate impulse for this iteration
     double oldNormalImpulse = c.normalImpulseAccum;
     double newNormalImpulse = oldNormalImpulse + jn;
     c.normalImpulseAccum = newNormalImpulse;
     
     double dJn = newNormalImpulse - oldNormalImpulse;
-
     Vector Pn = n * dJn;
 
+    // Apply impulse
     velA -= Pn * invMassA;
     velB += Pn * invMassB;
 
     registry.replace<Components::Velocity>(c.a, velA);
     registry.replace<Components::Velocity>(c.b, velB);
-
-    auto posA = registry.get<Components::Position>(c.a);
-    auto posB = registry.get<Components::Position>(c.b);
-    Vector rA(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
-    Vector rB(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
-
-    // applyAngularImpulse(registry, c.a, rA, Pn, -1.0, 1.0, angularDamping);
-    // applyAngularImpulse(registry, c.b, rB, Pn, +1.0, 1.0, angularDamping);
 }
 
 static void solveFrictionImpulse(entt::registry &registry,
@@ -346,10 +339,18 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
 
     auto &contacts = manager.getContactsForSolver();
 
+    // Reset accumulated impulses at start of physics step
+    for (auto &c : contacts) {
+        c.normalImpulseAccum = 0.0;
+        c.tangentImpulseAccum = 0.0;
+    }
+
+    // Warm start using previous frame's impulses
     for (auto &c : contacts) {
         warmStartContact(registry, c, frictionCoeff, angularDamping);
     }
 
+    // Solve iterations
     const int solverIterations = 10;
     for (int iter = 0; iter < solverIterations; iter++) {
         for (auto &c : contacts) {
@@ -366,11 +367,16 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                 continue;
             }
 
+            // Store impulses for this iteration
+            double oldNormalImpulse = c.normalImpulseAccum;
             solveNormalImpulse(registry, c, invMassA, invMassB, invSum, angularDamping);
+            
+            // Use total accumulated normal impulse for friction calculation
             solveFrictionImpulse(registry, c, invMassA, invMassB, invSum, frictionCoeff, angularDamping);
         }
     }
 
+    // Store final impulses for next frame's warm start
     manager.applySolverResults(contacts);
 }
 
