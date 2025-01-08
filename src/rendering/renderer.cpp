@@ -488,17 +488,17 @@ sf::Color Renderer::temperatureColorMapper(const PixelProperties& props) {
 }
 
 void Renderer::renderContactDebug(const entt::registry &registry) {
-    // Get contacts from the contact manager
+    // Get contacts from the contact manager (actually from the registry
+    // because we created debug entities for each ContactRef in the solver).
     auto view = registry.view<RigidBodyCollision::ContactRef>();
     
-    const float LINE_THICKNESS = 3.0f;  // Made even thicker for better visibility
+    const float LINE_THICKNESS = 3.0f;  
     const float CONTACT_POINT_SIZE = 4.0f;
-    const float NORMAL_LENGTH = 30.0f;  // Length of normal visualization in pixels
+    const float NORMAL_LENGTH = 30.0f;  
     
     for (auto entity : view) {
         const auto& contact = view.get<RigidBodyCollision::ContactRef>(entity);
         
-        // Convert physics coordinates (meters) to screen coordinates (pixels)
         float px = (float)SimulatorConstants::metersToPixels(contact.contactPoint.x);
         float py = (float)SimulatorConstants::metersToPixels(contact.contactPoint.y);
         
@@ -532,7 +532,7 @@ void Renderer::renderContactDebug(const entt::registry &registry) {
             sf::RectangleShape tangentImpulse(sf::Vector2f(impulseLength, LINE_THICKNESS));
             tangentImpulse.setFillColor(sf::Color::Blue);
             tangentImpulse.setPosition(px, py);
-            tangentImpulse.setRotation(angle + 90.0f);  // Perpendicular to normal
+            tangentImpulse.setRotation(angle + 90.0f);
             window.draw(tangentImpulse);
         }
     }

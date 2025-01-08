@@ -27,7 +27,7 @@ static constexpr double kSmallShapeMax = 0.25;  // Smaller shapes range
 static constexpr double kLargeShapeMin = 0.3;   // Larger shapes range
 static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
-static constexpr int    kParticleCount = 2;
+static constexpr int    kParticleCount = 20;
 
 static constexpr double kFloorStaticFriction = 0.6;
 static constexpr double kFloorDynamicFriction = 0.4;
@@ -153,13 +153,14 @@ static void makeWall(entt::registry &registry,
     // A friction or material if needed
     registry.emplace<Components::Material>(wallEnt, staticFriction, dynamicFriction);
 
-    // Use a rectangle polygon
+    // Use a rectangle polygon with CCW winding
     PolygonShape poly;
     poly.type = Components::ShapeType::Polygon;
-    poly.vertices.push_back(Vector(-halfW, -halfH));
-    poly.vertices.push_back(Vector( halfW, -halfH));
-    poly.vertices.push_back(Vector( halfW,  halfH));
-    poly.vertices.push_back(Vector(-halfW,  halfH));
+    // Start at bottom-left, go CCW
+    poly.vertices.push_back(Vector(-halfW, -halfH));  // Bottom-left
+    poly.vertices.push_back(Vector(-halfW,  halfH));  // Top-left
+    poly.vertices.push_back(Vector( halfW,  halfH));  // Top-right
+    poly.vertices.push_back(Vector( halfW, -halfH));  // Bottom-right
 
     registry.emplace<Components::Shape>(wallEnt, Components::ShapeType::Polygon, halfH);
     registry.emplace<PolygonShape>(wallEnt, poly);
@@ -280,9 +281,4 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
             created++;
         }
     }
-
-    std::cerr << "...Created " << created << " random polygons total.\n"
-              << "   Circles:  " << cCount    << "\n"
-              << "   Regular:  " << rCount    << "\n"
-              << "   Random:   " << randCount << "\n";
 }

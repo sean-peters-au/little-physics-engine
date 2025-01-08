@@ -13,22 +13,19 @@
 #include "nbody/core/profile.hpp"
 #include "nbody/systems/rigid_body_collision/contact_manager.hpp"
 
+#define ENABLE_CONTACT_SOLVER_DEBUG 0
+#define DEBUG(x) do { if (ENABLE_CONTACT_SOLVER_DEBUG) { std::cout << x; } } while(0)
+
 namespace RigidBodyCollision {
 
 // --------------------- Tuning -------------------------
 static const double Gravity               = 9.81;
-static const double GlobalFrictionCoeff   = 0.9;  // tangential friction
-static const double RollingFrictionCoeff  = 0.005;// smaller to avoid big flips
-static const double RollingCutoff         = 0.05; // if |w| < 0.05, no rolling friction
-static const double AngularDamping        = 0.98; // damp spin each iteration
-static const double BaumgarteFactor       = 0.2;  // position correction factor
-static const double PenetrationSlop       = 0.001;// small overlap tolerance
-static const double SleepThresholdLin     = 0.05; // if velocity < 0.05 for frames => set 0
-static const double SleepThresholdAng     = 0.05; // if angular velocity < 0.05 => set 0
-static const int    SleepFramesNeeded     = 60;   // frames below threshold => sleep
-// ------------------------------------------------------
+static const double GlobalFrictionCoeff   = 0.5;
+static const double RollingFrictionCoeff  = 0.0001;
+static const double RollingCutoff         = 0.001;
+static const double AngularDamping        = 0.99;
+//-------------------------------------------------------
 
-/** Checks if mass is effectively infinite */
 static bool isInfiniteMass(const entt::registry &registry, entt::entity e)
 {
     if (!registry.valid(e)) return false;
@@ -37,7 +34,6 @@ static bool isInfiniteMass(const entt::registry &registry, entt::entity e)
     return (m.value > 1e29);
 }
 
-/** Checks if body can rotate (has AngularVelocity + Inertia) and inertia > 0 */
 static bool canRotate(entt::registry &registry, entt::entity e)
 {
     if (!registry.all_of<Components::AngularVelocity, Components::Inertia>(e)) {
@@ -47,9 +43,6 @@ static bool canRotate(entt::registry &registry, entt::entity e)
     return (I.I > 1e-12);
 }
 
-/**
- * @brief apply an angular impulse to entity
- */
 static void applyAngularImpulse(entt::registry &registry,
                                 entt::entity entity,
                                 const Vector &r,
@@ -69,18 +62,15 @@ static void applyAngularImpulse(entt::registry &registry,
     angVel.omega += sign * crossVal * factor;
     angVel.omega *= angularDamping;
 
-    std::cout << "[applyAngularImpulse] e=" << (int)entity
-              << " cross=" << crossVal
-              << " oldOmega=" << oldOmega
-              << " newOmega=" << angVel.omega
-              << std::endl;
+    DEBUG(std::string("[applyAngularImpulse] e= ") + std::to_string((int)entity) + "\n");
+    DEBUG(std::string(" cross= ") + std::to_string(crossVal) + "\n");
+    DEBUG(std::string(" oldOmega= ") + std::to_string(oldOmega) + "\n");
+    DEBUG(std::string(" newOmega= ") + std::to_string(angVel.omega) + "\n");
+    DEBUG("\n");
 
     registry.replace<Components::AngularVelocity>(entity, angVel);
 }
 
-/**
- * @brief Rolling friction that bleeds off spin without flipping sign
- */
 static void applyRollingFriction(entt::registry &registry,
                                  entt::entity e)
 {
@@ -88,17 +78,16 @@ static void applyRollingFriction(entt::registry &registry,
     auto &angVel = registry.get<Components::AngularVelocity>(e);
     auto &inertia= registry.get<Components::Inertia>(e);
     auto &mass  = registry.get<Components::Mass>(e);
-    if (mass.value > 1e29) return; // infinite mass => skip
+    if (mass.value > 1e29) return; 
 
     double w = angVel.omega;
     if (std::fabs(w) < RollingCutoff) {
-        return; // no rolling friction if nearly zero
+        return;
     }
     double sign   = (w > 0.0) ? -1.0 : +1.0;
     double torque = RollingFrictionCoeff * mass.value * Gravity * 0.5;
     double alpha  = torque / inertia.I;
 
-    // clamp so we never flip sign in one iteration
     if (std::fabs(alpha) > std::fabs(w)) {
         alpha = w * (-1.0);
     }
@@ -106,18 +95,15 @@ static void applyRollingFriction(entt::registry &registry,
     angVel.omega += sign * alpha;
     angVel.omega *= AngularDamping;
 
-    std::cout << "[rollingFriction] e=" << (int)e
-              << " oldW=" << oldW
-              << " alpha=" << alpha
-              << " newW=" << angVel.omega
-              << std::endl;
+    DEBUG(std::string("[rollingFriction] e=") + std::to_string((int)e) + "\n");
+    DEBUG(std::string(" oldW=") + std::to_string(oldW) + "\n");
+    DEBUG(std::string(" alpha=") + std::to_string(alpha) + "\n");
+    DEBUG(std::string(" newW=") + std::to_string(angVel.omega) + "\n");
+    DEBUG("\n");
 
     registry.replace<Components::AngularVelocity>(e, angVel);
 }
 
-/**
- * @brief Warm-start with partial impulses from last frame
- */
 static void warmStartContact(entt::registry &registry,
                              ContactRef &c,
                              double frictionCoeff)
@@ -163,16 +149,13 @@ static void warmStartContact(entt::registry &registry,
     applyAngularImpulse(registry, c.b, rB, Pn, +1.0, warmFactor, AngularDamping);
     applyAngularImpulse(registry, c.b, rB, Pf, +1.0, warmFactor, AngularDamping);
 
-    std::cout << "[warmStartContact] eA=" << (int)c.a
-              << " eB=" << (int)c.b
-              << " normalImpulse=" << c.normalImpulseAccum
-              << " tangentImpulse=" << c.tangentImpulseAccum
-              << std::endl;
+    DEBUG(std::string("[warmStartContact] eA=") + std::to_string((int)c.a) + "\n");
+    DEBUG(std::string(" eB=") + std::to_string((int)c.b) + "\n");
+    DEBUG(std::string(" normalImpulse=") + std::to_string(c.normalImpulseAccum) + "\n");
+    DEBUG(std::string(" tangentImpulse=") + std::to_string(c.tangentImpulseAccum) + "\n");
+    DEBUG("\n");
 }
 
-/**
- * @brief Solve normal impulse (includes torque for off-center hits)
- */
 static void solveNormalConstraint(entt::registry &registry,
                                   ContactRef &c,
                                   double frictionCoeff)
@@ -206,7 +189,6 @@ static void solveNormalConstraint(entt::registry &registry,
     Vector relVel = velB_contact - velA_contact;
     double vn = relVel.dotProduct(n);
 
-    // add rotational mass
     double angularMass = 0.0;
     if (canRotate(registry, c.a)) {
         double raCrossN = rA.cross(n);
@@ -221,7 +203,7 @@ static void solveNormalConstraint(entt::registry &registry,
 
     double normalMass = invA + invB + angularMass;
     if (normalMass < 1e-12) {
-        return; // both infinite => skip
+        return;
     }
 
     double jn = -vn / normalMass;
@@ -251,18 +233,15 @@ static void solveNormalConstraint(entt::registry &registry,
     applyAngularImpulse(registry, c.a, rA, Pn, -1.0, 1.0, AngularDamping);
     applyAngularImpulse(registry, c.b, rB, Pn, +1.0, 1.0, AngularDamping);
 
-    std::cout << "[solveNormal] eA=" << (int)c.a
-              << " eB=" << (int)c.b
-              << " oldN=" << oldImpulse
-              << " newN=" << newImpulse
-              << " dJn=" << dJn
-              << " vn=" << vn
-              << std::endl;
+    DEBUG(std::string("[solveNormal] eA=") + std::to_string((int)c.a) + "\n");
+    DEBUG(std::string(" eB=") + std::to_string((int)c.b) + "\n");
+    DEBUG(std::string(" oldN=") + std::to_string(oldImpulse) + "\n");
+    DEBUG(std::string(" newN=") + std::to_string(newImpulse) + "\n");
+    DEBUG(std::string(" dJn=") + std::to_string(dJn) + "\n");
+    DEBUG(std::string(" vn=") + std::to_string(vn) + "\n");
+    DEBUG("\n");
 }
 
-/**
- * @brief Solve friction impulse using normalImpulse as limit
- */
 static void solveFrictionConstraint(entt::registry &registry,
                                     ContactRef &c,
                                     double frictionCoeff)
@@ -293,7 +272,6 @@ static void solveFrictionConstraint(entt::registry &registry,
     Vector n = c.normal;
     double dotN = rel.dotProduct(n);
 
-    // tangential velocity
     Vector vt = rel - (n * dotN);
     double vtLen = vt.length();
     if (vtLen < 1e-9) {
@@ -301,7 +279,6 @@ static void solveFrictionConstraint(entt::registry &registry,
     }
 
     Vector tDir = vt / vtLen;
-    // friction effective mass
     double angularMass = 0.0;
     if (canRotate(registry, c.a)) {
         double raCrossT = rA.cross(tDir);
@@ -344,91 +321,30 @@ static void solveFrictionConstraint(entt::registry &registry,
     applyAngularImpulse(registry, c.a, rA, Pf, -1.0, 1.0, AngularDamping);
     applyAngularImpulse(registry, c.b, rB, Pf, +1.0, 1.0, AngularDamping);
 
-    std::cout << "[solveFriction] eA="<< (int)c.a
-              << " eB="<< (int)c.b
-              << " oldTangent="<< oldTangent
-              << " newTangent="<< newTangent
-              << " vtLen="<< vtLen
-              << " frictionLimit="<< limit
-              << std::endl;
+    DEBUG(std::string("[solveFriction] eA=") + std::to_string((int)c.a) + "\n");
+    DEBUG(std::string(" eB=") + std::to_string((int)c.b) + "\n");
+    DEBUG(std::string(" oldTangent=") + std::to_string(oldTangent) + "\n");
+    DEBUG(std::string(" newTangent=") + std::to_string(newTangent) + "\n");
+    DEBUG(std::string(" vtLen=") + std::to_string(vtLen) + "\n");
+    DEBUG(std::string(" frictionLimit=") + std::to_string(limit) + "\n");
+    DEBUG("\n");
 }
 
-/**
- * @brief Basic position-based correction to reduce overlap each iteration (Baumgarte).
- */
-static void solvePosition(entt::registry &registry, ContactRef &c)
-{
-    // If penetration is small, skip
-    if (c.penetration < PenetrationSlop) {
-        return;
-    }
-
-    // get masses
-    double mA = registry.get<Components::Mass>(c.a).value;
-    double mB = registry.get<Components::Mass>(c.b).value;
-    double invA = (mA > 1e29) ? 0.0 : (1.0 / mA);
-    double invB = (mB > 1e29) ? 0.0 : (1.0 / mB);
-    double invSum = invA + invB;
-    if (invSum<1e-12) {
-        return; // both infinite => no correction
-    }
-    // portion
-    double correction = (c.penetration - PenetrationSlop) * BaumgarteFactor / invSum;
-
-    Vector corr = c.normal * correction;
-
-    auto posA = registry.get<Components::Position>(c.a);
-    auto posB = registry.get<Components::Position>(c.b);
-
-    posA.x -= corr.x * invA;
-    posA.y -= corr.y * invA;
-    posB.x += corr.x * invB;
-    posB.y += corr.y * invB;
-
-    registry.replace<Components::Position>(c.a, posA);
-    registry.replace<Components::Position>(c.b, posB);
-
-    std::cout << "[solvePosition] eA="<< (int)c.a
-              << " eB="<< (int)c.b
-              << " penetration="<< c.penetration
-              << " correction="<< correction
-              << std::endl;
-}
-
-/**
- * @brief Minor "sleep" approach: if velocity/omega < threshold for X frames => zero them out
- */
 static void checkSleep(entt::registry &registry, ContactRef &c)
 {
-    // For both A & B if they're finite mass
     auto trySleep = [&](entt::entity e)
     {
         if (!registry.valid(e)) return;
         if (!registry.all_of<Components::Sleep, Components::Velocity, Components::Mass>(e)) return;
         auto &slp = registry.get<Components::Sleep>(e);
         auto &m   = registry.get<Components::Mass>(e);
-        if (m.value>1e29) return; // infinite mass => no sleep
+        if (m.value>1e29) return;
 
         auto vel = registry.get<Components::Velocity>(e);
         double speed = vel.length();
         double w=0.0;
         if (canRotate(registry, e)) {
             w = std::fabs(registry.get<Components::AngularVelocity>(e).omega);
-        }
-        if (speed< SleepThresholdLin && w< SleepThresholdAng) {
-            slp.sleepCounter++;
-            if (slp.sleepCounter>= SleepFramesNeeded) {
-                // zero them out
-                registry.replace<Components::Velocity>(e, Components::Velocity(0.0,0.0));
-                if (canRotate(registry, e)) {
-                    auto &angV = registry.get<Components::AngularVelocity>(e);
-                    angV.omega=0.0;
-                    registry.replace<Components::AngularVelocity>(e, angV);
-                }
-                std::cout<<"[sleep] entity="<<(int)e<<" is now sleeping\n";
-            }
-        } else {
-            slp.sleepCounter=0;
         }
     };
     trySleep(c.a);
@@ -443,70 +359,66 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
                                             double /*baumgarte*/,
                                             double /*slop*/)
 {
-    // First, clear any existing contact visualization entities
+    // Destroy old contact-visual entities
     auto oldContacts = registry.view<RigidBodyCollision::ContactRef>();
     registry.destroy(oldContacts.begin(), oldContacts.end());
 
-    // Retrieve current contact set
-    auto &contacts = manager.getContactsForSolver();
+    // Now retrieve the manifold data
+    auto &manifolds = manager.getManifoldsForSolver();
 
-    // Create visualization entities for each contact
-    for (const auto &c : contacts) {
-        auto contactEntity = registry.create();
-        registry.emplace<RigidBodyCollision::ContactRef>(contactEntity, c);
+    // Create debug visualization entities for each contact in each manifold
+    for (auto &m : manifolds) {
+        for (auto &c : m.contacts) {
+            auto contactEntity = registry.create();
+            registry.emplace<RigidBodyCollision::ContactRef>(contactEntity, c);
+        }
     }
 
     // Warm Start
-    for (auto &c : contacts) {
-        warmStartContact(registry, c, GlobalFrictionCoeff);
+    for (auto &m : manifolds) {
+        for (auto &c : m.contacts) {
+            warmStartContact(registry, c, GlobalFrictionCoeff);
+        }
     }
 
     // multiple velocity solver iterations
     const int velocityIterations = 3;
     for (int iter=0; iter<velocityIterations; iter++) {
-        std::cout<<"=== Velocity Solver Iter "<<iter<<" ===\n";
-        for (auto &c : contacts) {
-            if (!registry.valid(c.a) || !registry.valid(c.b)) {
-                continue;
+        DEBUG(std::string("=== Velocity Solver Iter ") + std::to_string(iter) + " ===\n");
+        for (auto &m : manifolds) {
+            for (auto &c : m.contacts) {
+                if (!registry.valid(c.a) || !registry.valid(c.b)) {
+                    continue;
+                }
+                solveNormalConstraint(registry, c, GlobalFrictionCoeff);
+                solveFrictionConstraint(registry, c, GlobalFrictionCoeff);
             }
-            solveNormalConstraint(registry, c, GlobalFrictionCoeff);
-            solveFrictionConstraint(registry, c, GlobalFrictionCoeff);
         }
     }
 
-    // Rolling friction pass after velocity
-    for (auto &c : contacts) {
-        if (registry.valid(c.a) && !isInfiniteMass(registry, c.a)) {
-            applyRollingFriction(registry, c.a);
-        }
-        if (registry.valid(c.b) && !isInfiniteMass(registry, c.b)) {
-            applyRollingFriction(registry, c.b);
-        }
-    }
-
-    // Position correction pass (reduce overlap)
-    const int positionIterations= 3;
-    for (int i=0; i<positionIterations; i++) {
-        std::cout<<"=== Position Solver Iter "<<i<<" ===\n";
-        for (auto &c : contacts) {
-            if (!registry.valid(c.a) || !registry.valid(c.b)) {
-                continue;
+    // Rolling friction pass
+    for (auto &m : manifolds) {
+        for (auto &c : m.contacts) {
+            if (registry.valid(c.a) && !isInfiniteMass(registry, c.a)) {
+                applyRollingFriction(registry, c.a);
             }
-            // apply a simple Baumgarte correction
-            solvePosition(registry, c);
-
+            if (registry.valid(c.b) && !isInfiniteMass(registry, c.b)) {
+                applyRollingFriction(registry, c.b);
+            }
         }
     }
 
-    // Sleep checks
-    for (auto &c : contacts) {
-        checkSleep(registry, c);
+    // Sleep checks (purely velocity-based)
+    for (auto &m : manifolds) {
+        for (auto &c : m.contacts) {
+            checkSleep(registry, c);
+        }
     }
 
     // store final impulses for next frame
-    manager.applySolverResults(contacts);
+    manager.applySolverResults(manifolds);
 
-    std::cout<<"[solveContactConstraints] Done. Impulses stored.\n";
+    DEBUG("Done. Impulses stored.\n");
 }
 
 } // namespace RigidBodyCollision

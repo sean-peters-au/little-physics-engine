@@ -55,8 +55,6 @@ namespace SimulatorConstants {
         InitialVelocityFactor      = 1.0;
 
         ActiveSystems.clear();
-
-        std::cout << "Global constants reset to default.\n";
     }
 
     // Utility

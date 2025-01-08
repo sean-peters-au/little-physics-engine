@@ -50,12 +50,25 @@ struct ContactRef {
 };
 
 /**
+ * @brief Represents all contact points (and a shared normal) for a pair of entities
+ *
+ * A single "manifold" may contain multiple contact points if two polygons
+ * are resting against each other, or if an object has multiple contacts
+ * against a flat surface.
+ */
+struct ContactManifoldRef {
+    entt::entity a;              ///< First entity
+    entt::entity b;              ///< Second entity
+    Vector normal;               ///< Primary contact normal
+    std::vector<ContactRef> contacts; ///< All contact points sharing that normal
+};
+
+/**
  * @brief Manages persistent contact information between physics frames
  *
  * The ContactManager bridges collision detection and constraint solving by:
- * - Storing contact points between frames
- * - Merging new contacts with existing ones
- * - Maintaining warm-start impulse data
+ * - Grouping multiple contacts for the same entity pair into manifolds
+ * - Storing/managing warm-start impulse data
  * - Cleaning up stale contacts
  */
 class ContactManager {
@@ -70,16 +83,17 @@ public:
     void updateContacts(const CollisionManifold &manifold);
 
     /**
-     * @brief Retrieves current contacts with warm-start data for the solver
-     * @return Reference to the contact list
+     * @brief Retrieves current manifolds (each may have multiple contact points)
+     *        with warm-start data for the solver
+     * @return Reference to the manifold list
      */
-    std::vector<ContactRef> &getContactsForSolver();
+    std::vector<ContactManifoldRef> &getManifoldsForSolver();
 
     /**
      * @brief Stores solver results for next-frame warm-starting
-     * @param results Updated contact data from the solver
+     * @param manifolds Updated manifold data from the solver
      */
-    void applySolverResults(const std::vector<ContactRef> &results);
+    void applySolverResults(const std::vector<ContactManifoldRef> &manifolds);
 
     /**
      * @brief Removes contacts involving deleted entities
@@ -90,13 +104,21 @@ public:
     /**
      * @brief Retrieves the current collision manifold
      * @return Reference to the latest collision manifold
+     *
+     * Note: This is the raw manifold from the narrowphase (with each collision
+     * as a separate entry). We store it in case other systems need direct access.
      */
     const CollisionManifold &getCurrentManifold() const;
 
 private:
     class ContactData;  ///< PIMPL idiom for contact storage
     ContactData *m_data;
-    std::vector<ContactRef> m_contactsCache;  ///< Working copy for solver
+
+    /**
+     * @brief Caches built from the latest narrowphase collisions, but merged
+     *        into manifolds for the solver.
+     */
+    std::vector<ContactManifoldRef> m_manifoldsCache;
 };
 
 } // namespace RigidBodyCollision

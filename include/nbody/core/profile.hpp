@@ -25,6 +25,7 @@
 #include <string>
 #include <chrono>
 #include <unordered_map>
+#include <stack>
 
 namespace Profiling {
 
@@ -47,10 +48,13 @@ public:
      * @brief Contains aggregated timing statistics for a profiled section
      */
     struct ProfileData {
-        Duration total_time{0};           ///< Total time spent in this section
-        uint64_t call_count{0};          ///< Number of times this section was executed
-        Duration min_time{Duration::max()}; ///< Minimum single-call duration
-        Duration max_time{Duration::min()}; ///< Maximum single-call duration
+        Duration total_time{0};           
+        Duration self_time{0};            ///< Time spent in this section excluding children
+        uint64_t call_count{0};          
+        Duration min_time{Duration::max()};
+        Duration max_time{Duration::min()};
+        std::string parent_name;          ///< Name of parent scope
+        std::vector<std::string> children; ///< Names of child scopes
     };
 
     /**
@@ -77,6 +81,15 @@ public:
     static void printStats();
 
     /**
+     * @brief Prints a single node in the profiler tree
+     * @param name Name of the node to print
+     * @param prefix Prefix for indentation (used for tree structure)
+     * @param is_last Whether this node is the last child of its parent
+     * @param total_program_time Total time for the entire program
+     */
+    static void printNode(const std::string& name, const std::string& prefix, bool is_last, Duration total_program_time);
+
+    /**
      * @brief Clears all accumulated timing data
      */
     static void reset();
@@ -91,6 +104,7 @@ private:
     };
     
     std::unordered_map<std::string, SectionData> sections;
+    std::stack<std::string> scope_stack;  ///< Track current scope hierarchy
 
     /**
      * @brief Gets the singleton instance of the profiler

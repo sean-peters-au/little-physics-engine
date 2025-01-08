@@ -12,60 +12,59 @@
 namespace RigidBodyCollision {
 
 void PositionSolver::positionalSolver(entt::registry &registry,
-                                    const CollisionManifold &manifold,
-                                    int iterations,
-                                    double baumgarte,
-                                    double slop)
+                                      const CollisionManifold &manifold,
+                                      int iterations,
+                                      double baumgarte,
+                                      double slop)
 {
     PROFILE_SCOPE("PositionSolver");
 
-    // Multiple iterations help with stability and stacking
+    // We iterate multiple times to allow stacking corrections to converge
     for (int i = 0; i < iterations; i++) {
+        // Now each 'c' in manifold.collisions might represent a single contact
+        // and we might have multiple for the same pair.
         for (auto &c : manifold.collisions) {
-            // Skip invalid or deleted entities
             if (!registry.valid(c.a) || !registry.valid(c.b)) continue;
 
-            // Ensure entities have required components
-            if (!registry.all_of<Components::Position, Components::Mass, 
-                               Components::ParticlePhase>(c.a)) continue;
-            if (!registry.all_of<Components::Position, Components::Mass, 
-                               Components::ParticlePhase>(c.b)) continue;
+            // Ensure entities have the required components
+            if (!registry.all_of<Components::Position, Components::Mass, Components::ParticlePhase>(c.a)) 
+                continue;
+            if (!registry.all_of<Components::Position, Components::Mass, Components::ParticlePhase>(c.b)) 
+                continue;
 
-            // Only correct positions for solid phase particles
+            // Only correct positions for solid phase
             auto &phaseA = registry.get<Components::ParticlePhase>(c.a);
             auto &phaseB = registry.get<Components::ParticlePhase>(c.b);
-            if (phaseA.phase != Components::Phase::Solid && 
+            if (phaseA.phase != Components::Phase::Solid &&
                 phaseB.phase != Components::Phase::Solid) {
                 continue;
             }
 
-            // Get physics components
             auto &massA = registry.get<Components::Mass>(c.a);
             auto &massB = registry.get<Components::Mass>(c.b);
-            auto posA = registry.get<Components::Position>(c.a);
-            auto posB = registry.get<Components::Position>(c.b);
+            auto posA   = registry.get<Components::Position>(c.a);
+            auto posB   = registry.get<Components::Position>(c.b);
 
-            // Handle infinite mass bodies
             double invMassA = (massA.value > 1e29) ? 0.0 : (1.0 / massA.value);
             double invMassB = (massB.value > 1e29) ? 0.0 : (1.0 / massB.value);
-            double invSum = invMassA + invMassB;
-            if (invSum < 1e-12) continue;  // Both bodies are static
+            double invSum   = invMassA + invMassB;
+            if (invSum < 1e-12) continue;  // both infinite => no correction
 
-            // Apply position correction only if penetration exceeds slop
             double pen = c.penetration;
             if (pen <= slop) continue;
 
-            // Calculate correction magnitude based on penetration
+            // Apply standard Baumgarte approach
             double corr = std::max(pen - slop, 0.0) * baumgarte / invSum;
-            auto n = c.normal;
+            auto n = c.normal;  // normal from A->B
 
-            // Apply mass-weighted position adjustments
+            // We'll push bodies out along 'n'
+            // but if you wanted to push along the actual contactPoint,
+            // you'd use that for torque or advanced approaches, etc.
             posA.x -= n.x * corr * invMassA;
             posA.y -= n.y * corr * invMassA;
             posB.x += n.x * corr * invMassB;
             posB.y += n.y * corr * invMassB;
 
-            // Update positions in registry
             registry.replace<Components::Position>(c.a, posA);
             registry.replace<Components::Position>(c.b, posB);
         }
