@@ -27,7 +27,7 @@ static constexpr double kSmallShapeMax = 0.25;  // Smaller shapes range
 static constexpr double kLargeShapeMin = 0.3;   // Larger shapes range
 static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
-static constexpr int    kParticleCount = 20;
+static constexpr int    kParticleCount = 4;
 
 static constexpr double kFloorStaticFriction = 0.6;
 static constexpr double kFloorDynamicFriction = 0.4;
@@ -45,7 +45,7 @@ PolygonShape buildRegularPolygon(int sides, double sz)
     for(int i = 0; i < sides; i++) {
         double angle = i * angleStep;
         double x = sz * std::cos(angle);
-        double y = sz * std::sin(angle);
+        double y = -sz * std::sin(angle);
         poly.vertices.push_back(Vector(x, y));
     }
     return poly;

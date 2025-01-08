@@ -102,56 +102,47 @@ void ECSSimulator::init() {
 }
 
 void ECSSimulator::tick() {
+    PROFILE_SCOPE("Tick");
     // Run the scenario's chosen ECS systems in order
     for (auto system : SimulatorConstants::ActiveSystems) {
         switch (system) {
         case Systems::SystemType::COLLISION: {
-            PROFILE_SCOPE("Collision");
             Systems::RigidBodyCollisionSystem::update(registry);
             break;
         }
         case Systems::SystemType::ROTATION: {
-            PROFILE_SCOPE("Rotation");
             Systems::RotationSystem::update(registry);
             break;
         }
         case Systems::SystemType::BASIC_GRAVITY: {
-            PROFILE_SCOPE("Basic Gravity");
             Systems::BasicGravitySystem::update(registry);
             break;
         }
         case Systems::SystemType::BARNES_HUT: {
-            PROFILE_SCOPE("Barnes Hut");
             Systems::BarnesHutSystem::update(registry);
             break;
         }
         case Systems::SystemType::SPH: {
-            PROFILE_SCOPE("SPH");
             Systems::SPHSystem::update(registry);
             break;
         }
         case Systems::SystemType::GRID_THERMODYNAMICS: {
-            PROFILE_SCOPE("Grid Thermodynamics");
             Systems::GridThermodynamicsSystem::update(registry);
             break;
         }
         case Systems::SystemType::MOVEMENT: {
-            PROFILE_SCOPE("Movement");
             Systems::MovementSystem::update(registry);
             break;
         }
         case Systems::SystemType::SLEEP: {
-            PROFILE_SCOPE("Sleep");
             Systems::SleepSystem::update(registry);
             break;
         }
         case Systems::SystemType::DAMPENING: {
-            PROFILE_SCOPE("Dampening");
             Systems::DampeningSystem::update(registry);
             break;
         }
         case Systems::SystemType::BOUNDARY: {
-            PROFILE_SCOPE("Boundary");
             Systems::BoundarySystem::update(registry);
             break;
         }

@@ -1,11 +1,14 @@
 #include "nbody/systems/movement.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/core/constants.hpp"
+#include "nbody/core/profile.hpp"
 #include <cmath>
 
 namespace Systems {
 
 void MovementSystem::update(entt::registry &registry) {
+    PROFILE_SCOPE("MovementSystem");
+
     // Time step in real seconds (with all time scaling)
     double dt = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
 

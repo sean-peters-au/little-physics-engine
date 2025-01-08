@@ -1,11 +1,13 @@
 #include "nbody/systems/boundary.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/core/constants.hpp"
+#include "nbody/core/profile.hpp"
 #include <cmath>
 
 namespace Systems {
 
 void BoundarySystem::update(entt::registry &registry) {
+    PROFILE_SCOPE("BoundarySystem");
     // Convert margin to meters
     double margin_m = 15.0 * SimulatorConstants::MetersPerPixel;
     double universe_size_m = SimulatorConstants::UniverseSizeMeters;

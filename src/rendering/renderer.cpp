@@ -208,6 +208,7 @@ void Renderer::renderParticles(const entt::registry &registry) {
         renderContactDebug(registry);
         renderVelocityDebug(registry);
         renderAngularDebug(registry);
+        renderPolygonDebug(registry);
     }
 
     // Draw a divider line on the right edge of the simulation region
@@ -488,8 +489,6 @@ sf::Color Renderer::temperatureColorMapper(const PixelProperties& props) {
 }
 
 void Renderer::renderContactDebug(const entt::registry &registry) {
-    // Get contacts from the contact manager (actually from the registry
-    // because we created debug entities for each ContactRef in the solver).
     auto view = registry.view<RigidBodyCollision::ContactRef>();
     
     const float LINE_THICKNESS = 3.0f;  
@@ -508,25 +507,49 @@ void Renderer::renderContactDebug(const entt::registry &registry) {
         contactPoint.setPosition(px - CONTACT_POINT_SIZE, py - CONTACT_POINT_SIZE);
         window.draw(contactPoint);
 
-        // Draw normal (red line)
+        // Get colors of both shapes
+        sf::Color colorA = sf::Color::White;
+        sf::Color colorB = sf::Color::White;
+        if (registry.valid(contact.a) && registry.any_of<Components::Color>(contact.a)) {
+            const auto& color = registry.get<Components::Color>(contact.a);
+            colorA = sf::Color(color.r, color.g, color.b);
+        }
+        if (registry.valid(contact.b) && registry.any_of<Components::Color>(contact.b)) {
+            const auto& color = registry.get<Components::Color>(contact.b);
+            colorB = sf::Color(color.r, color.g, color.b);
+        }
+
+        // Darken the colors for the normal lines (multiply by 0.7)
+        sf::Color darkColorA(
+            static_cast<uint8_t>(colorA.r * 0.7f),
+            static_cast<uint8_t>(colorA.g * 0.7f),
+            static_cast<uint8_t>(colorA.b * 0.7f)
+        );
+        sf::Color darkColorB(
+            static_cast<uint8_t>(colorB.r * 0.7f),
+            static_cast<uint8_t>(colorB.g * 0.7f),
+            static_cast<uint8_t>(colorB.b * 0.7f)
+        );
+
+        // Draw normal (using shape A's color)
         sf::RectangleShape normal(sf::Vector2f(NORMAL_LENGTH, LINE_THICKNESS));
-        normal.setFillColor(sf::Color::Red);
+        normal.setFillColor(darkColorA);
         normal.setPosition(px, py);
         float angle = std::atan2(contact.normal.y, contact.normal.x) * 180.0f / (float)M_PI;
         normal.setRotation(angle);
         window.draw(normal);
 
-        // Draw accumulated normal impulse (green line)
+        // Draw accumulated normal impulse (using shape B's color)
         if (std::abs(contact.normalImpulseAccum) > 0.001f) {
             float impulseLength = std::abs(contact.normalImpulseAccum) * 5.0f;
             sf::RectangleShape normalImpulse(sf::Vector2f(impulseLength, LINE_THICKNESS));
-            normalImpulse.setFillColor(sf::Color::Green);
+            normalImpulse.setFillColor(darkColorB);
             normalImpulse.setPosition(px, py);
             normalImpulse.setRotation(angle);
             window.draw(normalImpulse);
         }
 
-        // Draw accumulated tangent impulse (blue line)
+        // Draw accumulated tangent impulse (blue line - keeping this distinct)
         if (std::abs(contact.tangentImpulseAccum) > 0.001f) {
             float impulseLength = std::abs(contact.tangentImpulseAccum) * 5.0f;
             sf::RectangleShape tangentImpulse(sf::Vector2f(impulseLength, LINE_THICKNESS));
@@ -596,6 +619,41 @@ void Renderer::renderAngularDebug(const entt::registry &registry) {
                 }
                 window.draw(&thickArc[0], thickArc.size(), sf::LineStrip);
             }
+        }
+    }
+}
+
+void Renderer::renderPolygonDebug(const entt::registry &registry) {
+    auto view = registry.view<Components::Position, PolygonShape, Components::AngularPosition>();
+    for (auto entity : view) {
+        const auto &pos = view.get<Components::Position>(entity);
+        const auto &poly = view.get<PolygonShape>(entity);
+        const auto &angPos = view.get<Components::AngularPosition>(entity);
+        
+        // Get rotation
+        double rad = angPos.angle;
+        double ca = std::cos(rad);
+        double sa = std::sin(rad);
+        
+        // Draw index number at each vertex
+        for (size_t i = 0; i < poly.vertices.size(); i++) {
+            const auto &v = poly.vertices[i];
+            // Apply rotation and translation
+            double rx = v.x * ca - v.y * sa;
+            double ry = v.x * sa + v.y * ca;
+            
+            float vx_px = (float)SimulatorConstants::metersToPixels(pos.x + rx);
+            float vy_px = (float)SimulatorConstants::metersToPixels(pos.y + ry);
+            
+            // Draw vertex index
+            std::string idx = std::to_string(i);
+            renderText(idx, (int)vx_px, (int)vy_px, sf::Color::Yellow);
+            
+            // Optionally: Draw a small dot at vertex
+            sf::CircleShape dot(2.0f);
+            dot.setFillColor(sf::Color::Yellow);
+            dot.setPosition(vx_px - 2.0f, vy_px - 2.0f);
+            window.draw(dot);
         }
     }
 }

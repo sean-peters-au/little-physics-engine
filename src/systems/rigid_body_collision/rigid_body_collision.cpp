@@ -5,6 +5,7 @@
 
 #include <vector>
 
+#include "nbody/core/profile.hpp"
 #include "nbody/systems/rigid_body_collision/rigid_body_collision.hpp"
 #include "nbody/systems/rigid_body_collision/broadphase.hpp"
 #include "nbody/systems/rigid_body_collision/narrowphase.hpp"
@@ -16,12 +17,9 @@
 namespace Systems
 {
 
-void RigidBodyCollisionSystem::update(entt::registry &registry,
-                                      int solverIterations,
-                                      int positionalSolverIterations,
-                                      double baumgarte,
-                                      double slop)
+void RigidBodyCollisionSystem::update(entt::registry &registry)
 {
+    PROFILE_SCOPE("RigidBodyCollisionSystem");
     using namespace RigidBodyCollision;
 
     // 1) Broad-phase: Quick AABB-based filtering (once per frame)
@@ -37,12 +35,10 @@ void RigidBodyCollisionSystem::update(entt::registry &registry,
     ContactManager manager;
     manager.updateContacts(manifold);
 
-    ContactSolver::solveContactConstraints(registry, manager, baumgarte, slop);
+    ContactSolver::solveContactConstraints(registry, manager);
 
     // 5) (Optional) Position solver for any residual penetration
-    PositionSolver::positionalSolver(registry, manifold, 
-                                        positionalSolverIterations,
-                                        baumgarte, slop);
+    PositionSolver::positionalSolver(registry, manifold);
 }
 
 } // namespace Systems

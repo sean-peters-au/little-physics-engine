@@ -11,11 +11,31 @@ void Profiler::startSection(const std::string& name) {
     auto& data = instance.sections[name];
     data.start_time = Clock::now();
 
-    // Set up parent-child relationship
+    // CHANGE: Always update parent relationship based on current scope
     if (!instance.scope_stack.empty()) {
         std::string parent = instance.scope_stack.top();
-        data.profile_data.parent_name = parent;
-        instance.sections[parent].profile_data.children.push_back(name);
+        
+        // Only update if parent changed
+        if (data.profile_data.parent_name != parent) {
+            // Remove from old parent's children list if it exists
+            if (!data.profile_data.parent_name.empty()) {
+                auto& old_parent_children = instance.sections[data.profile_data.parent_name].profile_data.children;
+                auto it = std::find(old_parent_children.begin(), old_parent_children.end(), name);
+                if (it != old_parent_children.end()) {
+                    old_parent_children.erase(it);
+                }
+            }
+            
+            // Add to new parent
+            data.profile_data.parent_name = parent;
+            auto& parent_children = instance.sections[parent].profile_data.children;
+            if (std::find(parent_children.begin(), parent_children.end(), name) == parent_children.end()) {
+                parent_children.push_back(name);
+            }
+        }
+    } else {
+        // No parent - this is a root node
+        data.profile_data.parent_name.clear();
     }
 
     instance.scope_stack.push(name);
@@ -23,6 +43,20 @@ void Profiler::startSection(const std::string& name) {
 
 void Profiler::endSection(const std::string& name) {
     auto& instance = getInstance();
+    
+    // Safety check - don't pop if stack is empty
+    if (instance.scope_stack.empty()) {
+        std::cerr << "Warning: Trying to end section '" << name << "' but scope stack is empty\n";
+        return;
+    }
+
+    // Safety check - ensure we're ending the correct section
+    if (instance.scope_stack.top() != name) {
+        std::cerr << "Warning: Ending section '" << name << "' but current scope is '" 
+                  << instance.scope_stack.top() << "'\n";
+        return;
+    }
+
     auto& data = instance.sections[name];
     Duration duration = Clock::now() - data.start_time;
     
@@ -33,7 +67,7 @@ void Profiler::endSection(const std::string& name) {
     data.profile_data.min_time = std::min(data.profile_data.min_time, duration);
     data.profile_data.max_time = std::max(data.profile_data.max_time, duration);
 
-    // Subtract this time from parent's self_time
+    // Subtract this time from parent's self_time if we have a parent
     if (!data.profile_data.parent_name.empty()) {
         auto& parent_data = instance.sections[data.profile_data.parent_name];
         parent_data.profile_data.self_time -= duration;
@@ -72,9 +106,13 @@ void Profiler::printNode(const std::string& name, const std::string& prefix, boo
     const auto& data = instance.sections[name];
     const auto& profile = data.profile_data;
 
-    // Calculate percentages
-    double total_pct = (profile.total_time.count() * 100.0) / total_program_time.count();
-    double self_pct = (profile.self_time.count() * 100.0) / total_program_time.count();
+    // Calculate percentages, avoiding division by zero
+    double total_pct = 0.0;
+    double self_pct = 0.0;
+    if (total_program_time.count() > 0) {
+        total_pct = (profile.total_time.count() * 100.0) / total_program_time.count();
+        self_pct = (profile.self_time.count() * 100.0) / total_program_time.count();
+    }
     
     // Convert times to milliseconds
     auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(profile.total_time).count();
@@ -83,7 +121,7 @@ void Profiler::printNode(const std::string& name, const std::string& prefix, boo
     // Print current node
     std::cout << prefix << (is_last ? "└── " : "├── ")
               << name << " [" << profile.call_count << " calls] "
-              << total_ms << "ms (total: " << total_pct << "%, "
+              << total_ms << "ms (total: " << std::fixed << std::setprecision(2) << total_pct << "%, "
               << "self: " << self_pct << "%)\n";
 
     // Print children
@@ -103,12 +141,20 @@ Profiler& Profiler::getInstance() {
     return instance;
 }
 
-ScopedProfiler::ScopedProfiler(const std::string& name) : section_name(name) {
-    Profiler::startSection(section_name);
+ScopedProfiler::ScopedProfiler(const std::string& name) : section_name(name), in_scope(false) {}
+    
+void ScopedProfiler::beginScope() {
+    if (!in_scope) {  // Only start if we're not already in the scope
+        Profiler::startSection(section_name);
+        in_scope = true;
+    }
 }
-
+    
 ScopedProfiler::~ScopedProfiler() {
-    Profiler::endSection(section_name);
+    if (in_scope) {  // Only end if we're actually in the scope
+        Profiler::endSection(section_name);
+        in_scope = false;
+    }
 }
 
 } // namespace Profiling 

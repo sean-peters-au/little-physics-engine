@@ -41,11 +41,7 @@ public:
      * @note The system automatically breaks early if no collisions are detected
      *       during broad-phase to avoid unnecessary computation
      */
-    static void update(entt::registry &registry,
-                      int solverIterations = 5,
-                      int positionalSolverIterations = 2,
-                      double baumgarte = 0.5,
-                      double slop = 0.001);
+    static void update(entt::registry &registry);
 };
 
 } // namespace Systems

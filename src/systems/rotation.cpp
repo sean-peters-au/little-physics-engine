@@ -3,6 +3,7 @@
  * @brief Implementation of rotational motion system
  */
 
+#include "nbody/core/profile.hpp"
 #include "nbody/systems/rotation.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sim.hpp"
@@ -11,6 +12,7 @@
 namespace Systems {
 
 void RotationSystem::update(entt::registry &registry) {
+    PROFILE_SCOPE("RotationSystem");
     // Get simulator state
     const auto& state = registry.get<Components::SimulatorState>(
         registry.view<Components::SimulatorState>().front()

@@ -1,3 +1,4 @@
+#include "nbody/core/profile.hpp"
 #include "nbody/systems/dampening.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/core/constants.hpp"
@@ -6,6 +7,8 @@
 namespace Systems {
 
 void DampeningSystem::update(entt::registry &registry) {
+    PROFILE_SCOPE("DampeningSystem");
+
     // We’ll apply linear and angular damping for non-sleeping objects
     auto view = registry.view<Components::Position, Components::Velocity>();
 

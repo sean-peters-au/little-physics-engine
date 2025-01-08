@@ -9,18 +9,21 @@
 #include "nbody/components/basic.hpp"
 #include "nbody/core/profile.hpp"
 
+const double BAUMGARTE = 0.5;
+const double SLOP = 0.001;
+const double ITERATIONS = 3;
+
 namespace RigidBodyCollision {
 
-void PositionSolver::positionalSolver(entt::registry &registry,
-                                      const CollisionManifold &manifold,
-                                      int iterations,
-                                      double baumgarte,
-                                      double slop)
+void PositionSolver::positionalSolver(
+    entt::registry &registry,
+    const CollisionManifold &manifold
+)
 {
     PROFILE_SCOPE("PositionSolver");
 
     // We iterate multiple times to allow stacking corrections to converge
-    for (int i = 0; i < iterations; i++) {
+    for (int i = 0; i < ITERATIONS; i++) {
         // Now each 'c' in manifold.collisions might represent a single contact
         // and we might have multiple for the same pair.
         for (auto &c : manifold.collisions) {
@@ -51,10 +54,10 @@ void PositionSolver::positionalSolver(entt::registry &registry,
             if (invSum < 1e-12) continue;  // both infinite => no correction
 
             double pen = c.penetration;
-            if (pen <= slop) continue;
+            if (pen <= SLOP) continue;
 
             // Apply standard Baumgarte approach
-            double corr = std::max(pen - slop, 0.0) * baumgarte / invSum;
+            double corr = std::max(pen - SLOP, 0.0) * BAUMGARTE / invSum;
             auto n = c.normal;  // normal from A->B
 
             // We'll push bodies out along 'n'

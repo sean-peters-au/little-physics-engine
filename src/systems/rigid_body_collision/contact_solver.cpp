@@ -21,9 +21,9 @@ namespace RigidBodyCollision {
 // --------------------- Tuning -------------------------
 static const double Gravity               = 9.81;
 static const double GlobalFrictionCoeff   = 0.5;
-static const double RollingFrictionCoeff  = 0.0001;
-static const double RollingCutoff         = 0.001;
-static const double AngularDamping        = 0.99;
+static const double RollingFrictionCoeff  = 0.00001;
+static const double RollingCutoff         = 0.00001;
+static const double AngularDamping        = 0.995;
 //-------------------------------------------------------
 
 static bool isInfiniteMass(const entt::registry &registry, entt::entity e)
@@ -354,10 +354,10 @@ static void checkSleep(entt::registry &registry, ContactRef &c)
 //---------------------------------------------------------------
 // The main public function
 //---------------------------------------------------------------
-void ContactSolver::solveContactConstraints(entt::registry &registry,
-                                            ContactManager &manager,
-                                            double /*baumgarte*/,
-                                            double /*slop*/)
+void ContactSolver::solveContactConstraints(
+    entt::registry &registry,
+    ContactManager &manager
+)
 {
     // Destroy old contact-visual entities
     auto oldContacts = registry.view<RigidBodyCollision::ContactRef>();
@@ -381,8 +381,8 @@ void ContactSolver::solveContactConstraints(entt::registry &registry,
         }
     }
 
-    // multiple velocity solver iterations
-    const int velocityIterations = 3;
+    // multiple velocity solver iterations :)
+    const int velocityIterations = 10;
     for (int iter=0; iter<velocityIterations; iter++) {
         DEBUG(std::string("=== Velocity Solver Iter ") + std::to_string(iter) + " ===\n");
         for (auto &m : manifolds) {

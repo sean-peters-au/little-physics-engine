@@ -21,6 +21,9 @@
 #include "nbody/math/polygon.hpp"
 #include "nbody/core/profile.hpp"
 
+#define ENABLE_NARROWPHASE_DEBUG 1
+#define DEBUG(x) do { if (ENABLE_NARROWPHASE_DEBUG) { std::cout << "[DEBUG] " << x << std::endl; } } while(0)
+
 namespace RigidBodyCollision {
 
 /**
@@ -157,25 +160,25 @@ static ReferenceChoice chooseReference(const Vector &globalNormal,
                                        entt::entity eA,
                                        entt::entity eB)
 {
-    // We'll see which polygon has a face whose normal is more aligned with globalNormal.
-    // Whichever is *most aligned* becomes the "reference."
-    int faceA = findBestFace(Averts,  globalNormal);
-    int faceB = findBestFace(Bverts, -globalNormal); // B's face normal should match -normal if B is reference
+    DEBUG("chooseReference: Global normal = " << globalNormal.x << ", " << globalNormal.y);
+    
+    int faceA = findBestFace(Averts, globalNormal);
+    int faceB = findBestFace(Bverts, -globalNormal);
+    
+    DEBUG("Best face indices - A: " << faceA << ", B: " << faceB);
 
-    // Compare dot products to see which is better
-    // (We can just compare them directly.)
-    // Actually let's compute the actual dot to see which is bigger
-    // For polygon A's best face:
     Vector edgeA = Averts[(faceA+1)%Averts.size()] - Averts[faceA];
     Vector normA(-edgeA.y, edgeA.x);
     normA = normA.normalized();
     double dotA = normA.dotProduct(globalNormal);
 
-    // For polygon B's best face:
     Vector edgeB = Bverts[(faceB+1)%Bverts.size()] - Bverts[faceB];
     Vector normB(-edgeB.y, edgeB.x);
     normB = normB.normalized();
-    double dotB = normB.dotProduct(-globalNormal); // compare alignment to -normal
+    double dotB = normB.dotProduct(-globalNormal);
+
+    DEBUG("Face A normal: " << normA.x << ", " << normA.y << " (dot: " << dotA << ")");
+    DEBUG("Face B normal: " << normB.x << ", " << normB.y << " (dot: " << dotB << ")");
 
     // If dotA >= dotB, pick A as reference, else B as reference
     ReferenceChoice rc;
@@ -316,22 +319,37 @@ static std::vector<CollisionInfo> buildPolygonPolygonContacts(
     const ShapeData &B,
     const EPAResult &res)
 {
-    std::vector<CollisionInfo> contacts;
+    DEBUG("\n=== New Polygon-Polygon Contact ===");
+    DEBUG("EPA Normal: " << res.normal.x << ", " << res.normal.y);
+    DEBUG("EPA Penetration: " << res.penetration);
 
-    // 1) Get world verts
+    std::vector<CollisionInfo> contacts;
     auto Averts = getWorldVerts(A);
     auto Bverts = getWorldVerts(B);
 
-    // 2) Decide who is reference vs incident
-    Vector globalNormal = res.normal; // points from A to B
+    DEBUG("Shape A vertices:");
+    for (const auto& v : Averts) {
+        DEBUG("  (" << v.x << ", " << v.y << ")");
+    }
+    DEBUG("Shape B vertices:");
+    for (const auto& v : Bverts) {
+        DEBUG("  (" << v.x << ", " << v.y << ")");
+    }
+
+    Vector globalNormal = res.normal;
     ReferenceChoice rc = chooseReference(globalNormal, Averts, Bverts, eA, eB);
 
-    // 3) Clip incident polygon
-    auto clipped = clipIncidentPolygon(rc);
+    DEBUG("Reference choice:");
+    DEBUG("  Reference entity: " << (rc.refEnt == eA ? "A" : "B"));
+    DEBUG("  Reference normal: " << rc.refNormal.x << ", " << rc.refNormal.y);
+    DEBUG("  Flipped: " << (rc.flipped ? "yes" : "no"));
 
-    // 4) For each clipped point, check if it's near the reference face
-    //    and behind by the penetration amount. We'll typically produce
-    //    up to 2 contact points that are within some threshold.
+    auto clipped = clipIncidentPolygon(rc);
+    
+    DEBUG("Clipped points:");
+    for (const auto& pt : clipped) {
+        DEBUG("  (" << pt.x << ", " << pt.y << ")");
+    }
 
     // We'll unify how we store normal for the final contact:
     // If rc.flipped is true, we want to invert the normal. Because from the solver perspective,
@@ -356,8 +374,7 @@ static std::vector<CollisionInfo> buildPolygonPolygonContacts(
             ci.normal = finalNormal;
             ci.penetration = penDepth; 
             ci.contactPoint = pt;
-            // Entities: If flipped => B is reference => that means A is incident => so we reverse?
-            // Actually we said normal is from A->B, so:
+            ci.normal = globalNormal; 
             ci.a = eA;
             ci.b = eB;
             contacts.push_back(ci);
@@ -368,6 +385,14 @@ static std::vector<CollisionInfo> buildPolygonPolygonContacts(
     while (contacts.size() > 2) {
         contacts.pop_back();
     }
+
+    DEBUG("Final contacts generated: " << contacts.size());
+    for (const auto& contact : contacts) {
+        DEBUG("Contact point: (" << contact.contactPoint.x << ", " << contact.contactPoint.y << ")");
+        DEBUG("Contact normal: (" << contact.normal.x << ", " << contact.normal.y << ")");
+        DEBUG("Penetration: " << contact.penetration);
+    }
+    DEBUG("=== End Contact ===\n");
 
     return contacts;
 }

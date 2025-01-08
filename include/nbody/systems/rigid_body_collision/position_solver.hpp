@@ -40,11 +40,10 @@ public:
      * @note Only solid phase particles participate in position correction
      *       to allow fluid-like behavior for non-solid phases
      */
-    static void positionalSolver(entt::registry &registry,
-                               const CollisionManifold &manifold,
-                               int iterations,
-                               double baumgarte,
-                               double slop);
+    static void positionalSolver(
+        entt::registry &registry,
+        const CollisionManifold &manifold
+    );
 };
 
 } // namespace RigidBodyCollision

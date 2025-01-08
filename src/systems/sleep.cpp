@@ -1,5 +1,6 @@
 #include "nbody/systems/sleep.hpp"
 #include "nbody/components/basic.hpp"
+#include "nbody/core/profile.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -10,6 +11,8 @@ static const double ANGULAR_SLEEP_THRESHOLD = 0.5;
 static const int SLEEP_FRAMES = 60;
 
 void Systems::SleepSystem::update(entt::registry &registry) {
+    PROFILE_SCOPE("SleepSystem");
+
     auto view = registry.view<Components::Velocity, Components::AngularVelocity, Components::ParticlePhase, Components::Mass, Components::Sleep>();
     for (auto [entity, vel, angVel, phase, mass, sleep] : view.each()) {
         if (phase.phase != Components::Phase::Solid && phase.phase != Components::Phase::Liquid && phase.phase != Components::Phase::Gas) {

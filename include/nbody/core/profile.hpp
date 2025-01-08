@@ -125,15 +125,26 @@ public:
      * @brief Creates a new scoped timing session
      * @param name Unique identifier for the code section
      */
-    ScopedProfiler(const std::string& name);
+    explicit ScopedProfiler(const std::string& name);
+    
+    /**
+     * @brief Starts timing this scope
+     * Note: This is safe to call multiple times
+     */
+    void beginScope();
     
     /**
      * @brief Ends the timing session and updates statistics
      */
     ~ScopedProfiler();
 
+    // Prevent copying
+    ScopedProfiler(const ScopedProfiler&) = delete;
+    ScopedProfiler& operator=(const ScopedProfiler&) = delete;
+
 private:
-    std::string section_name;  ///< Name of the section being timed
+    std::string section_name;
+    bool in_scope;  // Track scope state
 };
 
 } // namespace Profiling
@@ -142,4 +153,6 @@ private:
  * @brief Convenience macro for creating a scoped profiler
  * @param name String literal or variable containing section name
  */
-#define PROFILE_SCOPE(name) Profiling::ScopedProfiler profiler##__LINE__(name)
+#define PROFILE_SCOPE(name) \
+    static thread_local Profiling::ScopedProfiler profiler(name); \
+    profiler.beginScope()

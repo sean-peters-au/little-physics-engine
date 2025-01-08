@@ -3,6 +3,7 @@
  * @brief Implementation of basic gravitational force system
  */
 
+#include "nbody/core/profile.hpp"
 #include "nbody/systems/gravity.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sim.hpp"
@@ -12,6 +13,8 @@
 namespace Systems {
 
 void BasicGravitySystem::update(entt::registry& registry) {
+    PROFILE_SCOPE("BasicGravitySystem");
+
     // Get current simulator state for time scaling
     const auto& state = registry.get<Components::SimulatorState>(
         registry.view<Components::SimulatorState>().front()

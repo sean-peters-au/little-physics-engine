@@ -6,6 +6,7 @@
 #include "nbody/systems/barnes_hut.hpp"
 #include "nbody/core/debug.hpp"
 #include "nbody/components/basic.hpp"
+#include "nbody/core/profile.hpp"
 
 namespace Systems {
 
@@ -13,7 +14,7 @@ using Clock = std::chrono::high_resolution_clock;
 using TimePoint = std::chrono::time_point<Clock>;
 
 void BarnesHutSystem::update(entt::registry& registry) {
-    TimePoint start_time = Clock::now();
+    PROFILE_SCOPE("BarnesHutSystem");
 
     auto sv = registry.view<Components::SimulatorState>();
     if (sv.empty()) {

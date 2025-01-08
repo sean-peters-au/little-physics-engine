@@ -214,6 +214,7 @@ private:
     void renderContactDebug(const entt::registry &registry);
     void renderVelocityDebug(const entt::registry &registry);
     void renderAngularDebug(const entt::registry &registry);
+    void renderPolygonDebug(const entt::registry &registry);
 
     /**
      * @brief Builds a map from pixel -> aggregated properties

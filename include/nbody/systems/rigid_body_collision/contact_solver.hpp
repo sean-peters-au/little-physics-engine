@@ -31,16 +31,11 @@ public:
      *
      * @param registry   ECS registry containing physics components
      * @param manager    Contact manager providing collision data and warm-start info
-     * @param baumgarte  Position correction factor (unused in velocity-only solver)
-     * @param slop       Penetration allowance (unused in velocity-only solver)
-     *
-     * @note This implementation focuses on velocity correction only, ignoring
-     *       position error correction (Baumgarte stabilization)
      */
-    static void solveContactConstraints(entt::registry &registry,
-                                        ContactManager &manager,
-                                        double baumgarte,
-                                        double slop);
+    static void solveContactConstraints(
+        entt::registry &registry,
+        ContactManager &manager
+    );
 };
 
 } // namespace RigidBodyCollision
