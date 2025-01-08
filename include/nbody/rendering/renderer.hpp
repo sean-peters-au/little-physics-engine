@@ -173,6 +173,7 @@ public:
     std::vector<UIButton> scenarioButtons;
     UIButton pausePlayButton;
     UIButton resetButton;
+    UIButton nextFrameButton;
     std::vector<UIButton> speedButtons;
 
     enum class ColorScheme {
@@ -194,6 +195,8 @@ public:
     static sf::Color sleepColorMapper(const PixelProperties& props);
     static sf::Color temperatureColorMapper(const PixelProperties& props);
 
+    void handleUIClick(int x, int y);
+
 private:
     /** The SFML render window */
     sf::RenderWindow window;
@@ -204,6 +207,13 @@ private:
     /** Dimensions of the window */
     int screenWidth;
     int screenHeight;
+
+    bool debugVisualization = false;
+    UIButton debugButton;
+    
+    void renderContactDebug(const entt::registry &registry);
+    void renderVelocityDebug(const entt::registry &registry);
+    void renderAngularDebug(const entt::registry &registry);
 
     /**
      * @brief Builds a map from pixel -> aggregated properties

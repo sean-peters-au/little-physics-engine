@@ -37,17 +37,12 @@ void RigidBodyCollisionSystem::update(entt::registry &registry,
     ContactManager manager;
     manager.updateContacts(manifold);
 
-    // 4) Multiple velocity solver passes on the same manifold
-    for (int pass = 0; pass < solverIterations; pass++) {
-        ContactSolver::solveContactConstraints(registry, manager, baumgarte, slop);
-    }
+    ContactSolver::solveContactConstraints(registry, manager, baumgarte, slop);
 
     // 5) (Optional) Position solver for any residual penetration
-    if (positionalSolverIterations > 0) {
-        PositionSolver::positionalSolver(registry, manifold, 
-                                         positionalSolverIterations,
-                                         baumgarte, slop);
-    }
+    PositionSolver::positionalSolver(registry, manifold, 
+                                        positionalSolverIterations,
+                                        baumgarte, slop);
 }
 
 } // namespace Systems

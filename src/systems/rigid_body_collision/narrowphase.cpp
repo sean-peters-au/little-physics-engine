@@ -6,6 +6,7 @@
 #include <cmath>
 #include <vector>
 #include <entt/entt.hpp>
+#include <iostream>
 
 #include "nbody/systems/rigid_body_collision/narrowphase.hpp"
 #include "nbody/systems/rigid_body_collision/collision_data.hpp"
@@ -83,34 +84,27 @@ static std::vector<Vector> getWorldVerts(const ShapeData &shape) {
 static void findAccurateContact(const ShapeData &A,
                               const ShapeData &B,
                               const Vector &normal,
-                              double /*penetration*/,
-                              Vector &contactA,
-                              Vector &contactB)
+                              double penetration,
+                              Vector &contactPoint)  // Single output point
 {
-    // Find deepest points using support mapping
-    auto getMaxDot = [&](const ShapeData &S, const Vector &dir) {
-        auto wv = getWorldVerts(S);
-        if (wv.empty()) {
-            return Vector(S.pos.x, S.pos.y);
-        }
-        double bestVal = -1e30;
-        Vector bestPt;
-        for (auto &p : wv) {
-            double d = p.dotProduct(dir);
-            if (d > bestVal) {
-                bestVal = d;
-                bestPt = p;
-            }
-        }
-        return bestPt;
-    };
+    // Get vertices in world space
+    auto vertsA = getWorldVerts(A);
+    auto vertsB = getWorldVerts(B);
 
-    // Get deepest points along collision normal
-    Vector supA = getMaxDot(A,  normal);
-    Vector supB = getMaxDot(B, -normal);
+    // Find the deepest point of B into A (this is where the collision is happening)
+    double deepestProj = 1e30;
+    Vector deepestPoint;
 
-    contactA = supA;
-    contactB = supB;
+    for (const auto &v : vertsB) {
+        double proj = v.dotProduct(normal);  // Project onto collision normal
+        if (proj < deepestProj) {
+            deepestProj = proj;
+            deepestPoint = v;
+        }
+    }
+
+    // The contact point is where B intersects with A
+    contactPoint = deepestPoint;
 }
 
 /**
@@ -120,22 +114,21 @@ static void findAccurateContact(const ShapeData &A,
  * computed contact points and collision normal.
  */
 static CollisionInfo buildSingleContact(entt::entity eA,
-                                      entt::entity eB,
-                                      const ShapeData &A,
-                                      const ShapeData &B,
-                                      const Vector &n,
-                                      double penetration)
+                                     entt::entity eB,
+                                     const ShapeData &A,
+                                     const ShapeData &B,
+                                     const Vector &n,
+                                     double penetration)
 {
-    Vector cA, cB;
-    findAccurateContact(A, B, n, penetration, cA, cB);
-    Vector mid = (cA + cB)*0.5;
-
+    Vector contactPoint;
+    findAccurateContact(A, B, n, penetration, contactPoint);
+    
     CollisionInfo info;
     info.a = eA;
     info.b = eB;
     info.normal = n;
     info.penetration = penetration;
-    info.contactPoint = mid;
+    info.contactPoint = contactPoint;
     return info;
 }
 

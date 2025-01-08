@@ -188,7 +188,7 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
     // Top wall
     makeWall(registry, universeSizeM*0.5, 0.0, universeSizeM*0.5, halfWall, kWallStaticFriction, kWallDynamicFriction);
     // Bottom wall
-    makeWall(registry, universeSizeM*0.5, universeSizeM, universeSizeM*0.5, halfWall, kFloorStaticFriction, kFloorDynamicFriction);
+    makeWall(registry, universeSizeM*0.5, universeSizeM*0.9, universeSizeM*0.5, halfWall, kFloorStaticFriction, kFloorDynamicFriction);
 
     // Now create circles/polygons as before
     int totalParticles = SimulatorConstants::ParticleCount;

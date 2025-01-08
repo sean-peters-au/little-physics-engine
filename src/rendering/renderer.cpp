@@ -1,8 +1,10 @@
+#define _USE_MATH_DEFINES
 #include "nbody/rendering/renderer.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sim.hpp"
 #include "nbody/math/polygon.hpp"
+#include "nbody/systems/rigid_body_collision/contact_manager.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -201,6 +203,13 @@ void Renderer::renderParticles(const entt::registry &registry) {
         }
     }
 
+    // Add debug visualization if enabled
+    if (debugVisualization) {
+        renderContactDebug(registry);
+        renderVelocityDebug(registry);
+        renderAngularDebug(registry);
+    }
+
     // Draw a divider line on the right edge of the simulation region
     sf::Vertex line[2] = {
         sf::Vertex(sf::Vector2f((float)SimulatorConstants::ScreenLength, 0.f), sf::Color::White),
@@ -264,6 +273,31 @@ void Renderer::renderUI(const entt::registry &registry,
         renderText(pauseLabel, panelX + 5, panelY + 5);
     }
     panelY += 40;
+
+    // Add Next Frame button (only enabled when paused)
+    nextFrameButton.rect = sf::IntRect(panelX, panelY, 100, 30);
+    nextFrameButton.label = "Next Frame";
+    nextFrameButton.isSpecialButton = true;
+    nextFrameButton.scenario = currentScenario;
+
+    {
+        sf::RectangleShape shape(sf::Vector2f((float)nextFrameButton.rect.width,
+                                             (float)nextFrameButton.rect.height));
+        shape.setPosition((float)nextFrameButton.rect.left, (float)nextFrameButton.rect.top);
+        
+        // Gray out the button if not paused
+        if (!paused) {
+            shape.setFillColor(sf::Color(50, 50, 50));  // Darker gray when disabled
+        } else {
+            shape.setFillColor(sf::Color(100, 100, 100));
+        }
+        shape.setOutlineColor(sf::Color::White);
+        shape.setOutlineThickness(1.f);
+        window.draw(shape);
+
+        renderText("Next Frame", panelX + 5, panelY + 5, paused ? sf::Color::White : sf::Color(150, 150, 150));
+    }
+    panelY += 50;
 
     // Reset button
     resetButton.rect = sf::IntRect(panelX, panelY, 80, 30);
@@ -371,6 +405,24 @@ void Renderer::renderUI(const entt::registry &registry,
     }
 
     panelY += 20;
+    renderText("Debug View:", panelX, panelY, sf::Color::White);
+    panelY += 25;
+    
+    debugButton.rect = sf::IntRect(panelX, panelY, 100, 25);
+    debugButton.label = debugVisualization ? "Debug: ON" : "Debug: OFF";
+    debugButton.isSpecialButton = true;
+    
+    sf::RectangleShape shape(sf::Vector2f(debugButton.rect.width, debugButton.rect.height));
+    shape.setPosition(debugButton.rect.left, debugButton.rect.top);
+    shape.setFillColor(debugVisualization ? sf::Color(0, 200, 0) : sf::Color(100, 100, 100));
+    shape.setOutlineColor(sf::Color::White);
+    shape.setOutlineThickness(1.f);
+    window.draw(shape);
+    
+    renderText(debugButton.label, panelX + 5, panelY + 3);
+    panelY += 35;
+
+    panelY += 20;
     renderText("Scenarios:", panelX, panelY, sf::Color::White);
     panelY += 30;
 
@@ -410,8 +462,8 @@ void Renderer::renderUI(const entt::registry &registry,
     }
 }
 
-sf::Color Renderer::defaultColorMapper(const PixelProperties& props) {
-    return sf::Color::White; // fallback if no color component
+sf::Color Renderer::defaultColorMapper(const PixelProperties& /* props */) {
+    return sf::Color::White;
 }
 
 sf::Color Renderer::sleepColorMapper(const PixelProperties& props) {
@@ -433,4 +485,127 @@ sf::Color Renderer::temperatureColorMapper(const PixelProperties& props) {
     uint8_t r = static_cast<uint8_t>(255 * t);
     uint8_t b = static_cast<uint8_t>(255 * (1.0 - t));
     return sf::Color(r, 0, b);
+}
+
+void Renderer::renderContactDebug(const entt::registry &registry) {
+    // Get contacts from the contact manager
+    auto view = registry.view<RigidBodyCollision::ContactRef>();
+    
+    const float LINE_THICKNESS = 3.0f;  // Made even thicker for better visibility
+    const float CONTACT_POINT_SIZE = 4.0f;
+    const float NORMAL_LENGTH = 30.0f;  // Length of normal visualization in pixels
+    
+    for (auto entity : view) {
+        const auto& contact = view.get<RigidBodyCollision::ContactRef>(entity);
+        
+        // Convert physics coordinates (meters) to screen coordinates (pixels)
+        float px = (float)SimulatorConstants::metersToPixels(contact.contactPoint.x);
+        float py = (float)SimulatorConstants::metersToPixels(contact.contactPoint.y);
+        
+        // Draw contact point
+        sf::CircleShape contactPoint(CONTACT_POINT_SIZE);
+        contactPoint.setFillColor(sf::Color::Yellow);
+        contactPoint.setPosition(px - CONTACT_POINT_SIZE, py - CONTACT_POINT_SIZE);
+        window.draw(contactPoint);
+
+        // Draw normal (red line)
+        sf::RectangleShape normal(sf::Vector2f(NORMAL_LENGTH, LINE_THICKNESS));
+        normal.setFillColor(sf::Color::Red);
+        normal.setPosition(px, py);
+        float angle = std::atan2(contact.normal.y, contact.normal.x) * 180.0f / (float)M_PI;
+        normal.setRotation(angle);
+        window.draw(normal);
+
+        // Draw accumulated normal impulse (green line)
+        if (std::abs(contact.normalImpulseAccum) > 0.001f) {
+            float impulseLength = std::abs(contact.normalImpulseAccum) * 5.0f;
+            sf::RectangleShape normalImpulse(sf::Vector2f(impulseLength, LINE_THICKNESS));
+            normalImpulse.setFillColor(sf::Color::Green);
+            normalImpulse.setPosition(px, py);
+            normalImpulse.setRotation(angle);
+            window.draw(normalImpulse);
+        }
+
+        // Draw accumulated tangent impulse (blue line)
+        if (std::abs(contact.tangentImpulseAccum) > 0.001f) {
+            float impulseLength = std::abs(contact.tangentImpulseAccum) * 5.0f;
+            sf::RectangleShape tangentImpulse(sf::Vector2f(impulseLength, LINE_THICKNESS));
+            tangentImpulse.setFillColor(sf::Color::Blue);
+            tangentImpulse.setPosition(px, py);
+            tangentImpulse.setRotation(angle + 90.0f);  // Perpendicular to normal
+            window.draw(tangentImpulse);
+        }
+    }
+}
+
+void Renderer::renderVelocityDebug(const entt::registry &registry) {
+    const float LINE_THICKNESS = 2.0f;  // Increased line thickness
+    
+    auto view = registry.view<Components::Position, Components::Velocity>();
+    for (auto entity : view) {
+        const auto& pos = view.get<Components::Position>(entity);
+        const auto& vel = view.get<Components::Velocity>(entity);
+
+        float px = (float)SimulatorConstants::metersToPixels(pos.x);
+        float py = (float)SimulatorConstants::metersToPixels(pos.y);
+        
+        // Scale velocity for visualization
+        float velLength = std::sqrt(vel.x * vel.x + vel.y * vel.y) * 20.0f;  // Scale factor of 20
+        if (velLength > 0.1f) {  // Only draw if velocity is significant
+            sf::RectangleShape velLine(sf::Vector2f(velLength, LINE_THICKNESS));
+            velLine.setFillColor(sf::Color::Cyan);
+            velLine.setPosition(px, py);
+            float angle = std::atan2(vel.y, vel.x) * 180.0f / (float)M_PI;
+            velLine.setRotation(angle);
+            window.draw(velLine);
+        }
+    }
+}
+
+void Renderer::renderAngularDebug(const entt::registry &registry) {
+    const float LINE_THICKNESS = 2.0f;  // Increased line thickness
+    
+    auto view = registry.view<Components::Position, Components::AngularVelocity>();
+    for (auto entity : view) {
+        const auto& pos = view.get<Components::Position>(entity);
+        const auto& angVel = view.get<Components::AngularVelocity>(entity);
+
+        if (std::abs(angVel.omega) > 0.1f) {  // Only draw if angular velocity is significant
+            float px = (float)SimulatorConstants::metersToPixels(pos.x);
+            float py = (float)SimulatorConstants::metersToPixels(pos.y);
+            
+            float radius = 20.0f;  // Fixed radius for the arc
+            int segments = 16;  // Number of segments in the arc
+            float arcLength = std::min(static_cast<float>(std::abs(angVel.omega) * 0.5), static_cast<float>(M_PI));
+            
+            std::vector<sf::Vertex> arc;
+            for (int i = 0; i <= segments; ++i) {
+                float angle = (float)i / segments * arcLength;
+                if (angVel.omega < 0) angle = -angle;
+                
+                float x = px + radius * std::cos(angle);
+                float y = py + radius * std::sin(angle);
+                arc.push_back(sf::Vertex(sf::Vector2f(x, y), sf::Color::White));
+            }
+            
+            // Draw thicker lines by drawing multiple offset lines
+            for (float offset = -LINE_THICKNESS/2; offset <= LINE_THICKNESS/2; offset += 1.0f) {
+                std::vector<sf::Vertex> thickArc = arc;
+                for (auto& vertex : thickArc) {
+                    vertex.position.y += offset;
+                }
+                window.draw(&thickArc[0], thickArc.size(), sf::LineStrip);
+            }
+        }
+    }
+}
+
+void Renderer::handleUIClick(int x, int y) {
+    // ... existing UI handling code ...
+
+    // Check if debug button was clicked
+    if (debugButton.rect.contains(x, y)) {
+        debugVisualization = !debugVisualization;
+        return;
+    }
 }

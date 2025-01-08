@@ -232,9 +232,19 @@ std::vector<CandidatePair> broadPhase(entt::registry &registry)
         root->query(minx, miny, maxx, maxy, found);
 
         for (auto &f : found) {
+            // Only process if:
+            // 1. Not the same entity
+            // 2. Higher entity ID (to avoid duplicates)
+            // 3. Not both boundaries
             if (f.entity != e && f.entity > e) {
-                if (boxesOverlap(queryBB, f)) {
-                    pairs.push_back({ e, f.entity });
+                bool aBoundary = registry.any_of<Components::Boundary>(e);
+                bool bBoundary = registry.any_of<Components::Boundary>(f.entity);
+                
+                // Skip if both are boundaries
+                if (!(aBoundary && bBoundary)) {
+                    if (boxesOverlap(queryBB, f)) {
+                        pairs.push_back({ e, f.entity });
+                    }
                 }
             }
         }

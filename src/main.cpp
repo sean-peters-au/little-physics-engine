@@ -83,6 +83,7 @@ int main(int, char**) {
 
     bool running = true;
     bool paused = false;
+    bool stepFrame = false;
 
     // For UI highlights
     bool highlightPausePlay = false;
@@ -191,10 +192,25 @@ int main(int, char**) {
                         break;
                     }
                 }
+
+                // Add debug button handler
+                renderer.handleUIClick(mouseX, mouseY);  // This will handle the debug button toggle
+
+                // Next Frame button
+                if (paused && mouseX >= renderer.nextFrameButton.rect.left &&
+                    mouseX <= renderer.nextFrameButton.rect.left + renderer.nextFrameButton.rect.width &&
+                    mouseY >= renderer.nextFrameButton.rect.top &&
+                    mouseY <= renderer.nextFrameButton.rect.top + renderer.nextFrameButton.rect.height)
+                {
+                    stepFrame = true;
+                }
             }
             else if (event.type == sf::Event::KeyPressed) {
                 // Keyboard shortcuts
-                if (event.key.code == sf::Keyboard::P) {
+                if (event.key.code == sf::Keyboard::Space) {  // Space for next frame
+                    if (paused) stepFrame = true;
+                }
+                else if (event.key.code == sf::Keyboard::P) {  // P for pause
                     paused = !paused;
                 }
                 else if (event.key.code == sf::Keyboard::R) {
@@ -219,9 +235,10 @@ int main(int, char**) {
             }
         }
 
-        // Step the simulation if not paused
-        if (!paused) {
+        // Step the simulation if not paused or stepping one frame
+        if (!paused || stepFrame) {
             simulator.tick();
+            stepFrame = false;  // Reset the step flag
         }
 
         // Start rendering
