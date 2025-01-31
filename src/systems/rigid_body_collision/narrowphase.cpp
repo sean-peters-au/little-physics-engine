@@ -374,7 +374,6 @@ static std::vector<CollisionInfo> buildPolygonPolygonContacts(
             ci.normal = finalNormal;
             ci.penetration = penDepth; 
             ci.contactPoint = pt;
-            ci.normal = globalNormal; 
             ci.a = eA;
             ci.b = eB;
             contacts.push_back(ci);
@@ -382,9 +381,9 @@ static std::vector<CollisionInfo> buildPolygonPolygonContacts(
     }
 
     // We'll clamp to at most 2 contact points (common practice)
-    while (contacts.size() > 2) {
-        contacts.pop_back();
-    }
+    // while (contacts.size() > 2) {
+    //     contacts.pop_back();
+    // }
 
     DEBUG("Final contacts generated: " << contacts.size());
     for (const auto& contact : contacts) {

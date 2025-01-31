@@ -17,9 +17,9 @@
 #include <ctime>
 #include <iostream>
 
-static constexpr double kCirclesFraction     = 0.15;
-static constexpr double kRegularFraction     = 0.5;
-static constexpr double kRandomPolyFraction  = 0.35;
+static constexpr double kCirclesFraction     = 0.0;
+static constexpr double kRegularFraction     = 1.0;
+static constexpr double kRandomPolyFraction  = 1.0 - kCirclesFraction - kRegularFraction;
 
 static constexpr double kSmallShapeRatio = 0.90;
 static constexpr double kSmallShapeMin = 0.1;  // Smaller minimum
@@ -27,7 +27,7 @@ static constexpr double kSmallShapeMax = 0.25;  // Smaller shapes range
 static constexpr double kLargeShapeMin = 0.3;   // Larger shapes range
 static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
-static constexpr int    kParticleCount = 4;
+static constexpr int    kParticleCount = 2;
 
 static constexpr double kFloorStaticFriction = 0.6;
 static constexpr double kFloorDynamicFriction = 0.4;
@@ -197,7 +197,9 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
     int regularCount   = (int)std::round(kRegularFraction * totalParticles);
     int randomCount    = totalParticles - circlesCount - regularCount;
 
-    int side = (int)std::sqrt((double)totalParticles);
+    std::cerr << "Circles: " << circlesCount << ", Regular: " << regularCount << ", Random: " << randomCount << "\n";
+
+    int side = (int)std::ceil(std::sqrt((double)totalParticles));
     double spacing = universeSizeM / (side + 1);
 
     std::normal_distribution<> velocityDist(0.0, 1.0);
@@ -211,6 +213,7 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
     int created = 0;
     int cCount = 0, rCount = 0, randCount = 0;
 
+    std::cerr << "Creating " << totalParticles << " particles\n";
     for (int i = 0; i < side && created < totalParticles; ++i) {
         for (int j = 0; j < side && created < totalParticles; ++j) {
             double x_m = (i + 1) * spacing;
@@ -281,4 +284,6 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
             created++;
         }
     }
+
+    std::cerr << "Created " << created << " particles\n";
 }
