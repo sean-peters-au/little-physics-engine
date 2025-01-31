@@ -521,14 +521,14 @@ void Renderer::renderContactDebug(const entt::registry &registry) {
 
         // Darken the colors for the normal lines (multiply by 0.7)
         sf::Color darkColorA(
-            static_cast<uint8_t>(colorA.r * 0.7f),
-            static_cast<uint8_t>(colorA.g * 0.7f),
-            static_cast<uint8_t>(colorA.b * 0.7f)
+            static_cast<uint8_t>(colorA.r * 0.9f),
+            static_cast<uint8_t>(colorA.g * 0.9f),
+            static_cast<uint8_t>(colorA.b * 0.9f)
         );
         sf::Color darkColorB(
-            static_cast<uint8_t>(colorB.r * 0.7f),
-            static_cast<uint8_t>(colorB.g * 0.7f),
-            static_cast<uint8_t>(colorB.b * 0.7f)
+            static_cast<uint8_t>(colorB.r * 0.9f),
+            static_cast<uint8_t>(colorB.g * 0.9f),
+            static_cast<uint8_t>(colorB.b * 0.9f)
         );
 
         // Draw normal (using shape A's color)

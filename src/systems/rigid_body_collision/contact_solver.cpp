@@ -14,13 +14,21 @@
 #include "nbody/systems/rigid_body_collision/contact_manager.hpp"
 
 #define ENABLE_CONTACT_SOLVER_DEBUG 0
-#define DEBUG(x) do { if (ENABLE_CONTACT_SOLVER_DEBUG) { std::cout << x; } } while(0)
+
+// Add a global debug filter flag
+static bool g_debugFilter = true;
+
+#define DEBUG(x) do { \
+    if (ENABLE_CONTACT_SOLVER_DEBUG && g_debugFilter) { \
+        std::cout << "[DEBUG CONTACT SOLVER] " << x << std::endl; \
+    } \
+} while(0)
 
 namespace RigidBodyCollision {
 
 // --------------------- Tuning -------------------------
 static const double Gravity               = 9.81;
-static const double GlobalFrictionCoeff   = 0.5;
+static const double GlobalFrictionCoeff   = 0.1;
 static const double RollingFrictionCoeff  = 0.00001;
 static const double RollingCutoff         = 0.00001;
 static const double AngularDamping        = 0.995;
@@ -94,12 +102,6 @@ static void applyRollingFriction(entt::registry &registry,
     double oldW = w;
     angVel.omega += sign * alpha;
     angVel.omega *= AngularDamping;
-
-    DEBUG(std::string("[rollingFriction] e=") + std::to_string((int)e) + "\n");
-    DEBUG(std::string(" oldW=") + std::to_string(oldW) + "\n");
-    DEBUG(std::string(" alpha=") + std::to_string(alpha) + "\n");
-    DEBUG(std::string(" newW=") + std::to_string(angVel.omega) + "\n");
-    DEBUG("\n");
 
     registry.replace<Components::AngularVelocity>(e, angVel);
 }
@@ -233,13 +235,9 @@ static void solveNormalConstraint(entt::registry &registry,
     applyAngularImpulse(registry, c.a, rA, Pn, -1.0, 1.0, AngularDamping);
     applyAngularImpulse(registry, c.b, rB, Pn, +1.0, 1.0, AngularDamping);
 
-    DEBUG(std::string("[solveNormal] eA=") + std::to_string((int)c.a) + "\n");
-    DEBUG(std::string(" eB=") + std::to_string((int)c.b) + "\n");
-    DEBUG(std::string(" oldN=") + std::to_string(oldImpulse) + "\n");
-    DEBUG(std::string(" newN=") + std::to_string(newImpulse) + "\n");
-    DEBUG(std::string(" dJn=") + std::to_string(dJn) + "\n");
-    DEBUG(std::string(" vn=") + std::to_string(vn) + "\n");
-    DEBUG("\n");
+    if (std::fabs(dJn) > 1e-12) {
+        DEBUG("Normal impulse change: " << dJn);
+    }
 }
 
 static void solveFrictionConstraint(entt::registry &registry,
@@ -321,13 +319,10 @@ static void solveFrictionConstraint(entt::registry &registry,
     applyAngularImpulse(registry, c.a, rA, Pf, -1.0, 1.0, AngularDamping);
     applyAngularImpulse(registry, c.b, rB, Pf, +1.0, 1.0, AngularDamping);
 
-    DEBUG(std::string("[solveFriction] eA=") + std::to_string((int)c.a) + "\n");
-    DEBUG(std::string(" eB=") + std::to_string((int)c.b) + "\n");
-    DEBUG(std::string(" oldTangent=") + std::to_string(oldTangent) + "\n");
-    DEBUG(std::string(" newTangent=") + std::to_string(newTangent) + "\n");
-    DEBUG(std::string(" vtLen=") + std::to_string(vtLen) + "\n");
-    DEBUG(std::string(" frictionLimit=") + std::to_string(limit) + "\n");
-    DEBUG("\n");
+    if (std::fabs(dJt) > 1e-12) {
+        DEBUG("Friction impulse: " << dJt);
+    }
+    DEBUG("Friction limit: " << limit);
 }
 
 static void checkSleep(entt::registry &registry, ContactRef &c)
@@ -351,6 +346,11 @@ static void checkSleep(entt::registry &registry, ContactRef &c)
     trySleep(c.b);
 }
 
+// Helper function to check if entity is a boundary
+static bool isBoundary(const entt::registry &registry, entt::entity e) {
+    return registry.valid(e) && registry.any_of<Components::Boundary>(e);
+}
+
 //---------------------------------------------------------------
 // The main public function
 //---------------------------------------------------------------
@@ -359,6 +359,8 @@ void ContactSolver::solveContactConstraints(
     ContactManager &manager
 )
 {
+    PROFILE_SCOPE("ContactSolver");
+
     // Destroy old contact-visual entities
     auto oldContacts = registry.view<RigidBodyCollision::ContactRef>();
     registry.destroy(oldContacts.begin(), oldContacts.end());
@@ -375,35 +377,73 @@ void ContactSolver::solveContactConstraints(
     }
 
     // Warm Start
+    DEBUG("=== Beginning Contact Solve ===");
     for (auto &m : manifolds) {
         for (auto &c : m.contacts) {
+            // Set debug filter based on boundary status
+            g_debugFilter = !isBoundary(registry, c.a) && !isBoundary(registry, c.b);
+            
+            DEBUG("Contact: Entity " << (int)c.a << " vs " << (int)c.b);
+            DEBUG("Point: (" << c.contactPoint.x << ", " << c.contactPoint.y << ")");
+            DEBUG("Normal: (" << c.normal.x << ", " << c.normal.y << ")");
+            DEBUG("Accumulated impulses - Normal: " << c.normalImpulseAccum 
+                  << ", Tangent: " << c.tangentImpulseAccum);
             warmStartContact(registry, c, GlobalFrictionCoeff);
         }
     }
 
-    // multiple velocity solver iterations :)
+    // multiple velocity solver iterations
     const int velocityIterations = 10;
     for (int iter=0; iter<velocityIterations; iter++) {
-        DEBUG(std::string("=== Velocity Solver Iter ") + std::to_string(iter) + " ===\n");
+        DEBUG("\n=== Velocity Solver Iteration " << iter << " ===");
         for (auto &m : manifolds) {
             for (auto &c : m.contacts) {
-                if (!registry.valid(c.a) || !registry.valid(c.b)) {
-                    continue;
+                if (!registry.valid(c.a) || !registry.valid(c.b)) continue;
+
+                // Set debug filter based on boundary status
+                g_debugFilter = !isBoundary(registry, c.a) && !isBoundary(registry, c.b);
+
+                // Normal constraint
+                {
+                    auto velA = registry.get<Components::Velocity>(c.a);
+                    auto velB = registry.get<Components::Velocity>(c.b);
+                    DEBUG("Pre-solve velocities:");
+                    DEBUG("A: (" << velA.x << ", " << velA.y << ")");
+                    DEBUG("B: (" << velB.x << ", " << velB.y << ")");
+                    
+                    solveNormalConstraint(registry, c, GlobalFrictionCoeff);
+                    
+                    // Get post-solve velocities
+                    velA = registry.get<Components::Velocity>(c.a);
+                    velB = registry.get<Components::Velocity>(c.b);
+                    DEBUG("Post normal-solve velocities:");
+                    DEBUG("A: (" << velA.x << ", " << velA.y << ")");
+                    DEBUG("B: (" << velB.x << ", " << velB.y << ")");
+                    DEBUG("Normal impulse: " << c.normalImpulseAccum);
                 }
-                solveNormalConstraint(registry, c, GlobalFrictionCoeff);
-                solveFrictionConstraint(registry, c, GlobalFrictionCoeff);
+
+                // Friction constraint
+                {
+                    solveFrictionConstraint(registry, c, GlobalFrictionCoeff);
+                    DEBUG("Friction impulse: " << c.tangentImpulseAccum);
+                    DEBUG("Friction limit: " << (GlobalFrictionCoeff * std::fabs(c.normalImpulseAccum)));
+                }
             }
         }
     }
 
     // Rolling friction pass
+    DEBUG("\n=== Rolling Friction Pass ===");
     for (auto &m : manifolds) {
         for (auto &c : m.contacts) {
+            // Set debug filter based on boundary status
+            g_debugFilter = !isBoundary(registry, c.a) && !isBoundary(registry, c.b);
+            
             if (registry.valid(c.a) && !isInfiniteMass(registry, c.a)) {
-                applyRollingFriction(registry, c.a);
+                // applyRollingFriction(registry, c.a);
             }
             if (registry.valid(c.b) && !isInfiniteMass(registry, c.b)) {
-                applyRollingFriction(registry, c.b);
+                // applyRollingFriction(registry, c.b);
             }
         }
     }
@@ -418,7 +458,9 @@ void ContactSolver::solveContactConstraints(
     // store final impulses for next frame
     manager.applySolverResults(manifolds);
 
-    DEBUG("Done. Impulses stored.\n");
+    // Reset debug filter for final message
+    g_debugFilter = true;
+    DEBUG("=== Contact Solve Complete ===\n");
 }
 
 } // namespace RigidBodyCollision

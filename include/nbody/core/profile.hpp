@@ -3,20 +3,20 @@
  * @brief High-precision performance profiling system for timing code sections
  *
  * This profiling system provides tools for measuring execution time of code sections
- * with nanosecond precision. It supports:
- * - Named section timing with automatic scope-based measurement
- * - Aggregated statistics (total time, call count, min/max times)
- * - Percentage of total execution time per section
- * - Thread-safe singleton design
+ * in a hierarchical manner (parent-child scopes). It:
+ * - Uses RAII to automatically track scope durations
+ * - Aggregates statistics like total time, call count, min/max times
+ * - Computes and prints percentages of total execution time per section
+ * - Displays a tree-structured summary
  *
  * Example usage:
- * Do not use PROFILE_SCOPE in a global scope, use it in a function or add { } (e.g. for a switch statement)
  * @code
- * {
+ * void myFunc() {
  *     PROFILE_SCOPE("MyFunction");  // Automatically times this scope
- *     // ... code to profile ...
- * }
- * Profiling::Profiler::printStats();  // Print timing results
+ *     // ... code ...
+ * }  // endSection called automatically here
+ *
+ * Profiling::Profiler::printStats();  // Print timing results somewhere in your code
  * @endcode
  */
 
@@ -25,134 +25,124 @@
 #include <string>
 #include <chrono>
 #include <unordered_map>
+#include <vector>
 #include <stack>
 
 namespace Profiling {
 
 /**
- * @brief Core profiler class that manages timing measurements
- * 
- * Implements a singleton pattern to track timing data across the application.
- * All timing data is stored until explicitly reset.
+ * @brief Manages timing data across the application.
+ *
+ * This follows a singleton pattern. Use the static methods to start/end
+ * sections and to print/reset the statistics.
  */
 class Profiler {
 public:
-    /// High-precision clock type for timing measurements
-    using Clock = std::chrono::high_resolution_clock;
-    /// Time point type for storing start/end times
+    using Clock     = std::chrono::high_resolution_clock;
     using TimePoint = std::chrono::time_point<Clock>;
-    /// Duration type for storing elapsed time
-    using Duration = std::chrono::nanoseconds;
+    using Duration  = std::chrono::nanoseconds;
 
     /**
-     * @brief Contains aggregated timing statistics for a profiled section
+     * @brief Stores aggregated timing statistics for a named scope
      */
     struct ProfileData {
-        Duration total_time{0};           
-        Duration self_time{0};            ///< Time spent in this section excluding children
-        uint64_t call_count{0};          
+        Duration total_time{0};        ///< Accumulated total time for this scope
+        Duration self_time{0};         ///< Time excluding children’s time
+        uint64_t call_count{0};        ///< Number of times this scope was entered
         Duration min_time{Duration::max()};
-        Duration max_time{Duration::min()};
-        std::string parent_name;          ///< Name of parent scope
-        std::vector<std::string> children; ///< Names of child scopes
+        Duration max_time{0};
+
+        std::string parent_name;       ///< Parent scope in the tree
+        std::vector<std::string> children; ///< Child scope names
     };
 
     /**
-     * @brief Starts timing a named section
-     * @param name Unique identifier for the code section
+     * @brief Start timing a named scope, pushing it on the internal scope stack.
+     * @param name The scope’s name (must be ended with endSection).
      */
     static void startSection(const std::string& name);
 
     /**
-     * @brief Ends timing a named section and updates statistics
-     * @param name Unique identifier for the code section (must match startSection)
+     * @brief End timing a named scope, popping it from the scope stack.
+     * @param name The scope’s name (must match the most recent startSection).
      */
     static void endSection(const std::string& name);
 
     /**
-     * @brief Prints formatted timing statistics to stdout
-     * 
-     * Output includes:
-     * - Total execution time per section
-     * - Percentage of total program time
-     * - Number of calls
-     * - Average/min/max execution times
+     * @brief Print a hierarchical summary of all timing data to stdout.
+     *
+     * Shows the total time, self time, call counts, and percentage of total
+     * program time for each scope. Child scopes are listed under parents
+     * with ASCII tree lines (like ├── and └──).
      */
     static void printStats();
 
     /**
-     * @brief Prints a single node in the profiler tree
-     * @param name Name of the node to print
-     * @param prefix Prefix for indentation (used for tree structure)
-     * @param is_last Whether this node is the last child of its parent
-     * @param total_program_time Total time for the entire program
-     */
-    static void printNode(const std::string& name, const std::string& prefix, bool is_last, Duration total_program_time);
-
-    /**
-     * @brief Clears all accumulated timing data
+     * @brief Reset all recorded profiling data (clears the Profiler’s map).
      */
     static void reset();
 
 private:
     /**
-     * @brief Internal data structure for tracking active timing sessions
+     * @brief Internal structure to hold timing state for each named section.
      */
     struct SectionData {
-        TimePoint start_time;      ///< Start time of current execution
-        ProfileData profile_data;  ///< Aggregated statistics
+        TimePoint start_time;   ///< The last time we started this scope
+        ProfileData profile_data;
     };
-    
+
+    // Map from scope name -> the data we collect about that scope.
     std::unordered_map<std::string, SectionData> sections;
-    std::stack<std::string> scope_stack;  ///< Track current scope hierarchy
+
+    // Stack of active scope names (the “call stack” for profiling).
+    std::stack<std::string> scope_stack;
+
+    // Private constructor for singleton
+    Profiler() = default;
 
     /**
-     * @brief Gets the singleton instance of the profiler
-     * @return Reference to the global profiler instance
+     * @brief Return the singleton instance of this profiler.
      */
     static Profiler& getInstance();
+
+    /**
+     * @brief Recursive helper for printStats() that prints one scope node.
+     */
+    static void printNode(const std::string& name,
+                          const std::string& prefix,
+                          bool is_last,
+                          Duration total_program_time);
 };
 
 /**
- * @brief RAII wrapper for automatic section timing
- * 
- * Automatically starts timing on construction and ends on destruction,
- * ensuring timing data is collected even if exceptions occur.
+ * @brief RAII guard that automatically starts timing in the constructor
+ *        and ends timing in the destructor.
  */
 class ScopedProfiler {
 public:
     /**
-     * @brief Creates a new scoped timing session
-     * @param name Unique identifier for the code section
+     * @brief Constructor: immediately starts timing the given scope.
      */
     explicit ScopedProfiler(const std::string& name);
-    
+
     /**
-     * @brief Starts timing this scope
-     * Note: This is safe to call multiple times
-     */
-    void beginScope();
-    
-    /**
-     * @brief Ends the timing session and updates statistics
+     * @brief Destructor: ends the scope’s timing.
      */
     ~ScopedProfiler();
 
-    // Prevent copying
+    // No copy allowed
     ScopedProfiler(const ScopedProfiler&) = delete;
     ScopedProfiler& operator=(const ScopedProfiler&) = delete;
 
 private:
     std::string section_name;
-    bool in_scope;  // Track scope state
 };
 
 } // namespace Profiling
 
 /**
- * @brief Convenience macro for creating a scoped profiler
- * @param name String literal or variable containing section name
+ * @brief Convenience macro for scoping. Creates a local ScopedProfiler
+ *        whose destructor will end the scope automatically.
  */
 #define PROFILE_SCOPE(name) \
-    static thread_local Profiling::ScopedProfiler profiler(name); \
-    profiler.beginScope()
+    ::Profiling::ScopedProfiler _scopedProfiler##__LINE__ { name }

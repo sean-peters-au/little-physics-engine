@@ -95,7 +95,8 @@ public:
  */
 static std::pair<entt::entity, entt::entity> sortEntityPair(entt::entity a, entt::entity b)
 {
-    return (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
+    return std::make_pair(a, b);
+    // return (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
 }
 
 //------------------------------------------------------------------------------
@@ -129,7 +130,7 @@ void ContactManager::updateContacts(const CollisionManifold &manifold)
         // Sort the pair
         ContactKey key;
         key.sortedPair = sortEntityPair(col.a, col.b);
-        key.normal = col.normal; // store exactly as given
+        key.normal = col.normal;
 
         activeKeys[key] = true;
     }

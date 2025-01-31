@@ -27,7 +27,7 @@ static constexpr double kSmallShapeMax = 0.25;  // Smaller shapes range
 static constexpr double kLargeShapeMin = 0.3;   // Larger shapes range
 static constexpr double kLargeShapeMax = 0.5;  // Larger maximum
 
-static constexpr int    kParticleCount = 2;
+static constexpr int    kParticleCount = 100;
 
 static constexpr double kFloorStaticFriction = 0.6;
 static constexpr double kFloorDynamicFriction = 0.4;
@@ -106,7 +106,7 @@ ScenarioConfig RandomPolygonsScenario::getConfig() const
     cfg.ParticleMassMean = 1.0;
     cfg.ParticleMassStdDev = 0.1;
     cfg.GravitationalSoftener = 0;
-    cfg.CollisionCoeffRestitution = 0.0;
+    cfg.CollisionCoeffRestitution = 0.2;
     cfg.DragCoeff = 0.0;
     cfg.ParticleDensity = 0.5;
     cfg.InitialVelocityFactor = 1.0;
@@ -189,7 +189,7 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
     // Top wall
     makeWall(registry, universeSizeM*0.5, 0.0, universeSizeM*0.5, halfWall, kWallStaticFriction, kWallDynamicFriction);
     // Bottom wall
-    makeWall(registry, universeSizeM*0.5, universeSizeM*0.9, universeSizeM*0.5, halfWall, kFloorStaticFriction, kFloorDynamicFriction);
+    makeWall(registry, universeSizeM*0.5, universeSizeM, universeSizeM*0.5, halfWall, kFloorStaticFriction, kFloorDynamicFriction);
 
     // Now create circles/polygons as before
     int totalParticles = SimulatorConstants::ParticleCount;

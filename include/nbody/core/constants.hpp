@@ -21,6 +21,7 @@ namespace SimulatorConstants {
     // Truly global constants
     extern const double Pi;
     extern const double RealG;  // Real gravitational constant 6.674e-11
+    extern const double Epsilon;
 
     // Scenario-specific
     extern double UniverseSizeMeters;

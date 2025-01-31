@@ -21,8 +21,16 @@
 #include "nbody/math/polygon.hpp"
 #include "nbody/core/profile.hpp"
 
-#define ENABLE_NARROWPHASE_DEBUG 1
-#define DEBUG(x) do { if (ENABLE_NARROWPHASE_DEBUG) { std::cout << "[DEBUG] " << x << std::endl; } } while(0)
+#define ENABLE_NARROWPHASE_DEBUG 0
+
+// Add a global debug filter flag
+static bool g_debugFilter = true;
+
+#define DEBUG(x) do { \
+    if (ENABLE_NARROWPHASE_DEBUG && g_debugFilter) { \
+        std::cout << "[DEBUG NARROWPHASE] " << x << std::endl; \
+    } \
+} while(0)
 
 namespace RigidBodyCollision {
 
@@ -182,7 +190,8 @@ static ReferenceChoice chooseReference(const Vector &globalNormal,
 
     // If dotA >= dotB, pick A as reference, else B as reference
     ReferenceChoice rc;
-    if (dotA >= dotB) {
+    // if (dotA >= dotB) {
+    if (true) {
         rc.refEnt = eA;
         rc.incEnt = eB;
         rc.refVerts = Averts;
@@ -267,7 +276,7 @@ static std::vector<Vector> clipIncidentPolygon(const ReferenceChoice &rc)
 
     // Plane 1: the reference face plane itself (we want points "behind" it)
     // But for manifold generation, we usually keep incident polygon points
-    // behind the face plane by ~penetration. We’ll keep it simple: no extra offset.
+    // behind the face plane by ~penetration. We'll keep it simple: no extra offset.
     double faceOffset = rc.refNormal.dotProduct(v1);
 
     // We also need the "top" and "bottom" boundaries of this face: each face has 2 side planes if we want to bound it in a segment.
@@ -308,6 +317,11 @@ static std::vector<Vector> clipIncidentPolygon(const ReferenceChoice &rc)
     return poly;
 }
 
+// Helper function to check if entity is a boundary
+static bool isBoundary(const entt::registry &registry, entt::entity e) {
+    return registry.valid(e) && registry.any_of<Components::Boundary>(e);
+}
+
 /**
  * @brief Builds multiple collision points for polygon–polygon after EPA.
  *        We'll return up to 2 contact points from reference-face clipping.
@@ -317,8 +331,12 @@ static std::vector<CollisionInfo> buildPolygonPolygonContacts(
     entt::entity eB,
     const ShapeData &A,
     const ShapeData &B,
-    const EPAResult &res)
+    const EPAResult &res,
+    entt::registry &registry)
 {
+    // Set debug filter based on boundary status
+    g_debugFilter = !isBoundary(registry, eA) && !isBoundary(registry, eB);
+
     DEBUG("\n=== New Polygon-Polygon Contact ===");
     DEBUG("EPA Normal: " << res.normal.x << ", " << res.normal.y);
     DEBUG("EPA Penetration: " << res.penetration);
@@ -357,7 +375,6 @@ static std::vector<CollisionInfo> buildPolygonPolygonContacts(
     // might actually need flipping. Let's define finalNormal accordingly:
     Vector finalNormal = (rc.flipped) ? -globalNormal : globalNormal;
 
-    double penDepth = res.penetration; // approximate for all points
     // We find the reference face plane offset
     int i1 = rc.refFaceIndex;
     int i2 = (i1+1) % rc.refVerts.size();
@@ -365,19 +382,18 @@ static std::vector<CollisionInfo> buildPolygonPolygonContacts(
     Vector refV2 = rc.refVerts[i2];
     double planeOffset = rc.refNormal.dotProduct(refV1);
 
-    // 5) The final contact points are those that are no more than penDepth behind the reference face
-    for (auto &pt : clipped) {
-        double dist = rc.refNormal.dotProduct(pt) - planeOffset;
-        // If dist < 0 => it's behind the face. Usually we accept up to 'penetration' margin
-        if (dist <= penDepth + 1e-6) {
-            CollisionInfo ci;
-            ci.normal = finalNormal;
-            ci.penetration = penDepth; 
-            ci.contactPoint = pt;
-            ci.a = eA;
-            ci.b = eB;
-            contacts.push_back(ci);
-        }
+    // Create collision info for each contact point
+    for (const auto &contactPoint : clipped) {
+        // Calculate penetration depth for this contact point
+        double penetration = -(rc.refNormal.dotProduct(contactPoint) - planeOffset);
+        
+        CollisionInfo ci;
+        ci.normal = finalNormal;
+        ci.penetration = penetration;
+        ci.contactPoint = contactPoint;
+        ci.a = eA;
+        ci.b = eB;
+        contacts.push_back(ci);
     }
 
     // We'll clamp to at most 2 contact points (common practice)
@@ -387,9 +403,10 @@ static std::vector<CollisionInfo> buildPolygonPolygonContacts(
 
     DEBUG("Final contacts generated: " << contacts.size());
     for (const auto& contact : contacts) {
-        DEBUG("Contact point: (" << contact.contactPoint.x << ", " << contact.contactPoint.y << ")");
-        DEBUG("Contact normal: (" << contact.normal.x << ", " << contact.normal.y << ")");
-        DEBUG("Penetration: " << contact.penetration);
+        DEBUG("=== New Contact ===");
+        DEBUG("\tContact point: (" << contact.contactPoint.x << ", " << contact.contactPoint.y << ")");
+        DEBUG("\tContact normal: (" << contact.normal.x << ", " << contact.normal.y << ")");
+        DEBUG("\tPenetration: " << contact.penetration);
     }
     DEBUG("=== End Contact ===\n");
 
@@ -407,6 +424,9 @@ CollisionManifold narrowPhase(entt::registry &registry,
     // Process each candidate pair from broad-phase
     for (auto &cp : pairs) {
         if (!registry.valid(cp.eA) || !registry.valid(cp.eB)) continue;
+
+        // Set debug filter based on boundary status
+        g_debugFilter = !isBoundary(registry, cp.eA) && !isBoundary(registry, cp.eB);
 
         // Extract shape data for GJK/EPA
         auto sdA = extractShapeData(registry, cp.eA);
@@ -457,7 +477,7 @@ CollisionManifold narrowPhase(entt::registry &registry,
                 else {
                     // polygon–polygon => produce multiple contact points
                     auto multContacts = buildPolygonPolygonContacts(
-                                            cp.eA, cp.eB, sdA, sdB, res);
+                        cp.eA, cp.eB, sdA, sdB, res, registry);
                     for (auto &cinfo : multContacts) {
                         manifold.collisions.push_back(cinfo);
                     }
@@ -465,6 +485,10 @@ CollisionManifold narrowPhase(entt::registry &registry,
             }
         }
     }
+
+    // Reset debug filter for final message
+    g_debugFilter = true;
+    DEBUG("=== Narrow Phase Complete ===\n");
 
     return manifold;
 }

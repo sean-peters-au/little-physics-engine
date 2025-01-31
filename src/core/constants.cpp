@@ -8,6 +8,7 @@ namespace SimulatorConstants {
     // Global constants
     const double Pi    = 3.141592654;
     const double RealG = 6.674e-11;  // m³/kg/s²
+    const double Epsilon = 1e-9;
 
     // Scenario variables
     double UniverseSizeMeters;

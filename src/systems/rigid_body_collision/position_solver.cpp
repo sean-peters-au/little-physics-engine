@@ -1,10 +1,24 @@
 // position_solver.cpp
-#include "nbody/systems/rigid_body_collision/position_solver.hpp"
 #include <algorithm>
+#include <cmath>
+#include <iostream>
+
 #include <entt/entt.hpp>
+
+#include "nbody/systems/rigid_body_collision/position_solver.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/core/profile.hpp"
-#include <cmath>
+
+#define ENABLE_POSITION_SOLVER_DEBUG 0
+
+// Add a global debug filter flag
+static bool g_debugFilter = true;
+
+#define DEBUG(x) do { \
+    if (ENABLE_POSITION_SOLVER_DEBUG && g_debugFilter) { \
+        std::cout << "[DEBUG POSITION SOLVER] " << x << std::endl; \
+    } \
+} while(0)
 
 namespace RigidBodyCollision {
 
@@ -14,7 +28,12 @@ namespace RigidBodyCollision {
  */
 static constexpr double BAUMGARTE = 0.2;
 static constexpr double SLOP = 0.001;
-static constexpr int POS_SOLVER_ITERATIONS = 5;
+static constexpr int POS_SOLVER_ITERATIONS = 3;
+
+// Helper function to check if entity is a boundary
+static bool isBoundary(const entt::registry &registry, entt::entity e) {
+    return registry.valid(e) && registry.any_of<Components::Boundary>(e);
+}
 
 void PositionSolver::positionalSolver(
     entt::registry &registry,
@@ -23,15 +42,16 @@ void PositionSolver::positionalSolver(
 {
     PROFILE_SCOPE("PositionSolver");
 
-    // We do a few sequential iterations over all contacts in the manifold.
-    // This approach is similar to the sequential impulse "split impulse" method
-    // used in many 2D physics engines (like Box2D).
     for (int iter = 0; iter < POS_SOLVER_ITERATIONS; ++iter)
     {
+        DEBUG("=== Position Solver Iteration " << iter + 1 << " ===");
         for (auto &c : manifold.collisions)
         {
             if (!registry.valid(c.a) || !registry.valid(c.b))
                 continue;
+
+            // Set debug filter based on boundary status
+            g_debugFilter = !isBoundary(registry, c.a) && !isBoundary(registry, c.b);
 
             // Make sure both have position, mass, etc.
             if (!registry.all_of<Components::Position, Components::Mass, Components::ParticlePhase>(c.a)
@@ -90,10 +110,21 @@ void PositionSolver::positionalSolver(
             double invIA = (canRotateA && inertiaA > 1e-12) ? (1.0 / inertiaA) : 0.0;
             double invIB = (canRotateB && inertiaB > 1e-12) ? (1.0 / inertiaB) : 0.0;
 
-            // Check if penetration is large enough to warrant correction
+            DEBUG("Contact: Entity " << static_cast<uint32_t>(c.a) << " vs " << static_cast<uint32_t>(c.b));
+            DEBUG("Contact point: (" << c.contactPoint.x << ", " << c.contactPoint.y << ")");
+            DEBUG("Normal: (" << c.normal.x << ", " << c.normal.y << "), Penetration: " << c.penetration);
+
+            DEBUG("Masses: " << massA << " vs " << massB << " (inv: " << invMassA << " vs " << invMassB << ")");
+            if (canRotateA || canRotateB) {
+                DEBUG("Inertias: " << (canRotateA ? std::to_string(inertiaA) : "fixed") 
+                      << " vs " << (canRotateB ? std::to_string(inertiaB) : "fixed"));
+            }
+
             double pen = c.penetration - SLOP;
-            if (pen <= 0.0)
+            if (pen <= 0.0) {
+                DEBUG("Skipping - penetration " << c.penetration << " below slop " << SLOP);
                 continue;
+            }
 
             double correctionMag = BAUMGARTE * pen;
 
@@ -108,6 +139,8 @@ void PositionSolver::positionalSolver(
             Vector rA(c.contactPoint.x - posA.x, c.contactPoint.y - posA.y);
             Vector rB(c.contactPoint.x - posB.x, c.contactPoint.y - posB.y);
 
+            DEBUG("Lever arms - rA: (" << rA.x << ", " << rA.y << "), rB: (" << rB.x << ", " << rB.y << ")");
+
             // For position corrections, the "effective mass" is:
             //
             //   K = (invMassA + invMassB)
@@ -121,32 +154,32 @@ void PositionSolver::positionalSolver(
                          + (rACrossN * rACrossN) * invIA
                          + (rBCrossN * rBCrossN) * invIB;
 
-            if (denom < 1e-12)
+            if (denom < 1e-12) {
+                DEBUG("Skipping - effective mass too small (denom: " << denom << ")");
                 continue;
+            }
 
             double scalar = correctionMag / denom;
 
             // The final linear correction
             Vector correction = normal * scalar;
+            DEBUG("Correction - Linear: (" << correction.x << ", " << correction.y << ")");
 
             // Apply to posA (negative direction)
             posA.x -= correction.x * invMassA;
             posA.y -= correction.y * invMassA;
-
-            // Angular correction: angleA -= (rA cross n) * scalar * invIA
             if (canRotateA) {
                 double rotA = rACrossN * scalar * invIA;
                 angleA -= rotA;
+                DEBUG("Entity A - New pos: (" << posA.x << ", " << posA.y << "), Rot: " << rotA);
             }
 
-            // Apply to posB (positive direction)
             posB.x += correction.x * invMassB;
             posB.y += correction.y * invMassB;
-
-            // Angular correction: angleB += (rB cross n) * scalar * invIB
             if (canRotateB) {
                 double rotB = rBCrossN * scalar * invIB;
                 angleB += rotB;
+                DEBUG("Entity B - New pos: (" << posB.x << ", " << posB.y << "), Rot: " << rotB);
             }
 
             // Store back in registry
@@ -165,6 +198,10 @@ void PositionSolver::positionalSolver(
             }
         }
     }
+
+    // Reset debug filter for final message
+    g_debugFilter = true;
+    DEBUG("=== Position Solve Complete ===\n");
 }
 
 } // namespace RigidBodyCollision

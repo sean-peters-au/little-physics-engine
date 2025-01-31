@@ -38,7 +38,7 @@ void RigidBodyCollisionSystem::update(entt::registry &registry)
     ContactSolver::solveContactConstraints(registry, manager);
 
     // 5) (Optional) Position solver for any residual penetration
-    // PositionSolver::positionalSolver(registry, manifold);
+    PositionSolver::positionalSolver(registry, manifold);
 }
 
 } // namespace Systems
