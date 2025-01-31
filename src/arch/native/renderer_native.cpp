@@ -1,5 +1,5 @@
 #define _USE_MATH_DEFINES
-#include "nbody/rendering/renderer.hpp"
+#include "nbody/arch/native/renderer_native.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sim.hpp"

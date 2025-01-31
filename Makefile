@@ -1,44 +1,126 @@
-# Compiler settings
-CXX := clang++
+# @fileoverview Makefile
+# @brief Build script for both native (desktop) and WASM (web) targets.
+
+# ---------------------------------------------------------------------------------
+# Common settings
+# ---------------------------------------------------------------------------------
+
 CXXFLAGS := -Wall -Wextra -std=c++17 \
             -I./include \
             -I./include/nbody/vendor/entt/include \
-            -ffast-math -mrecip -march=native \
             -I/opt/homebrew/include
-LDFLAGS := -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system
 
 # Directory structure
+BUILD_DIR := build
 SRC_DIR := src
 INC_DIR := include
-BUILD_DIR := build
 TEST_DIR := tests
 ASSETS_DIR := assets
 
-# Find all source files recursively (excluding main.cpp for tests)
-SRCS := $(shell find $(SRC_DIR) -name '*.cpp' ! -name 'main.cpp')
-OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+# Base source files (excluding arch-specific code)
+BASE_SRCS := $(shell find $(SRC_DIR) -name '*.cpp' \
+             ! -path "$(SRC_DIR)/arch/*")
 
-# Test sources
+# Clang-tidy settings
+TIDY := clang-tidy
+TIDY_FLAGS := -checks=bugprone-*,modernize-*,performance-*,readability-*,-modernize-use-trailing-return-type
+TIDY_FIX_FLAGS := -fix -fix-errors
+
+# ---------------------------------------------------------------------------------
+# Architecture-specific targets
+# ---------------------------------------------------------------------------------
+
+.PHONY: native wasm print-debug
+
+print-debug:
+	@echo "BASE_SRCS: $(BASE_SRCS)"
+	@echo "ARCH_SRCS: $(ARCH_SRCS)"
+	@echo "OBJS: $(OBJS)"
+
+# Define variables for native build
+NATIVE_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/native/*.cpp)
+NATIVE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(BASE_SRCS)) \
+               $(patsubst $(SRC_DIR)/arch/native/%.cpp,$(BUILD_DIR)/arch/native/%.o,$(NATIVE_ARCH_SRCS))
+
+# Define variables for wasm build
+WASM_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/wasm/*.cpp)
+WASM_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/wasm/%.o,$(BASE_SRCS)) \
+             $(patsubst $(SRC_DIR)/arch/wasm/%.cpp,$(BUILD_DIR)/arch/wasm/%.o,$(WASM_ARCH_SRCS))
+
+native: CXX := clang++
+native: LDFLAGS := -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system
+native: directories copy_assets $(NATIVE_OBJS)
+	@echo "Building native target with objects: $(NATIVE_OBJS)"
+	$(CXX) $(CXXFLAGS) $(NATIVE_OBJS) -o $(BUILD_DIR)/simulator_native $(LDFLAGS)
+
+wasm: CXX := em++
+wasm: LDFLAGS := -s USE_WEBGL2=1 -s FULL_ES3=1 \
+                 -s ALLOW_MEMORY_GROWTH=1 \
+                 -s INVOKE_RUN=1 -s DEMANGLE_SUPPORT=1
+wasm: directories copy_assets $(WASM_OBJS)
+	@echo "Building wasm target with objects: $(WASM_OBJS)"
+	$(CXX) $(CXXFLAGS) $(WASM_OBJS) -o $(BUILD_DIR)/simulator_wasm.html \
+	    $(LDFLAGS) \
+	    --shell-file assets/sim.html \
+	    -s EXIT_RUNTIME=1 -s ASSERTIONS=1
+
+# ---------------------------------------------------------------------------------
+# Build rules
+# ---------------------------------------------------------------------------------
+
+# Generic object compilation rules
+$(BUILD_DIR)/native/%.o: $(SRC_DIR)/%.cpp
+	@echo "Compiling native $<"
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/wasm/%.o: $(SRC_DIR)/%.cpp
+	@echo "Compiling wasm $<"
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/arch/native/%.o: $(SRC_DIR)/arch/native/%.cpp
+	@echo "Compiling arch-specific native $<"
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/arch/wasm/%.o: $(SRC_DIR)/arch/wasm/%.cpp
+	@echo "Compiling arch-specific wasm $<"
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ---------------------------------------------------------------------------------
+# Test targets
+# ---------------------------------------------------------------------------------
+
 TEST_SRCS := $(shell find $(TEST_DIR) -name '*.cpp')
 TEST_OBJS := $(TEST_SRCS:$(TEST_DIR)/%.cpp=$(BUILD_DIR)/tests/%.o)
-
-# Main target
-TARGET := $(BUILD_DIR)/simulator
 TEST_TARGET := $(BUILD_DIR)/test_runner
 
-# Default target
-all: directories copy_assets $(TARGET)
+test: $(TEST_TARGET)
+	./$(TEST_TARGET)
 
-# Create necessary directories
+$(TEST_TARGET): $(OBJS) $(TEST_OBJS)
+	$(CXX) $^ -o $@ $(LDFLAGS) -lgtest -lgtest_main -pthread
+
+$(BUILD_DIR)/tests/%.o: $(TEST_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ---------------------------------------------------------------------------------
+# Utility targets
+# ---------------------------------------------------------------------------------
+
 directories:
 	@mkdir -p $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)/systems
 	@mkdir -p $(BUILD_DIR)/core
 	@mkdir -p $(BUILD_DIR)/rendering
 	@mkdir -p $(BUILD_DIR)/tests
+	@mkdir -p $(BUILD_DIR)/arch/native
+	@mkdir -p $(BUILD_DIR)/arch/wasm
 	@mkdir -p $(ASSETS_DIR)/fonts
 
-# Download and copy assets
 copy_assets: directories
 	@if [ ! -f $(ASSETS_DIR)/fonts/arial.ttf ]; then \
 		echo "Downloading Arial font..."; \
@@ -46,33 +128,41 @@ copy_assets: directories
 			-o $(ASSETS_DIR)/fonts/arial.ttf; \
 	fi
 
-# Compile source files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# Compile test files
-$(BUILD_DIR)/tests/%.o: $(TEST_DIR)/%.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# Link the main executable
-$(TARGET): $(OBJS) $(BUILD_DIR)/main.o
-	$(CXX) $^ -o $(TARGET) $(LDFLAGS)
-
-# Link the test executable
-$(TEST_TARGET): $(OBJS) $(TEST_OBJS)
-	$(CXX) $^ -o $(TEST_TARGET) $(LDFLAGS) -lgtest -lgtest_main -pthread
-
-# Build and run tests
-test: $(TEST_TARGET)
-	./$(TEST_TARGET)
-
-# Clean build files
 clean:
 	rm -rf $(BUILD_DIR)
 
-# Clean and rebuild
 rebuild: clean all
 
-.PHONY: all clean rebuild test directories copy_assets
+lint:
+	@echo "Running clang-tidy..."
+	@for file in $(SRCS) src/main.cpp; do \
+		$(TIDY) $$file $(TIDY_FLAGS) -- $(CXXFLAGS); \
+	done
+
+lint-fix:
+	@echo "Running clang-tidy with auto-fix..."
+	@for file in $(SRCS) src/main.cpp; do \
+		$(TIDY) $$file $(TIDY_FLAGS) $(TIDY_FIX_FLAGS) -- $(CXXFLAGS); \
+	done
+
+compile_commands: clean
+	@echo "Generating compile_commands.json..."
+	@bear -- make
+
+# Add new serve target
+serve: wasm
+	@echo "Starting server at http://localhost:8080/simulator_wasm.html"
+	@if command -v python3 &> /dev/null; then \
+		if command -v xdg-open &> /dev/null; then \
+			xdg-open http://localhost:8080/simulator_wasm.html; \
+		elif command -v open &> /dev/null; then \
+			open http://localhost:8080/simulator_wasm.html; \
+		fi; \
+		cd $(BUILD_DIR) && python3 -m http.server 8080; \
+	else \
+		echo "Error: python3 is not installed"; \
+		exit 1; \
+	fi
+
+# Add to the .PHONY list
+.PHONY: all native wasm clean rebuild test directories copy_assets lint lint-fix compile_commands serve

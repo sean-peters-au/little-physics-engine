@@ -1,7 +1,7 @@
 # Setup
 
 ```
-brew install sdl2 sdl2_ttf
+brew install emscripten
 # Create the proper directory structure
 mkdir -p external/entt/include/entt
 

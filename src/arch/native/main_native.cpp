@@ -4,7 +4,7 @@
 
 #include "nbody/core/simulator.hpp"
 #include "nbody/core/constants.hpp"
-#include "nbody/rendering/renderer.hpp"
+#include "nbody/arch/native/renderer_native.hpp"
 #include "nbody/components/sim.hpp"
 #include "nbody/core/profile.hpp"
 

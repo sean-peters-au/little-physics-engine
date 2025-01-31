@@ -1,5 +1,5 @@
 /**
- * @file renderer.hpp
+ * @file renderer_native.hpp
  * @brief Graphics rendering system using SFML
  *
  * This system handles:
@@ -11,8 +11,7 @@
  * Uses SFML for window management and drawing operations.
  */
 
-#ifndef RENDERER_H
-#define RENDERER_H
+#pragma once
 
 #include <entt/entt.hpp>
 #include <string>
@@ -222,5 +221,3 @@ private:
     std::unordered_map<std::pair<int,int>, PixelProperties, PixelCoordHash>
     aggregateParticlesByPixel(const entt::registry& registry);
 };
-
-#endif
