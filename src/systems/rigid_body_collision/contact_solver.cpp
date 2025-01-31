@@ -1,14 +1,17 @@
 /**
  * @file contact_solver.cpp
- * @brief Implementation of a single-step LCP solver for stacked rigid body contacts.
+ * @brief Linear Complementarity Problem (LCP) solver for rigid body contact resolution
  *
- * Instead of iterating over contacts individually, this solver:
- * 1) Gathers all contacts from the ContactManager,
- * 2) Maps each dynamic body to a 3D index in a global velocity vector (vx, vy, omega),
- * 3) Builds an LCP for the normal + friction constraints of all contacts,
- * 4) Uses a (simplified) Projected Gauss-Seidel to solve the LCP,
- * 5) Applies the resulting impulses to each body exactly once,
- * 6) Stores impulse data for warm-starting next frame.
+ * This solver implements a global approach to contact resolution by:
+ * 1. Building a single LCP system combining all contact constraints
+ * 2. Solving normal and friction constraints simultaneously using Projected Gauss-Seidel
+ * 3. Applying the resulting impulses to update body velocities
+ * 
+ * Key features:
+ * - Handles both normal and friction constraints
+ * - Supports warm starting from previous frame's impulses
+ * - Efficiently processes stacked and interlinked contacts
+ * - Uses a sparse velocity representation for dynamic bodies only
  */
 
 #include "nbody/systems/rigid_body_collision/contact_solver.hpp"
@@ -30,14 +33,16 @@ static bool g_debugFilter = true;
 namespace RigidBodyCollision
 {
 
-// -----------------------------------------------------------------------------
-// A small helper struct to track each dynamic body's degrees of freedom in
-// a single global velocity vector. We store each body's index (3 dofs: vx, vy, w).
-// -----------------------------------------------------------------------------
+/**
+ * @brief Maps a rigid body to its degrees of freedom in the global velocity vector
+ *
+ * Each dynamic body gets 3 consecutive slots in the velocity vector for (vx, vy, omega).
+ * Static bodies are marked with index = -1 to skip velocity updates.
+ */
 struct BodyDOF
 {
-    bool isDynamic = false;  ///< false if infinite mass or does not rotate
-    int index = -1;          ///< index in the global velocity array
+    bool isDynamic = false;  ///< false for infinite mass or non-rotating bodies
+    int index = -1;         ///< base index in global velocity array, or -1 if static
 };
 
 /**
@@ -106,10 +111,13 @@ static std::unordered_map<entt::entity, BodyDOF> buildBodyDOFTable(
     return table;
 }
 
-// -----------------------------------------------------------------------------
-// LCP Setup: We define each contact as two constraints (normal + friction).
-// We'll store them in a simpler structure for the solver’s iteration.
-// -----------------------------------------------------------------------------
+/**
+ * @brief Represents a single constraint row in the LCP system
+ *
+ * Each contact generates two constraint rows:
+ * - A normal constraint ensuring non-penetration (λ ≥ 0)
+ * - A friction constraint bounded by ±µN
+ */
 struct ConstraintRow
 {
     // Indices
@@ -140,10 +148,12 @@ struct ConstraintRow
     double lambda = 0.0;
 };
 
-// -----------------------------------------------------------------------------
-// For friction, we need to know the friction limit per contact. We'll store that
-// along with the "normal" row so we can clamp friction row's hi = µ * normalImpulse.
-// -----------------------------------------------------------------------------
+/**
+ * @brief Pairs a normal and friction constraint for a single contact point
+ *
+ * The friction constraint's bounds are updated during solving based on
+ * the normal constraint's impulse magnitude (λ_n) and friction coefficient.
+ */
 struct ContactRows
 {
     // The normal constraint
@@ -152,7 +162,7 @@ struct ContactRows
     // The friction constraint
     ConstraintRow friction;
 
-    // We keep a pointer back to the normal row’s impulse so friction can see it
+    // We keep a pointer back to the normal row's impulse so friction can see it
     // in real-time if we do iterative updates. This is typical in the PGS approach.
 };
 
@@ -185,10 +195,10 @@ static std::vector<ContactRows> buildConstraintRows(
             normalRow.lo = 0.0;
             normalRow.hi = 1e20; // large
 
-            // We’ll store warm-start impulse in normalRow.lambda
+            // We'll store warm-start impulse in normalRow.lambda
             normalRow.lambda = c.normalImpulseAccum;
 
-            // We define a “restitution” or “velocity bias” if we want bouncing. 
+            // We define a "restitution" or "velocity bias" if we want bouncing. 
             // For now, we set it to 0 or a small negative for slight position correction. 
             // We'll skip restitution in this example. 
             normalRow.rhs = 0.0; 
@@ -204,7 +214,7 @@ static std::vector<ContactRows> buildConstraintRows(
             frictionRow.rA = normalRow.rA;
             frictionRow.rB = normalRow.rB;
 
-            // friction can be negative or positive => lo = -∞, hi = +∞, but we’ll clamp to ±(µ * normalImpulse)
+            // friction can be negative or positive => lo = -∞, hi = +∞, but we'll clamp to ±(µ * normalImpulse)
             frictionRow.lo = -1e20;
             frictionRow.hi = +1e20;
 
@@ -222,8 +232,8 @@ static std::vector<ContactRows> buildConstraintRows(
 
 // -----------------------------------------------------------------------------
 // Compute the effective mass for a single constraint row. 
-// “effMass = 1 / (J * M^-1 * J^T)”
-// Where J is the row’s Jacobian, M^-1 is diagonal block for the two bodies in question.
+// "effMass = 1 / (J * M^-1 * J^T)"
+// Where J is the row's Jacobian, M^-1 is diagonal block for the two bodies in question.
 // In 2D, we do a small form for each row: see typical Box2D derivations.
 // -----------------------------------------------------------------------------
 static double computeEffectiveMass(
@@ -232,12 +242,12 @@ static double computeEffectiveMass(
     const std::vector<double> &invMass,
     const std::vector<double> &invInertia)
 {
-    // If body is infinite mass, dofTable[x].index < 0 => that body’s invMass/invInertia = 0.
+    // If body is infinite mass, dofTable[x].index < 0 => that body's invMass/invInertia = 0.
     double invM_A = 0.0, invM_B = 0.0, invI_A = 0.0, invI_B = 0.0;
 
     const auto &dA = dofTable.at(row.a);
     if (dA.isDynamic) {
-        int idxA = dA.index / 3; // the “body slot”
+        int idxA = dA.index / 3; // the "body slot"
         invM_A = invMass[idxA];
         invI_A = invInertia[idxA];
     }
@@ -300,9 +310,12 @@ static double computeRelativeVelocity(
     return rel.dotProduct(row.dir);
 }
 
-// -----------------------------------------------------------------------------
-// Apply an impulse Δλ * dir to each body’s velocity in the big vector v
-// -----------------------------------------------------------------------------
+/**
+ * @brief Applies an impulse to each body's velocity in the global velocity vector
+ *
+ * This function updates the velocity vector v by applying the impulse Δλ * dir to each body.
+ * It handles both dynamic and static bodies, updating their velocities accordingly.
+ */
 static void applyImpulse(
     const ConstraintRow &row,
     double dLambda,
@@ -346,10 +359,13 @@ static void applyImpulse(
     }
 }
 
-// -----------------------------------------------------------------------------
-// A standard Projected Gauss-Seidel: we iterate over each row, compute the
-// necessary incremental impulse, clamp it to [lo, hi], update velocities.
-// -----------------------------------------------------------------------------
+
+/**
+ * @brief Solves the Linear Complementarity Problem using Projected Gauss-Seidel
+ *
+ * This function iterates over each constraint row, computes the necessary incremental
+ * impulse, clamps it to [lo, hi], and updates velocities.
+ */
 static void solveLCP_PGS(
     std::vector<ContactRows> &contactRows,
     std::vector<double> &v, // global velocity array
@@ -359,7 +375,7 @@ static void solveLCP_PGS(
     double frictionCoeff,
     int iterations = 10)
 {
-    // Precompute each row’s effective mass
+    // Precompute each row's effective mass
     for (auto &cr : contactRows) {
         cr.normal.effMass   = computeEffectiveMass(cr.normal, dofTable, invMass, invInertia);
         cr.friction.effMass = computeEffectiveMass(cr.friction, dofTable, invMass, invInertia);
@@ -367,7 +383,7 @@ static void solveLCP_PGS(
 
     for (int iter=0; iter<iterations; ++iter)
     {
-        // For each contact’s normal + friction rows
+        // For each contact's normal + friction rows
         for (auto &cr : contactRows) {
             // 1) Solve normal row
             {
@@ -375,7 +391,7 @@ static void solveLCP_PGS(
                 double vn  = computeRelativeVelocity(row, dofTable, v);
                 double lambdaOld = row.lambda;
 
-                // The “constraint violation” is (vn + row.rhs). We want it >= 0 if row.lambda=0, etc.
+                // The "constraint violation" is (vn + row.rhs). We want it >= 0 if row.lambda=0, etc.
                 // Here: dλ = -effMass*(vn + b)
                 double dLambda = - row.effMass * (vn + row.rhs);
 
@@ -425,20 +441,20 @@ void ContactSolver::solveContactConstraints(entt::registry &registry, ContactMan
 {
     PROFILE_SCOPE("ContactSolver (LCP)");
 
-    // 1) Retrieve manifolds from manager
+    // Retrieve manifolds from manager
     auto &manifolds = manager.getManifoldsForSolver();
     if (manifolds.empty()) {
         return; // no collisions
     }
 
-    // 2) Build a map of “body -> DOF index”
+    // Build a map of "body -> DOF index"
     auto dofTable = buildBodyDOFTable(registry, manifolds);
 
-    // 3) Prepare a big velocity vector v, plus arrays for invMass & invInertia
-    //    We'll store them “by body” not by dof-component, so invMass[i], invInertia[i].
+    // Prepare a big velocity vector v, plus arrays for invMass & invInertia
+    //    We'll store them "by body" not by dof-component, so invMass[i], invInertia[i].
     //    The dof index for body i is (3*i).
     //    We'll do a small pass to gather each dynamic body in dofTable in a stable order.
-    //    For direct indexing, we store “entity -> i”.
+    //    For direct indexing, we store "entity -> i".
     std::vector<entt::entity> bodyList; 
     bodyList.reserve(dofTable.size());
     {
@@ -506,10 +522,10 @@ void ContactSolver::solveContactConstraints(entt::registry &registry, ContactMan
         }
     }
 
-    // 7) Store the final impulses back into the contact manager for warm-starting
+    // Store the final impulses back into the contact manager for warm-starting
     //    In each ContactRows, normal.lambda => c.normalImpulseAccum, friction.lambda => c.tangentImpulseAccum
-    //    The manager’s final step is applySolverResults(...), so we re-gather everything in a new
-    //    manifold-like structure. However, we already have “manifolds” from the manager, so we just
+    //    The manager's final step is applySolverResults(...), so we re-gather everything in a new
+    //    manifold-like structure. However, we already have "manifolds" from the manager, so we just
     //    update them in place.
     //    We must match them 1:1 with contactRows, in the same order we built them. That was an
     //    iteration over manifolds => for each contact => build ContactRows. So we do the same iteration:
