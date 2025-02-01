@@ -39,7 +39,7 @@ print-debug:
 
 # Define variables for native build
 NATIVE_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/native/*.cpp)
-NATIVE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(BASE_SRCS)) \
+NATIVE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/native/%.o,$(BASE_SRCS)) \
                $(patsubst $(SRC_DIR)/arch/native/%.cpp,$(BUILD_DIR)/arch/native/%.o,$(NATIVE_ARCH_SRCS))
 
 # Define variables for wasm build
