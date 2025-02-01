@@ -213,7 +213,6 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
     int created = 0;
     int cCount = 0;
     int rCount = 0;
-    int randCount = 0;
 
     std::cerr << "Creating " << totalParticles << " particles\n";
     for (int i = 0; i < side && created < totalParticles; ++i) {
@@ -270,7 +269,6 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
 
                 // Calculate proper moment of inertia for the polygon
                 i = calculatePolygonInertia(poly.vertices, massVal);
-                randCount++;
             }
 
             registry.emplace<Components::AngularPosition>(entity, 0.0);

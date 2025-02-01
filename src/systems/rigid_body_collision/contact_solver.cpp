@@ -133,17 +133,6 @@ struct ContactRows
 };
 
 /**
- * @brief Converts a double-based Vector to a float2 NEON vector
- *
- * @param v The input Vector with double precision
- * @return float32x2_t with x,y from v
- */
-inline static float32x2_t toFloat2(const Vector &v)
-{
-    return {static_cast<float>(v.x), static_cast<float>(v.y)};
-}
-
-/**
  * @brief Builds normal + friction constraints for all contacts in single-precision
  *
  * @param registry ECS registry

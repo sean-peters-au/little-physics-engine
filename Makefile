@@ -5,17 +5,16 @@
 # Common settings
 # ---------------------------------------------------------------------------------
 
-# If on macOS, add flags so clang/clang-tidy can correctly find system headers 
-# and define the necessary feature macros to avoid "FP_NAN, ldiv_t not found" errors.
+# Only apply macOS-specific flags for native builds
 ifeq ($(shell uname),Darwin)
-CXXFLAGS += -stdlib=libc++ -isysroot $(shell xcrun --show-sdk-path) -D_DARWIN_C_SOURCE -D_XOPEN_SOURCE=700
+NATIVE_CXXFLAGS += -stdlib=libc++ -isysroot $(shell xcrun --show-sdk-path) -D_DARWIN_C_SOURCE -D_XOPEN_SOURCE=700
 endif
 
+# Base flags for all builds
 CXXFLAGS := -Wall -Wextra -std=c++17 \
             -I./include \
             -isystem ./include/nbody/vendor/entt/include \
-            -isystem /opt/homebrew/include \
-            $(CXXFLAGS)
+            -isystem /opt/homebrew/include
 
 # Directory structure
 BUILD_DIR := build
@@ -56,12 +55,14 @@ WASM_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/wasm/%.o,$(BASE_SRCS)) \
 WASM_SRCS := $(BASE_SRCS) $(WASM_ARCH_SRCS)
 
 native: CXX := clang++
+native: CXXFLAGS += $(NATIVE_CXXFLAGS)  # Add macOS flags only for native
 native: LDFLAGS := -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system
 native: directories copy_assets $(NATIVE_OBJS)
 	@echo "Building native target with objects: $(NATIVE_OBJS)"
 	$(CXX) $(CXXFLAGS) $(NATIVE_OBJS) -o $(BUILD_DIR)/simulator_native $(LDFLAGS)
 
 wasm: CXX := em++
+wasm: CXXFLAGS += -s USE_WEBGL2=1  # Add emscripten-specific flags
 wasm: LDFLAGS := -s USE_WEBGL2=1 -s FULL_ES3=1 \
                  -s ALLOW_MEMORY_GROWTH=1 \
                  -s INVOKE_RUN=1 -s DEMANGLE_SUPPORT=1
