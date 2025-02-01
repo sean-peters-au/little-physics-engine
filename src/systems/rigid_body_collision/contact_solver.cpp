@@ -50,9 +50,7 @@ struct BodyDOF {
  */
 static bool isInfiniteMass(const entt::registry &registry, entt::entity e)
 {
-    if (!registry.valid(e) || !registry.all_of<Components::Mass>(e)) {
-        return false;
-    }
+    if (!registry.valid(e) || !registry.all_of<Components::Mass>(e)) { return false; }
     double const m = registry.get<Components::Mass>(e).value;
     return (m > 1e29);
 }
@@ -66,9 +64,7 @@ static bool isInfiniteMass(const entt::registry &registry, entt::entity e)
  */
 static bool canRotate(const entt::registry &registry, entt::entity e)
 {
-    if (!registry.all_of<Components::AngularVelocity, Components::Inertia>(e)) {
-        return false;
-    }
+    if (!registry.all_of<Components::AngularVelocity, Components::Inertia>(e)) { return false; }
     double const i = registry.get<Components::Inertia>(e).I;
     return (i > 1e-12 && i < 1e29);
 }
