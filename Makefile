@@ -7,8 +7,8 @@
 
 CXXFLAGS := -Wall -Wextra -std=c++17 \
             -I./include \
-            -I./include/nbody/vendor/entt/include \
-            -I/opt/homebrew/include
+            -isystem ./include/nbody/vendor/entt/include \
+            -isystem /opt/homebrew/include
 
 # Directory structure
 BUILD_DIR := build
@@ -46,6 +46,10 @@ NATIVE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/native/%.o,$(BASE_SRCS))
 WASM_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/wasm/*.cpp)
 WASM_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/wasm/%.o,$(BASE_SRCS)) \
              $(patsubst $(SRC_DIR)/arch/wasm/%.cpp,$(BUILD_DIR)/arch/wasm/%.o,$(WASM_ARCH_SRCS))
+
+# Entry points for each architecture
+NATIVE_MAIN := $(SRC_DIR)/arch/native/main_native.cpp
+WASM_MAIN := $(SRC_DIR)/arch/wasm/main_wasm.cpp
 
 native: CXX := clang++
 native: LDFLAGS := -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system
@@ -133,21 +137,29 @@ clean:
 
 rebuild: clean all
 
-lint:
-	@echo "Running clang-tidy..."
-	@for file in $(SRCS) src/main.cpp; do \
-		$(TIDY) $$file $(TIDY_FLAGS) -- $(CXXFLAGS); \
-	done
-
-lint-fix:
-	@echo "Running clang-tidy with auto-fix..."
-	@for file in $(SRCS) src/main.cpp; do \
-		$(TIDY) $$file $(TIDY_FLAGS) $(TIDY_FIX_FLAGS) -- $(CXXFLAGS); \
-	done
-
-compile_commands: clean
+compile_commands.json:
 	@echo "Generating compile_commands.json..."
-	@bear -- make
+	@bear -- $(MAKE) -B native CXXFLAGS="$(CXXFLAGS) -w"  # Disable warnings during database generation
+
+lint: compile_commands.json
+	@echo "Running clang-tidy..."
+	@if [ "$(WASM)" = "1" ]; then \
+		echo "Checking WASM build..."; \
+		$(TIDY) $(WASM_MAIN) -p $(BUILD_DIR); \
+	else \
+		echo "Checking native build..."; \
+		$(TIDY) $(NATIVE_MAIN) -p $(BUILD_DIR); \
+	fi
+
+lint-fix: compile_commands.json
+	@echo "Running clang-tidy with auto-fix..."
+	@if [ "$(WASM)" = "1" ]; then \
+		echo "Checking WASM build..."; \
+		$(TIDY) $(WASM_MAIN) -p $(BUILD_DIR) $(TIDY_FIX_FLAGS); \
+	else \
+		echo "Checking native build..."; \
+		$(TIDY) $(NATIVE_MAIN) -p $(BUILD_DIR) $(TIDY_FIX_FLAGS); \
+	fi
 
 # Add new serve target
 serve: wasm

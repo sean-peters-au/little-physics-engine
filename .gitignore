@@ -3,3 +3,5 @@ build/
 *.swo
 obj/
 *.o
+compile_commands.json
+.vscode/
