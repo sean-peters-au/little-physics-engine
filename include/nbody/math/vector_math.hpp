@@ -67,14 +67,14 @@ public:
      * @param p Position to add
      * @return New position at component-wise sum
      */
-    Position operator+(const Position& p) const;
+    Position operator+(const Position& b) const;
     
     /**
      * @brief Subtracts two positions
      * @param p Position to subtract
      * @return New position at component-wise difference
      */
-    Position operator-(const Position& p) const;
+    Position operator-(const Position& b) const;
     
     /**
      * @brief Scales position by scalar value
@@ -150,14 +150,14 @@ public:
      * @param v Vector to add
      * @return Sum vector
      */
-    Vector operator+(const Vector& v) const;
+    Vector operator+(const Vector& b) const;
     
     /**
      * @brief Subtracts two vectors
      * @param v Vector to subtract
      * @return Difference vector
      */
-    Vector operator-(const Vector& v) const;
+    Vector operator-(const Vector& b) const;
     
     /**
      * @brief Scales vector by scalar value

@@ -20,28 +20,28 @@ Position::Position() : x(0), y(0) {}
 Position::Position(double x, double y) : x(x), y(y) {}
 
 Position::operator Vector() const { 
-  return Vector(this->x, this->y); 
+  return {this->x, this->y}; 
 }
 
 Position Position::operator+(const Position& b) const {
-  return Position(this->x + b.x, this->y + b.y);
+  return {this->x + b.x, this->y + b.y};
 }
 
 Position Position::operator-(const Position& b) const {
-  return Position(this->x - b.x, this->y - b.y);
+  return {this->x - b.x, this->y - b.y};
 }
 
 Position Position::operator*(double scalar) const {
-  return Position(this->x * scalar, this->y * scalar);
+  return {this->x * scalar, this->y * scalar};
 }
 
 Position Position::operator/(double scalar) const {
-  return Position(this->x / scalar, this->y / scalar);
+  return {this->x / scalar, this->y / scalar};
 }
 
 double Position::dist(const Position& p) const {
-	double dx = this->x - p.x;
-	double dy = this->y - p.y;
+	double const dx = this->x - p.x;
+	double const dy = this->y - p.y;
 	return my_sqrt(dx * dx + dy * dy);
 }
 
@@ -65,27 +65,27 @@ Vector::Vector(double x, double y) : x(x), y(y) {}
 Vector::Vector(const Position& p) : x(p.x), y(p.y) {}
 
 Vector::operator Position() const { 
-  return Position(this->x, this->y);
+  return {this->x, this->y};
 }
 
 Vector Vector::operator-() const {
-    return Vector(-this->x, -this->y);
+    return {-this->x, -this->y};
 }
 
 Vector Vector::operator+(const Vector& b) const {
-  return Vector(this->x + b.x, this->y + b.y);
+  return {this->x + b.x, this->y + b.y};
 }
 
 Vector Vector::operator-(const Vector& b) const {
-  return Vector(this->x - b.x, this->y - b.y);
+  return {this->x - b.x, this->y - b.y};
 }
 
 Vector Vector::operator*(double scalar) const {
-  return Vector(this->x * scalar, this->y * scalar);
+  return {this->x * scalar, this->y * scalar};
 }
 
 Vector Vector::operator/(double scalar) const {
-  return Vector(this->x / scalar, this->y / scalar);
+  return {this->x / scalar, this->y / scalar};
 }
 
 double Vector::length() const {
@@ -101,17 +101,16 @@ double Vector::cross(const Vector &other) const {
 }
 
 Vector Vector::perp() const {
-  return Vector(-this->y, this->x); 
+  return {-this->y, this->x}; 
 }
 
 Vector Vector::normalized() const {
-  double len = this->length();
+  double const len = this->length();
   if (len > 1e-9) {
-    return Vector(this->x / len, this->y / len);
-  } else {
-    // default direction if zero-length vector
+    return {this->x / len, this->y / len};
+  }     // default direction if zero-length vector
     return Vector(1.0, 0.0);
-  }
+ 
 }
 
 double Vector::projectLength(const Vector &onto) const {
@@ -119,20 +118,21 @@ double Vector::projectLength(const Vector &onto) const {
 }
 
 Vector Vector::projectOnto(const Vector &onto) const {
-  double denom = onto.dotProduct(onto);
-  if (denom < 1e-9) return Vector(0,0);
-  double scalar = (this->x * onto.x + this->y * onto.y) / denom;
-  return Vector(onto.x * scalar, onto.y * scalar);
+  double const denom = onto.dotProduct(onto);
+  if (denom < 1e-9) { return {0,0};
+}
+  double const scalar = (this->x * onto.x + this->y * onto.y) / denom;
+  return {onto.x * scalar, onto.y * scalar};
 }
 
 Vector Vector::rotateByAngle(double angle) const {
-  double c = std::cos(angle);
-  double s = std::sin(angle);
-  return Vector(this->x*c - this->y*s, this->x*s + this->y*c);
+  double const c = std::cos(angle);
+  double const s = std::sin(angle);
+  return {this->x*c - this->y*s, this->x*s + this->y*c};
 }
 
 double Vector::angleBetween(const Vector &other) const {
-  double lenProduct = this->length()*other.length();
+  double const lenProduct = this->length()*other.length();
   if (lenProduct < 1e-9) {
     return 0.0; // undefined, but return 0 for no angle
   }
@@ -143,27 +143,27 @@ double Vector::angleBetween(const Vector &other) const {
 
 Vector Vector::rotate() const {
   // Rotate 90 degrees clockwise creates a new vector
-  return Vector(this->y, -this->x);
+  return {this->y, -this->x};
 }
 
 Vector Vector::scale(double length) const {
-	double vlen = this->length();
+	double const vlen = this->length();
   if (vlen > 1e-9) {
-    double factor = length / vlen;
-    return Vector(this->x * factor, this->y * factor);
-  } else {
-    std::cout << "Warning: scaling zero-length vector." << std::endl;
+    double const factor = length / vlen;
+    return {this->x * factor, this->y * factor};
+  }     std::cout << "Warning: scaling zero-length vector." << std::endl;
     return *this;
-  }
+ 
 }
 
 Vector closestPointOnLine(const Vector &a, const Vector &b, const Vector &p) {
-  Vector ab = b - a;
-  double denom = ab.dotProduct(ab);
-  if (denom < 1e-9) return a;
+  Vector const ab = b - a;
+  double const denom = ab.dotProduct(ab);
+  if (denom < 1e-9) { return a;
+}
   double t = ((p.x - a.x)*ab.x + (p.y - a.y)*ab.y) / denom;
   t = std::max(0.0,std::min(1.0,t));
-  return Vector(a.x + ab.x*t, a.y + ab.y*t);
+  return {a.x + ab.x*t, a.y + ab.y*t};
 }
 
 // Vector operators

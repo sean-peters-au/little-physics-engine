@@ -9,9 +9,9 @@ namespace Systems {
 void BoundarySystem::update(entt::registry &registry) {
     PROFILE_SCOPE("BoundarySystem");
     // Convert margin to meters
-    double margin_m = 15.0 * SimulatorConstants::MetersPerPixel;
-    double universe_size_m = SimulatorConstants::UniverseSizeMeters;
-    double bounce_damping = 0.7;
+    double const marginM = 15.0 * SimulatorConstants::MetersPerPixel;
+    double const universeSizeM = SimulatorConstants::UniverseSizeMeters;
+    double const bounceDamping = 0.7;
 
     // View of entities with Position and Velocity
     auto view = registry.view<Components::Position, Components::Velocity>();
@@ -28,38 +28,38 @@ void BoundarySystem::update(entt::registry &registry) {
             bool bounced = false;
 
             // Check left boundary
-            if (pos.x < margin_m) {
-                pos.x = margin_m;
-                vel.x = std::abs(vel.x) * bounce_damping;
+            if (pos.x < marginM) {
+                pos.x = marginM;
+                vel.x = std::abs(vel.x) * bounceDamping;
                 bounced = true;
             }
             // Check right boundary
-            else if (pos.x > universe_size_m - margin_m) {
-                pos.x = universe_size_m - margin_m;
-                vel.x = -std::abs(vel.x) * bounce_damping;
+            else if (pos.x > universeSizeM - marginM) {
+                pos.x = universeSizeM - marginM;
+                vel.x = -std::abs(vel.x) * bounceDamping;
                 bounced = true;
             }
 
             // Check top boundary
-            if (pos.y < margin_m) {
-                pos.y = margin_m;
-                vel.y = std::abs(vel.y) * bounce_damping;
+            if (pos.y < marginM) {
+                pos.y = marginM;
+                vel.y = std::abs(vel.y) * bounceDamping;
                 bounced = true;
             }
             // Check bottom boundary
-            else if (pos.y > universe_size_m - margin_m) {
-                pos.y = universe_size_m - margin_m;
-                vel.y = -std::abs(vel.y) * bounce_damping;
+            else if (pos.y > universeSizeM - marginM) {
+                pos.y = universeSizeM - marginM;
+                vel.y = -std::abs(vel.y) * bounceDamping;
                 bounced = true;
             }
 
             // If bounced, optionally clamp speed if it gets too large
             if (bounced) {
-                double speed_after = std::sqrt((vel.x * vel.x) + (vel.y * vel.y));
-                if (speed_after > 1.0) {
+                double const speedAfter = std::sqrt((vel.x * vel.x) + (vel.y * vel.y));
+                if (speedAfter > 1.0) {
                     // Normalize velocity to speed 1.0
-                    vel.x *= 1.0 / speed_after;
-                    vel.y *= 1.0 / speed_after;
+                    vel.x *= 1.0 / speedAfter;
+                    vel.y *= 1.0 / speedAfter;
                 }
             }
 

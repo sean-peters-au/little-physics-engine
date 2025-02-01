@@ -34,7 +34,7 @@ public:
     /**
      * @brief Sets the scenario type (Keplerian, Isothermal, etc.)
      */
-    void setScenario(SimulatorConstants::SimulationType scenario);
+    static void setScenario(SimulatorConstants::SimulationType scenario);
 
     /**
      * @brief Resets the ECS with the newly selected scenario

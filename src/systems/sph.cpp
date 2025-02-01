@@ -9,22 +9,22 @@
 
 namespace Systems {
 
-static bool sph_initialized = false;
-static double cell_size_meters;
-static int grid_size;
+static bool sphInitialized = false;
+static double cellSizeMeters;
+static int gridSize;
 
 // Commonly used constants for SPH
-static double default_h = 1e9;         // Example smoothing length in meters, adjust as needed
-static double default_c_s = 1000.0;    // Speed of sound in m/s, adjust as needed
-static double rest_density = 1e-7;     // Example rest density, tune to your scenario
+static double defaultH = 1e9;         // Example smoothing length in meters, adjust as needed
+static double defaultCS = 1000.0;    // Speed of sound in m/s, adjust as needed
+static double restDensity = 1e-7;     // Example rest density, tune to your scenario
 
 void SPHSystem::update(entt::registry &registry) {
 
     // Initialize on first run
-    if (!sph_initialized) {
-        grid_size = SimulatorConstants::GridSize; 
-        cell_size_meters = SimulatorConstants::UniverseSizeMeters / grid_size;
-        sph_initialized = true;
+    if (!sphInitialized) {
+        gridSize = SimulatorConstants::GridSize; 
+        cellSizeMeters = SimulatorConstants::UniverseSizeMeters / gridSize;
+        sphInitialized = true;
     }
 
     // Ensure each particle has needed components
@@ -33,24 +33,24 @@ void SPHSystem::update(entt::registry &registry) {
         for (auto [entity, phase, mass, sphTemp] : view.each()) {
             // Already has SPHTemp; ensure smoothing length and c_s
             if (!registry.any_of<Components::SmoothingLength>(entity)) {
-                registry.emplace<Components::SmoothingLength>(entity, default_h);
+                registry.emplace<Components::SmoothingLength>(entity, defaultH);
             }
             if (!registry.any_of<Components::SpeedOfSound>(entity)) {
-                registry.emplace<Components::SpeedOfSound>(entity, default_c_s);
+                registry.emplace<Components::SpeedOfSound>(entity, defaultCS);
             }
         }
 
         // For particles that might not yet have SPHTemp
-        auto particles_view = registry.view<Components::ParticlePhase, Components::Mass>();
-        for (auto entity : particles_view) {
+        auto particlesView = registry.view<Components::ParticlePhase, Components::Mass>();
+        for (auto entity : particlesView) {
             if (!registry.any_of<Components::SPHTemp>(entity)) {
                 registry.emplace<Components::SPHTemp>(entity);
             }
             if (!registry.any_of<Components::SmoothingLength>(entity)) {
-                registry.emplace<Components::SmoothingLength>(entity, default_h);
+                registry.emplace<Components::SmoothingLength>(entity, defaultH);
             }
             if (!registry.any_of<Components::SpeedOfSound>(entity)) {
-                registry.emplace<Components::SpeedOfSound>(entity, default_c_s);
+                registry.emplace<Components::SpeedOfSound>(entity, defaultCS);
             }
         }
     }
@@ -82,10 +82,10 @@ void SPHSystem::computePressure(entt::registry &registry) {
     // Simple isothermal EOS: P = c_s^2 (ρ - ρ0)
     auto view = registry.view<Components::SPHTemp, Components::SpeedOfSound>();
     for (auto [entity, sphTemp, c_s] : view.each()) {
-        double rho = sphTemp.density;
-        double c = c_s.value;
+        double const rho = sphTemp.density;
+        double const c = c_s.value;
         // offset density by rest_density if you want a stable reference
-        sphTemp.pressure = c*c*(rho - rest_density);
+        sphTemp.pressure = c*c*(rho - restDensity);
         if (sphTemp.pressure < 0.0) {
             sphTemp.pressure = 0.0; // no negative pressure
         }
@@ -97,8 +97,8 @@ void SPHSystem::computeForces(entt::registry &registry) {
     populateGrid(grid, registry);
 
     // Reset accelerations
-    auto reset_view = registry.view<Components::SPHTemp>();
-    for (auto [entity, sphTemp] : reset_view.each()) {
+    auto resetView = registry.view<Components::SPHTemp>();
+    for (auto [entity, sphTemp] : resetView.each()) {
         sphTemp.acc_x = 0.0;
         sphTemp.acc_y = 0.0;
     }
@@ -118,7 +118,7 @@ void SPHSystem::applyForces(entt::registry &registry) {
     );
 
     // Time step in real seconds using simulator state
-    double dt = SimulatorConstants::SecondsPerTick * 
+    double const dt = SimulatorConstants::SecondsPerTick * 
                state.baseTimeAcceleration * state.timeScale;
 
     // Apply the computed accelerations to velocities
@@ -133,9 +133,9 @@ void SPHSystem::applyForces(entt::registry &registry) {
 }
 
 SPHSystem::Grid SPHSystem::createGrid() {
-    Grid grid(grid_size);
-    for (int i = 0; i < grid_size; i++) {
-        grid[i].resize(grid_size);
+    Grid grid(gridSize);
+    for (int i = 0; i < gridSize; i++) {
+        grid[i].resize(gridSize);
     }
     for (auto &row : grid) {
         for (auto &cell : row) {
@@ -148,10 +148,10 @@ SPHSystem::Grid SPHSystem::createGrid() {
 void SPHSystem::populateGrid(Grid &grid, entt::registry &registry) {
     auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase, Components::SPHTemp>();
     for (auto [entity, pos, mass, phase, sphTemp] : view.each()) {
-        int x = static_cast<int>(pos.x / cell_size_meters);
-        int y = static_cast<int>(pos.y / cell_size_meters);
-        x = std::clamp(x, 0, grid_size-1);
-        y = std::clamp(y, 0, grid_size-1);
+        int x = static_cast<int>(pos.x / cellSizeMeters);
+        int y = static_cast<int>(pos.y / cellSizeMeters);
+        x = std::clamp(x, 0, gridSize-1);
+        y = std::clamp(y, 0, gridSize-1);
         grid[x][y].particles.push_back(entity);
 }
 }
@@ -162,8 +162,8 @@ void SPHSystem::computeDensityForParticle(entt::entity e, entt::registry &regist
     auto &sphTemp = registry.get<Components::SPHTemp>(e);
     auto &hComp = registry.get<Components::SmoothingLength>(e);
 
-    double h = hComp.value;
-    double h_sq = h*h;
+    double const h = hComp.value;
+    double const hSq = h*h;
 
     // Find neighbors
     std::vector<entt::entity> neighbors;
@@ -171,15 +171,15 @@ void SPHSystem::computeDensityForParticle(entt::entity e, entt::registry &regist
 
     double density = 0.0;
     for (auto n : neighbors) {
-        const auto &pos_n = registry.get<Components::Position>(n);
-        const auto &mass_n = registry.get<Components::Mass>(n);
+        const auto &posN = registry.get<Components::Position>(n);
+        const auto &massN = registry.get<Components::Mass>(n);
 
-        double dx = pos.x - pos_n.x;
-        double dy = pos.y - pos_n.y;
-        double r_sq = dx*dx + dy*dy;
-        if (r_sq < h_sq) {
-            double r = std::sqrt(r_sq);
-            density += mass_n.value * W_poly6(r, h);
+        double const dx = pos.x - posN.x;
+        double const dy = pos.y - posN.y;
+        double const rSq = dx*dx + dy*dy;
+        if (rSq < hSq) {
+            double const r = std::sqrt(rSq);
+            density += massN.value * W_poly6(r, h);
         }
     }
     sphTemp.density = density;
@@ -191,80 +191,81 @@ void SPHSystem::computeForcesForParticle(entt::entity e, entt::registry &registr
     const auto &mass = registry.get<Components::Mass>(e);
     const auto &sphTemp = registry.get<Components::SPHTemp>(e);
     const auto &hComp = registry.get<Components::SmoothingLength>(e);
-    const auto &c_s = registry.get<Components::SpeedOfSound>(e);
+    const auto &cS = registry.get<Components::SpeedOfSound>(e);
 
-    double h = hComp.value;
-    double h_sq = h*h;
+    double const h = hComp.value;
+    double const hSq = h*h;
 
     std::vector<entt::entity> neighbors;
     findNeighbors(e, registry, grid, neighbors);
 
-    double acc_x = 0.0;
-    double acc_y = 0.0;
+    double accX = 0.0;
+    double accY = 0.0;
 
-    double rho_i = sphTemp.density;
-    double P_i = sphTemp.pressure;
+    double const rhoI = sphTemp.density;
+    double const pI = sphTemp.pressure;
 
     for (auto n : neighbors) {
-        if (n == e) continue; // skip self
+        if (n == e) { continue; // skip self
+}
 
-        const auto &pos_n = registry.get<Components::Position>(n);
-        const auto &vel_n = registry.get<Components::Velocity>(n);
-        const auto &mass_n = registry.get<Components::Mass>(n);
-        const auto &sphTemp_n = registry.get<Components::SPHTemp>(n);
+        const auto &posN = registry.get<Components::Position>(n);
+        const auto &velN = registry.get<Components::Velocity>(n);
+        const auto &massN = registry.get<Components::Mass>(n);
+        const auto &sphTempN = registry.get<Components::SPHTemp>(n);
 
-        double dx = pos.x - pos_n.x;
-        double dy = pos.y - pos_n.y;
-        double r_sq = dx*dx + dy*dy;
-        if (r_sq < h_sq && r_sq > 1e-12) {
-            double r = std::sqrt(r_sq);
-            double rho_j = sphTemp_n.density;
-            double P_j = sphTemp_n.pressure;
+        double const dx = pos.x - posN.x;
+        double const dy = pos.y - posN.y;
+        double const rSq = dx*dx + dy*dy;
+        if (rSq < hSq && rSq > 1e-12) {
+            double const r = std::sqrt(rSq);
+            double const rhoJ = sphTempN.density;
+            double const pJ = sphTempN.pressure;
 
             // Pressure force
-            double gradW = gradW_spiky(r, h);
-            double common = mass_n.value * (P_i/(rho_i*rho_i) + P_j/(rho_j*rho_j));
+            double const gradW = gradW_spiky(r, h);
+            double const common = massN.value * (pI/(rhoI*rhoI) + pJ/(rhoJ*rhoJ));
 
-            double nx = dx / r;
-            double ny = dy / r;
+            double const nx = dx / r;
+            double const ny = dy / r;
 
-            acc_x -= common * gradW * nx;
-            acc_y -= common * gradW * ny;
+            accX -= common * gradW * nx;
+            accY -= common * gradW * ny;
 
             // Artificial viscosity
-            double vel_x = vel.x - vel_n.x;
-            double vel_y = vel.y - vel_n.y;
-            double mu = (h * (vel_x * nx + vel_y * ny)) / (r_sq + 0.01*h_sq);
+            double const velX = vel.x - velN.x;
+            double const velY = vel.y - velN.y;
+            double const mu = (h * (velX * nx + velY * ny)) / (rSq + 0.01*hSq);
             if (mu < 0.0) {
-                double c = std::max(c_s.value, c_s.value); // Just c_s for both
-                double rho_avg = 0.5*(rho_i + rho_j);
-                double visc = (-alpha * c * mu + beta * mu*mu) / rho_avg;
-                acc_x -= mass_n.value * visc * gradW * nx;
-                acc_y -= mass_n.value * visc * gradW * ny;
+                double const c = std::max(cS.value, cS.value); // Just c_s for both
+                double const rhoAvg = 0.5*(rhoI + rhoJ);
+                double const visc = (-alpha * c * mu + beta * mu*mu) / rhoAvg;
+                accX -= massN.value * visc * gradW * nx;
+                accY -= massN.value * visc * gradW * ny;
             }
         }
     }
 
     // Assign accelerations back to SPHTemp
-    auto &sphTemp_mut = registry.get<Components::SPHTemp>(e);
-    sphTemp_mut.acc_x += acc_x;
-    sphTemp_mut.acc_y += acc_y;
+    auto &sphTempMut = registry.get<Components::SPHTemp>(e);
+    sphTempMut.acc_x += accX;
+    sphTempMut.acc_y += accY;
 }
 
 // Kernel functions
 double SPHSystem::W_poly6(double r, double h) {
-    double alpha = 315.0/(64.0*M_PI*std::pow(h,9));
-    double diff = (h*h - r*r);
+    double const alpha = 315.0/(64.0*M_PI*std::pow(h,9));
+    double const diff = (h*h - r*r);
     return diff > 0.0 ? alpha * diff*diff*diff : 0.0;
 }
 
 double SPHSystem::gradW_spiky(double r, double h) {
-    double beta = -45.0/(M_PI*std::pow(h,6));
+    double const beta = -45.0/(M_PI*std::pow(h,6));
     return (r > 0 && r < h) ? beta * ( (h-r)*(h-r) ) : 0.0;
 }
 
 double SPHSystem::lapW_visc(double r, double h) {
-    double gamma = 45.0/(M_PI*std::pow(h,6));
+    double const gamma = 45.0/(M_PI*std::pow(h,6));
     return (r < h) ? gamma*(h - r) : 0.0;
 }
 
@@ -272,19 +273,20 @@ void SPHSystem::findNeighbors(entt::entity e, entt::registry &registry, const Gr
                               std::vector<entt::entity> &neighbors) {
     const auto &pos = registry.get<Components::Position>(e);
     const auto &hComp = registry.get<Components::SmoothingLength>(e);
-    double h = hComp.value;
+    double const h = hComp.value;
 
-    int cell_range = static_cast<int>(std::ceil(h / cell_size_meters));
+    int const cellRange = static_cast<int>(std::ceil(h / cellSizeMeters));
 
-    int x = static_cast<int>(pos.x / cell_size_meters);
-    int y = static_cast<int>(pos.y / cell_size_meters);
+    int const x = static_cast<int>(pos.x / cellSizeMeters);
+    int const y = static_cast<int>(pos.y / cellSizeMeters);
 
-    for (int dx = -cell_range; dx <= cell_range; dx++) {
-        for (int dy = -cell_range; dy <= cell_range; dy++) {
-            int nx = x + dx;
-            int ny = y + dy;
-            if (nx < 0 || nx >= grid_size || ny < 0 || ny >= grid_size) continue;
-            for (auto &p : grid[nx][ny].particles) {
+    for (int dx = -cellRange; dx <= cellRange; dx++) {
+        for (int dy = -cellRange; dy <= cellRange; dy++) {
+            int const nx = x + dx;
+            int const ny = y + dy;
+            if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) { continue;
+}
+            for (const auto &p : grid[nx][ny].particles) {
                 neighbors.push_back(p);
             }
         }

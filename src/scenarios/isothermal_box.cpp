@@ -15,7 +15,7 @@ ScenarioConfig IsothermalBoxScenario::getConfig() const {
     cfg.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
     cfg.TimeAcceleration = 1.0;
     cfg.GridSize = 50;
-    cfg.CellSizePixels = (double)SimulatorConstants::ScreenLength / cfg.GridSize;
+    cfg.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
 
     cfg.ParticleCount = 500;
     cfg.ParticleMassMean = 1e20;
@@ -38,24 +38,24 @@ ScenarioConfig IsothermalBoxScenario::getConfig() const {
 
 void IsothermalBoxScenario::createEntities(entt::registry &registry) const {
     std::cerr << "Creating Isothermal Box scenario...\n";
-    std::default_random_engine generator{static_cast<unsigned int>(time(0))};
+    std::default_random_engine generator{static_cast<unsigned int>(time(nullptr))};
 
-    double box_size = SimulatorConstants::UniverseSizeMeters;
-    double spacing = box_size / std::sqrt(SimulatorConstants::ParticleCount);
+    double const boxSize = SimulatorConstants::UniverseSizeMeters;
+    double const spacing = boxSize / std::sqrt(SimulatorConstants::ParticleCount);
 
-    double mass_mean = SimulatorConstants::ParticleMassMean;
-    std::normal_distribution<> massDist(mass_mean, mass_mean * 0.1);
+    double const massMean = SimulatorConstants::ParticleMassMean;
+    std::normal_distribution<> massDist(massMean, massMean * 0.1);
 
     int particles = 0;
-    int sideCount = (int)std::sqrt(SimulatorConstants::ParticleCount);
+    int const sideCount = static_cast<int>(std::sqrt(SimulatorConstants::ParticleCount));
     for (int i = 0; i < sideCount; ++i) {
         for (int j = 0; j < sideCount; ++j) {
-            double x_m = i * spacing + spacing * 0.5;
-            double y_m = j * spacing + spacing * 0.5;
+            double xM = i * spacing + spacing * 0.5;
+            double yM = j * spacing + spacing * 0.5;
 
-            if (x_m < box_size && y_m < box_size) {
+            if (xM < boxSize && yM < boxSize) {
                 auto entity = registry.create();
-                registry.emplace<Components::Position>(entity, x_m, y_m);
+                registry.emplace<Components::Position>(entity, xM, yM);
                 registry.emplace<Components::Velocity>(entity, 0.0, 0.0);
                 registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Gas);
                 registry.emplace<Components::Mass>(entity, massDist(generator));

@@ -1,4 +1,4 @@
-#define _USE_MATH_DEFINES
+#define USE_MATH_DEFINES
 #include "nbody/arch/native/renderer_native.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/components/basic.hpp"
@@ -14,23 +14,23 @@
 
 static sf::Color densityGrayscale(const Renderer::PixelProperties &props) {
     // Example color mapper if you want a density-based grayscale
-    const double max_density = 100.0;
-    double factor = (props.density / max_density);
-    if (factor > 1.0) factor = 1.0;
-    uint8_t intensity = static_cast<uint8_t>(std::round(factor * 255.0));
-    return sf::Color(intensity, intensity, intensity);
+    const double maxDensity = 100.0;
+    double factor = (props.density / maxDensity);
+    if (factor > 1.0) { factor = 1.0;
+}
+    auto const intensity = static_cast<uint8_t>(std::round(factor * 255.0));
+    return {intensity, intensity, intensity};
 }
 
 Renderer::Renderer(int screenWidth, int screenHeight)
-    : window()
-    , font()
-    , initialized(false)
+    : 
+     initialized(false)
     , screenWidth(screenWidth)
     , screenHeight(screenHeight)
 {
 }
 
-Renderer::~Renderer() {}
+Renderer::~Renderer() = default;
 
 bool Renderer::init() {
     // Create a window of the specified size
@@ -64,17 +64,17 @@ Renderer::aggregateParticlesByPixel(const entt::registry &registry)
     for (auto entity : view) {
         const auto &pos = view.get<Components::Position>(entity);
 
-        int px = static_cast<int>(SimulatorConstants::metersToPixels(pos.x));
-        int py = static_cast<int>(SimulatorConstants::metersToPixels(pos.y));
+        int const px = static_cast<int>(SimulatorConstants::metersToPixels(pos.x));
+        int const py = static_cast<int>(SimulatorConstants::metersToPixels(pos.y));
 
         // Only accumulate if within the simulation screen
-        if (px >= 0 && px < (int)SimulatorConstants::ScreenLength &&
-            py >= 0 && py < (int)SimulatorConstants::ScreenLength)
+        if (px >= 0 && px < static_cast<int>(SimulatorConstants::ScreenLength) &&
+            py >= 0 && py < static_cast<int>(SimulatorConstants::ScreenLength))
         {
-            auto *dens = registry.try_get<Components::Density>(entity);
-            auto *temp = registry.try_get<Components::Temperature>(entity);
-            auto *mass = registry.try_get<Components::Mass>(entity);
-            auto *sleep = registry.try_get<Components::Sleep>(entity);
+            const auto *dens = registry.try_get<Components::Density>(entity);
+            const auto *temp = registry.try_get<Components::Temperature>(entity);
+            const auto *mass = registry.try_get<Components::Mass>(entity);
+            const auto *sleep = registry.try_get<Components::Sleep>(entity);
 
             auto &pixProps = pixelMap[{px, py}];
             pixProps.add(dens, temp, mass, sleep);
@@ -108,8 +108,8 @@ void Renderer::renderParticles(const entt::registry &registry) {
         const auto &pos = view.get<Components::Position>(entity);
         const auto &shape = view.get<Components::Shape>(entity);
 
-        float px = (float)SimulatorConstants::metersToPixels(pos.x);
-        float py = (float)SimulatorConstants::metersToPixels(pos.y);
+        auto const px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
+        auto const py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
 
         // Determine fill color
         sf::Color fillColor;
@@ -119,7 +119,7 @@ void Renderer::renderParticles(const entt::registry &registry) {
             fillColor = sf::Color(colComp.r, colComp.g, colComp.b);
         } else {
             // Otherwise use the color mapper
-            std::pair<int,int> coords((int)px, (int)py);
+            std::pair<int,int> const coords(static_cast<int>(px), static_cast<int>(py));
             auto it = pixelMap.find(coords);
             if (it != pixelMap.end()) {
                 fillColor = mapper(it->second);
@@ -131,30 +131,30 @@ void Renderer::renderParticles(const entt::registry &registry) {
         // Angle from AngularPosition if present
         double angleDeg = 0.0;
         if (registry.any_of<Components::AngularPosition>(entity)) {
-            auto &angPos = registry.get<Components::AngularPosition>(entity);
+            const auto &angPos = registry.get<Components::AngularPosition>(entity);
             angleDeg = (angPos.angle * 180.0 / SimulatorConstants::Pi);
         }
 
         // If we have a PolygonShape, we handle it with sf::ConvexShape
-        if (auto *poly = registry.try_get<PolygonShape>(entity)) {
+        if (const auto *poly = registry.try_get<PolygonShape>(entity)) {
             sf::ConvexShape convex;
             convex.setPointCount(poly->vertices.size());
 
             // Convert angle to radians for rotation
-            double rad = angleDeg * (SimulatorConstants::Pi / 180.0);
-            double ca = std::cos(rad);
-            double sa = std::sin(rad);
+            double const rad = angleDeg * (SimulatorConstants::Pi / 180.0);
+            double const ca = std::cos(rad);
+            double const sa = std::sin(rad);
 
             // Each vertex is local to the entity, so rotate it, then offset by (px,py)
             for (size_t i = 0; i < poly->vertices.size(); ++i) {
                 const auto &v = poly->vertices[i];
                 // rotation
-                double rx = v.x * ca - v.y * sa;
-                double ry = v.x * sa + v.y * ca;
+                double const rx = v.x * ca - v.y * sa;
+                double const ry = v.x * sa + v.y * ca;
 
-                float vx_px = (float)SimulatorConstants::metersToPixels(pos.x + rx);
-                float vy_px = (float)SimulatorConstants::metersToPixels(pos.y + ry);
-                convex.setPoint(i, sf::Vector2f(vx_px, vy_px));
+                auto const vxPx = static_cast<float>(SimulatorConstants::metersToPixels(pos.x + rx));
+                auto const vyPx = static_cast<float>(SimulatorConstants::metersToPixels(pos.y + ry));
+                convex.setPoint(i, sf::Vector2f(vxPx, vyPx));
             }
 
             convex.setFillColor(fillColor);
@@ -163,7 +163,7 @@ void Renderer::renderParticles(const entt::registry &registry) {
         else {
             // Possibly circle or "square" (legacy usage for shape.type)
             if (shape.type == Components::ShapeType::Circle) {
-                float radiusPixels = (float)std::max(1.0, SimulatorConstants::metersToPixels(shape.size));
+                float const radiusPixels = static_cast<float>(std::max(1.0, SimulatorConstants::metersToPixels(shape.size)));
                 sf::CircleShape circle(radiusPixels);
                 circle.setOrigin(radiusPixels, radiusPixels);
                 circle.setPosition(px, py);
@@ -171,7 +171,7 @@ void Renderer::renderParticles(const entt::registry &registry) {
                 window.draw(circle);
 
                 // Add rotation indicator
-                float indicatorRadius = std::max(1.0f, radiusPixels * 0.2f);  // 20% of main circle
+                float const indicatorRadius = std::max(1.0F, radiusPixels * 0.2F);  // 20% of main circle
                 sf::CircleShape indicator(indicatorRadius);
                 // set the colour to a slightly darker shade than the main circle (don't go below zero)
                 indicator.setFillColor(sf::Color(std::max(0, fillColor.r - 50), std::max(0, fillColor.g - 50), std::max(0, fillColor.b - 50)));  // Dark indicator
@@ -183,20 +183,20 @@ void Renderer::renderParticles(const entt::registry &registry) {
                 }
                 
                 // Calculate indicator position: main circle center + rotated radius vector
-                float indicatorX = px + (radiusPixels - indicatorRadius * 2) * std::cos(angle);
-                float indicatorY = py + (radiusPixels - indicatorRadius * 2) * std::sin(angle);
+                float const indicatorX = px + (radiusPixels - indicatorRadius * 2) * std::cos(angle);
+                float const indicatorY = py + (radiusPixels - indicatorRadius * 2) * std::sin(angle);
                 
                 indicator.setOrigin(indicatorRadius, indicatorRadius);
                 indicator.setPosition(indicatorX, indicatorY);
                 window.draw(indicator);
             } else {
                 // Let's assume shape.type == Square or something similar
-                float halfSide = (float)SimulatorConstants::metersToPixels(shape.size);
-                float side = halfSide * 2.0f;
+                auto const halfSide = static_cast<float>(SimulatorConstants::metersToPixels(shape.size));
+                float const side = halfSide * 2.0F;
                 sf::RectangleShape rect(sf::Vector2f(side, side));
                 rect.setOrigin(halfSide, halfSide);
                 rect.setPosition(px, py);
-                rect.setRotation((float)angleDeg);
+                rect.setRotation(static_cast<float>(angleDeg));
                 rect.setFillColor(fillColor);
                 window.draw(rect);
             }
@@ -213,8 +213,8 @@ void Renderer::renderParticles(const entt::registry &registry) {
 
     // Draw a divider line on the right edge of the simulation region
     sf::Vertex line[2] = {
-        sf::Vertex(sf::Vector2f((float)SimulatorConstants::ScreenLength, 0.f), sf::Color::White),
-        sf::Vertex(sf::Vector2f((float)SimulatorConstants::ScreenLength, (float)screenHeight), sf::Color::White)
+        sf::Vertex(sf::Vector2f(static_cast<float>(SimulatorConstants::ScreenLength), 0.F), sf::Color::White),
+        sf::Vertex(sf::Vector2f(static_cast<float>(SimulatorConstants::ScreenLength), static_cast<float>(screenHeight)), sf::Color::White)
     };
     window.draw(line, 2, sf::Lines);
 }
@@ -232,7 +232,7 @@ void Renderer::renderText(const std::string &text, int x, int y, sf::Color color
     sfText.setString(text);
     sfText.setCharacterSize(16);
     sfText.setFillColor(color);
-    sfText.setPosition((float)x, (float)y);
+    sfText.setPosition(static_cast<float>(x), static_cast<float>(y));
     window.draw(sfText);
 }
 
@@ -248,27 +248,27 @@ void Renderer::renderUI(const entt::registry &registry,
     speedButtons.clear();
 
     // We'll place the UI to the right of the simulation area
-    int panelX = (int)SimulatorConstants::ScreenLength + 10;
+    int const panelX = static_cast<int>(SimulatorConstants::ScreenLength) + 10;
     int panelY = 10;
 
     // Pause/Play button
-    std::string pauseLabel = paused ? "Play" : "Pause";
+    std::string const pauseLabel = paused ? "Play" : "Pause";
     pausePlayButton.rect = sf::IntRect(panelX, panelY, 80, 30);
     pausePlayButton.label = pauseLabel;
     pausePlayButton.isSpecialButton = true;
     pausePlayButton.scenario = currentScenario;
 
     {
-        sf::RectangleShape shape(sf::Vector2f((float)pausePlayButton.rect.width,
-                                              (float)pausePlayButton.rect.height));
-        shape.setPosition((float)pausePlayButton.rect.left, (float)pausePlayButton.rect.top);
+        sf::RectangleShape shape(sf::Vector2f(static_cast<float>(pausePlayButton.rect.width),
+                                              static_cast<float>(pausePlayButton.rect.height)));
+        shape.setPosition(static_cast<float>(pausePlayButton.rect.left), static_cast<float>(pausePlayButton.rect.top));
         if (showPausePlayHighlight) {
             shape.setFillColor(sf::Color(200, 200, 0));
         } else {
             shape.setFillColor(sf::Color(100, 100, 100));
         }
         shape.setOutlineColor(sf::Color::White);
-        shape.setOutlineThickness(1.f);
+        shape.setOutlineThickness(1.F);
         window.draw(shape);
 
         renderText(pauseLabel, panelX + 5, panelY + 5);
@@ -282,9 +282,9 @@ void Renderer::renderUI(const entt::registry &registry,
     nextFrameButton.scenario = currentScenario;
 
     {
-        sf::RectangleShape shape(sf::Vector2f((float)nextFrameButton.rect.width,
-                                             (float)nextFrameButton.rect.height));
-        shape.setPosition((float)nextFrameButton.rect.left, (float)nextFrameButton.rect.top);
+        sf::RectangleShape shape(sf::Vector2f(static_cast<float>(nextFrameButton.rect.width),
+                                             static_cast<float>(nextFrameButton.rect.height)));
+        shape.setPosition(static_cast<float>(nextFrameButton.rect.left), static_cast<float>(nextFrameButton.rect.top));
         
         // Gray out the button if not paused
         if (!paused) {
@@ -293,7 +293,7 @@ void Renderer::renderUI(const entt::registry &registry,
             shape.setFillColor(sf::Color(100, 100, 100));
         }
         shape.setOutlineColor(sf::Color::White);
-        shape.setOutlineThickness(1.f);
+        shape.setOutlineThickness(1.F);
         window.draw(shape);
 
         renderText("Next Frame", panelX + 5, panelY + 5, paused ? sf::Color::White : sf::Color(150, 150, 150));
@@ -307,16 +307,16 @@ void Renderer::renderUI(const entt::registry &registry,
     resetButton.scenario = currentScenario;
 
     {
-        sf::RectangleShape shape(sf::Vector2f((float)resetButton.rect.width,
-                                              (float)resetButton.rect.height));
-        shape.setPosition((float)resetButton.rect.left, (float)resetButton.rect.top);
+        sf::RectangleShape shape(sf::Vector2f(static_cast<float>(resetButton.rect.width),
+                                              static_cast<float>(resetButton.rect.height)));
+        shape.setPosition(static_cast<float>(resetButton.rect.left), static_cast<float>(resetButton.rect.top));
         if (showResetHighlight) {
             shape.setFillColor(sf::Color(200, 200, 0));
         } else {
             shape.setFillColor(sf::Color(100, 100, 100));
         }
         shape.setOutlineColor(sf::Color::White);
-        shape.setOutlineThickness(1.f);
+        shape.setOutlineThickness(1.F);
         window.draw(shape);
 
         renderText("Reset", panelX + 5, panelY + 5);
@@ -341,7 +341,7 @@ void Renderer::renderUI(const entt::registry &registry,
         simState = &registry.get<Components::SimulatorState>(stView.front());
     }
 
-    for (auto& sp : speeds) {
+    for (const auto& sp : speeds) {
         UIButton btn;
         btn.rect = sf::IntRect(panelX, panelY, 60, 25);
         btn.label = sp.second;
@@ -349,18 +349,18 @@ void Renderer::renderUI(const entt::registry &registry,
         btn.scenario = currentScenario;
         btn.speedMultiplier = sp.first;
 
-        sf::RectangleShape shape(sf::Vector2f((float)btn.rect.width, (float)btn.rect.height));
-        shape.setPosition((float)btn.rect.left, (float)btn.rect.top);
+        sf::RectangleShape shape(sf::Vector2f(static_cast<float>(btn.rect.width), static_cast<float>(btn.rect.height)));
+        shape.setPosition(static_cast<float>(btn.rect.left), static_cast<float>(btn.rect.top));
 
         // highlight if current timeScale ~ sp.first
-        if (simState && std::fabs(simState->timeScale - sp.first) < 0.01) {
+        if ((simState != nullptr) && std::fabs(simState->timeScale - sp.first) < 0.01) {
             shape.setFillColor(sf::Color(0, 200, 0));
         } else {
             shape.setFillColor(sf::Color(100, 100, 100));
         }
 
         shape.setOutlineColor(sf::Color::White);
-        shape.setOutlineThickness(1.f);
+        shape.setOutlineThickness(1.F);
         window.draw(shape);
 
         renderText(btn.label, panelX + 5, panelY + 3);
@@ -380,7 +380,7 @@ void Renderer::renderUI(const entt::registry &registry,
     };
 
     colorSchemeButtons.clear();
-    for (auto& scheme : schemes) {
+    for (const auto& scheme : schemes) {
         UIButton btn;
         btn.rect = sf::IntRect(panelX, panelY, 100, 25);
         btn.label = scheme.second;
@@ -396,7 +396,7 @@ void Renderer::renderUI(const entt::registry &registry,
         }
 
         shape.setOutlineColor(sf::Color::White);
-        shape.setOutlineThickness(1.f);
+        shape.setOutlineThickness(1.F);
         window.draw(shape);
 
         renderText(btn.label, panelX + 5, panelY + 3);
@@ -417,7 +417,7 @@ void Renderer::renderUI(const entt::registry &registry,
     shape.setPosition(debugButton.rect.left, debugButton.rect.top);
     shape.setFillColor(debugVisualization ? sf::Color(0, 200, 0) : sf::Color(100, 100, 100));
     shape.setOutlineColor(sf::Color::White);
-    shape.setOutlineThickness(1.f);
+    shape.setOutlineThickness(1.F);
     window.draw(shape);
     
     renderText(debugButton.label, panelX + 5, panelY + 3);
@@ -428,7 +428,7 @@ void Renderer::renderUI(const entt::registry &registry,
     panelY += 30;
 
     // Build scenario buttons
-    for (auto &sc : scenarios) {
+    for (const auto &sc : scenarios) {
         UIButton btn;
         btn.rect = sf::IntRect(panelX, panelY, 150, 30);
         btn.label = sc.second;
@@ -436,11 +436,11 @@ void Renderer::renderUI(const entt::registry &registry,
         btn.scenario = sc.first;
         btn.speedMultiplier = 1.0;
 
-        bool isCurrent = (sc.first == currentScenario);
-        bool isHover   = (sc.first == highlightedScenario);
+        bool const isCurrent = (sc.first == currentScenario);
+        bool const isHover   = (sc.first == highlightedScenario);
 
-        sf::RectangleShape shape(sf::Vector2f((float)btn.rect.width, (float)btn.rect.height));
-        shape.setPosition((float)btn.rect.left, (float)btn.rect.top);
+        sf::RectangleShape shape(sf::Vector2f(static_cast<float>(btn.rect.width), static_cast<float>(btn.rect.height)));
+        shape.setPosition(static_cast<float>(btn.rect.left), static_cast<float>(btn.rect.top));
 
         if (isCurrent) {
             shape.setFillColor(sf::Color(0, 200, 0));
@@ -453,7 +453,7 @@ void Renderer::renderUI(const entt::registry &registry,
         }
 
         shape.setOutlineColor(sf::Color::White);
-        shape.setOutlineThickness(1.f);
+        shape.setOutlineThickness(1.F);
         window.draw(shape);
 
         renderText(btn.label, panelX + 5, panelY + 5);
@@ -468,43 +468,45 @@ sf::Color Renderer::defaultColorMapper(const PixelProperties& /* props */) {
 }
 
 sf::Color Renderer::sleepColorMapper(const PixelProperties& props) {
-    if (props.particle_count == 0) return sf::Color::White;
+    if (props.particle_count == 0) { return sf::Color::White;
+}
     return props.is_asleep ? sf::Color(200, 50, 50) : sf::Color(50, 200, 50);
 }
 
 sf::Color Renderer::temperatureColorMapper(const PixelProperties& props) {
-    if (props.particle_count == 0 || !props.has_temperature) 
-        return sf::Color(128, 128, 128); // grey for no temperature
+    if (props.particle_count == 0 || !props.has_temperature) { 
+        return {128, 128, 128}; // grey for no temperature
+}
     
     // Temperature range from cold (blue) to hot (red)
-    const double min_temp = 0.0;
-    const double max_temp = 100.0;
-    double t = (props.temperature - min_temp) / (max_temp - min_temp);
+    const double minTemp = 0.0;
+    const double maxTemp = 100.0;
+    double t = (props.temperature - minTemp) / (maxTemp - minTemp);
     t = std::max(0.0, std::min(1.0, t));
     
     // Blue (0,0,255) -> Red (255,0,0)
-    uint8_t r = static_cast<uint8_t>(255 * t);
-    uint8_t b = static_cast<uint8_t>(255 * (1.0 - t));
-    return sf::Color(r, 0, b);
+    auto const r = static_cast<uint8_t>(255 * t);
+    auto const b = static_cast<uint8_t>(255 * (1.0 - t));
+    return {r, 0, b};
 }
 
 void Renderer::renderContactDebug(const entt::registry &registry) {
     auto view = registry.view<RigidBodyCollision::ContactRef>();
     
-    const float LINE_THICKNESS = 3.0f;  
-    const float CONTACT_POINT_SIZE = 4.0f;
-    const float NORMAL_LENGTH = 30.0f;  
+    const float lineThickness = 3.0F;  
+    const float contactPointSize = 4.0F;
+    const float normalLength = 30.0F;  
     
     for (auto entity : view) {
         const auto& contact = view.get<RigidBodyCollision::ContactRef>(entity);
         
-        float px = (float)SimulatorConstants::metersToPixels(contact.contactPoint.x);
-        float py = (float)SimulatorConstants::metersToPixels(contact.contactPoint.y);
+        auto const px = static_cast<float>(SimulatorConstants::metersToPixels(contact.contactPoint.x));
+        auto const py = static_cast<float>(SimulatorConstants::metersToPixels(contact.contactPoint.y));
         
         // Draw contact point
-        sf::CircleShape contactPoint(CONTACT_POINT_SIZE);
+        sf::CircleShape contactPoint(contactPointSize);
         contactPoint.setFillColor(sf::Color::Yellow);
-        contactPoint.setPosition(px - CONTACT_POINT_SIZE, py - CONTACT_POINT_SIZE);
+        contactPoint.setPosition(px - contactPointSize, py - contactPointSize);
         window.draw(contactPoint);
 
         // Get colors of both shapes
@@ -520,29 +522,29 @@ void Renderer::renderContactDebug(const entt::registry &registry) {
         }
 
         // Darken the colors for the normal lines (multiply by 0.7)
-        sf::Color darkColorA(
-            static_cast<uint8_t>(colorA.r * 0.9f),
-            static_cast<uint8_t>(colorA.g * 0.9f),
-            static_cast<uint8_t>(colorA.b * 0.9f)
+        sf::Color const darkColorA(
+            static_cast<uint8_t>(colorA.r * 0.9F),
+            static_cast<uint8_t>(colorA.g * 0.9F),
+            static_cast<uint8_t>(colorA.b * 0.9F)
         );
-        sf::Color darkColorB(
-            static_cast<uint8_t>(colorB.r * 0.9f),
-            static_cast<uint8_t>(colorB.g * 0.9f),
-            static_cast<uint8_t>(colorB.b * 0.9f)
+        sf::Color const darkColorB(
+            static_cast<uint8_t>(colorB.r * 0.9F),
+            static_cast<uint8_t>(colorB.g * 0.9F),
+            static_cast<uint8_t>(colorB.b * 0.9F)
         );
 
         // Draw normal (using shape A's color)
-        sf::RectangleShape normal(sf::Vector2f(NORMAL_LENGTH, LINE_THICKNESS));
+        sf::RectangleShape normal(sf::Vector2f(normalLength, lineThickness));
         normal.setFillColor(darkColorA);
         normal.setPosition(px, py);
-        float angle = std::atan2(contact.normal.y, contact.normal.x) * 180.0f / (float)M_PI;
+        float const angle = std::atan2(contact.normal.y, contact.normal.x) * 180.0F / static_cast<float>(M_PI);
         normal.setRotation(angle);
         window.draw(normal);
 
         // Draw accumulated normal impulse (using shape B's color)
-        if (std::abs(contact.normalImpulseAccum) > 0.001f) {
-            float impulseLength = std::abs(contact.normalImpulseAccum) * 5.0f;
-            sf::RectangleShape normalImpulse(sf::Vector2f(impulseLength, LINE_THICKNESS));
+        if (std::abs(contact.normalImpulseAccum) > 0.001F) {
+            float const impulseLength = std::abs(contact.normalImpulseAccum) * 5.0F;
+            sf::RectangleShape normalImpulse(sf::Vector2f(impulseLength, lineThickness));
             normalImpulse.setFillColor(darkColorB);
             normalImpulse.setPosition(px, py);
             normalImpulse.setRotation(angle);
@@ -550,35 +552,35 @@ void Renderer::renderContactDebug(const entt::registry &registry) {
         }
 
         // Draw accumulated tangent impulse (blue line - keeping this distinct)
-        if (std::abs(contact.tangentImpulseAccum) > 0.001f) {
-            float impulseLength = std::abs(contact.tangentImpulseAccum) * 5.0f;
-            sf::RectangleShape tangentImpulse(sf::Vector2f(impulseLength, LINE_THICKNESS));
+        if (std::abs(contact.tangentImpulseAccum) > 0.001F) {
+            float const impulseLength = std::abs(contact.tangentImpulseAccum) * 5.0F;
+            sf::RectangleShape tangentImpulse(sf::Vector2f(impulseLength, lineThickness));
             tangentImpulse.setFillColor(sf::Color::Blue);
             tangentImpulse.setPosition(px, py);
-            tangentImpulse.setRotation(angle + 90.0f);
+            tangentImpulse.setRotation(angle + 90.0F);
             window.draw(tangentImpulse);
         }
     }
 }
 
 void Renderer::renderVelocityDebug(const entt::registry &registry) {
-    const float LINE_THICKNESS = 2.0f;  // Increased line thickness
+    const float lineThickness = 2.0F;  // Increased line thickness
     
     auto view = registry.view<Components::Position, Components::Velocity>();
     for (auto entity : view) {
         const auto& pos = view.get<Components::Position>(entity);
         const auto& vel = view.get<Components::Velocity>(entity);
 
-        float px = (float)SimulatorConstants::metersToPixels(pos.x);
-        float py = (float)SimulatorConstants::metersToPixels(pos.y);
+        auto const px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
+        auto const py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
         
         // Scale velocity for visualization
-        float velLength = std::sqrt(vel.x * vel.x + vel.y * vel.y) * 20.0f;  // Scale factor of 20
-        if (velLength > 0.1f) {  // Only draw if velocity is significant
-            sf::RectangleShape velLine(sf::Vector2f(velLength, LINE_THICKNESS));
+        float const velLength = std::sqrt(vel.x * vel.x + vel.y * vel.y) * 20.0F;  // Scale factor of 20
+        if (velLength > 0.1F) {  // Only draw if velocity is significant
+            sf::RectangleShape velLine(sf::Vector2f(velLength, lineThickness));
             velLine.setFillColor(sf::Color::Cyan);
             velLine.setPosition(px, py);
-            float angle = std::atan2(vel.y, vel.x) * 180.0f / (float)M_PI;
+            float const angle = std::atan2(vel.y, vel.x) * 180.0F / static_cast<float>(M_PI);
             velLine.setRotation(angle);
             window.draw(velLine);
         }
@@ -586,38 +588,39 @@ void Renderer::renderVelocityDebug(const entt::registry &registry) {
 }
 
 void Renderer::renderAngularDebug(const entt::registry &registry) {
-    const float LINE_THICKNESS = 2.0f;  // Increased line thickness
+    const float lineThickness = 2.0F;  // Increased line thickness
     
     auto view = registry.view<Components::Position, Components::AngularVelocity>();
     for (auto entity : view) {
         const auto& pos = view.get<Components::Position>(entity);
         const auto& angVel = view.get<Components::AngularVelocity>(entity);
 
-        if (std::abs(angVel.omega) > 0.1f) {  // Only draw if angular velocity is significant
-            float px = (float)SimulatorConstants::metersToPixels(pos.x);
-            float py = (float)SimulatorConstants::metersToPixels(pos.y);
+        if (std::abs(angVel.omega) > 0.1F) {  // Only draw if angular velocity is significant
+            auto const px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
+            auto const py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
             
-            float radius = 20.0f;  // Fixed radius for the arc
-            int segments = 16;  // Number of segments in the arc
-            float arcLength = std::min(static_cast<float>(std::abs(angVel.omega) * 0.5), static_cast<float>(M_PI));
+            float const radius = 20.0F;  // Fixed radius for the arc
+            int const segments = 16;  // Number of segments in the arc
+            float const arcLength = std::min(static_cast<float>(std::abs(angVel.omega) * 0.5), static_cast<float>(M_PI));
             
             std::vector<sf::Vertex> arc;
             for (int i = 0; i <= segments; ++i) {
-                float angle = (float)i / segments * arcLength;
-                if (angVel.omega < 0) angle = -angle;
+                float angle = static_cast<float>(i) / segments * arcLength;
+                if (angVel.omega < 0) { angle = -angle;
+}
                 
-                float x = px + radius * std::cos(angle);
-                float y = py + radius * std::sin(angle);
-                arc.push_back(sf::Vertex(sf::Vector2f(x, y), sf::Color::White));
+                float const x = px + radius * std::cos(angle);
+                float const y = py + radius * std::sin(angle);
+                arc.emplace_back(sf::Vector2f(x, y), sf::Color::White);
             }
             
             // Draw thicker lines by drawing multiple offset lines
-            for (float offset = -LINE_THICKNESS/2; offset <= LINE_THICKNESS/2; offset += 1.0f) {
+            for (float offset = -lineThickness/2; offset <= lineThickness/2; offset += 1.0F) {
                 std::vector<sf::Vertex> thickArc = arc;
                 for (auto& vertex : thickArc) {
                     vertex.position.y += offset;
                 }
-                window.draw(&thickArc[0], thickArc.size(), sf::LineStrip);
+                window.draw(thickArc.data(), thickArc.size(), sf::LineStrip);
             }
         }
     }
@@ -631,28 +634,28 @@ void Renderer::renderPolygonDebug(const entt::registry &registry) {
         const auto &angPos = view.get<Components::AngularPosition>(entity);
         
         // Get rotation
-        double rad = angPos.angle;
-        double ca = std::cos(rad);
-        double sa = std::sin(rad);
+        double const rad = angPos.angle;
+        double const ca = std::cos(rad);
+        double const sa = std::sin(rad);
         
         // Draw index number at each vertex
         for (size_t i = 0; i < poly.vertices.size(); i++) {
             const auto &v = poly.vertices[i];
             // Apply rotation and translation
-            double rx = v.x * ca - v.y * sa;
-            double ry = v.x * sa + v.y * ca;
+            double const rx = v.x * ca - v.y * sa;
+            double const ry = v.x * sa + v.y * ca;
             
-            float vx_px = (float)SimulatorConstants::metersToPixels(pos.x + rx);
-            float vy_px = (float)SimulatorConstants::metersToPixels(pos.y + ry);
+            auto const vxPx = static_cast<float>(SimulatorConstants::metersToPixels(pos.x + rx));
+            auto const vyPx = static_cast<float>(SimulatorConstants::metersToPixels(pos.y + ry));
             
             // Draw vertex index
-            std::string idx = std::to_string(i);
-            renderText(idx, (int)vx_px, (int)vy_px, sf::Color::Yellow);
+            std::string const idx = std::to_string(i);
+            renderText(idx, static_cast<int>(vxPx), static_cast<int>(vyPx), sf::Color::Yellow);
             
             // Optionally: Draw a small dot at vertex
-            sf::CircleShape dot(2.0f);
+            sf::CircleShape dot(2.0F);
             dot.setFillColor(sf::Color::Yellow);
-            dot.setPosition(vx_px - 2.0f, vy_px - 2.0f);
+            dot.setPosition(vxPx - 2.0F, vyPx - 2.0F);
             window.draw(dot);
         }
     }

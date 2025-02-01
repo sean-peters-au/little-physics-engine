@@ -51,14 +51,14 @@ class CoordinateSystem
    * @param pos Position in screen space (pixels)
    * @return Position in universe space (meters)
    */
-  Position screenToUniverse(Position pos);
+  Position screenToUniverse(Position pos) const;
 
   /**
    * @brief Converts universe coordinates to screen coordinates
    * @param pos Position in universe space (meters)
    * @return Position in screen space (pixels)
    */
-  Position universeToScreen(Position pos);
+  Position universeToScreen(Position pos) const;
 };
 
 #endif

@@ -27,14 +27,12 @@
 #include "nbody/core/profile.hpp"
 #include "nbody/math/vector_math.hpp"
 
-#define ENABLE_POSITION_SOLVER_DEBUG 0
-
 namespace RigidBodyCollision {
 
 // If you'd like to experiment with fewer or more passes
-static constexpr int POS_SOLVER_ITERATIONS = 3;
-static constexpr double BAUMGARTE_FACTOR = 0.2; 
-static constexpr double PENETRATION_SLOP = 0.001;
+static constexpr int PosSolverIterations = 3;
+static constexpr double BaumgarteFactor = 0.2; 
+static constexpr double PenetrationSlop = 0.001;
 
 /**
  * @brief Minimal data needed for position correction of a single contact point
@@ -99,7 +97,7 @@ static void gatherPositionData(
         bd.isSolid = false;
 
         // Next index
-        int idx = static_cast<int>(bodies.size());
+        int const idx = static_cast<int>(bodies.size());
         bodies.push_back(bd);
         indexMap[e] = idx;
         return idx;
@@ -107,7 +105,7 @@ static void gatherPositionData(
 
     // 1) Create a body slot for every entity that appears in collisions
     //    We also skip collisions if both are non-solid.
-    for (auto &c : manifold.collisions) {
+    for (const auto &c : manifold.collisions) {
         if (!registry.valid(c.a) || !registry.valid(c.b)) {
             continue; // skip
         }
@@ -125,8 +123,8 @@ static void gatherPositionData(
             continue; 
         }
         // We keep it
-        int iA = getBodyIndex(c.a);
-        int iB = getBodyIndex(c.b);
+        int const iA = getBodyIndex(c.a);
+        int const iB = getBodyIndex(c.b);
 
         PositionContact pc;
         pc.indexA = iA;
@@ -144,7 +142,7 @@ static void gatherPositionData(
 static void loadBodyData(entt::registry &registry, std::vector<BodyData> &bodies)
 {
     for (auto &bd : bodies) {
-        entt::entity e = bd.e;
+        entt::entity const e = bd.e;
         if (!registry.valid(e)) {
             bd.valid = false;
             continue;
@@ -162,7 +160,7 @@ static void loadBodyData(entt::registry &registry, std::vector<BodyData> &bodies
         bd.y = pos.y;
 
         // Load mass
-        double m = registry.get<Components::Mass>(e).value;
+        double const m = registry.get<Components::Mass>(e).value;
         bd.invMass = (m > 1e29) ? 0.0 : (1.0 / m);
 
         // Load angle if present
@@ -173,10 +171,10 @@ static void loadBodyData(entt::registry &registry, std::vector<BodyData> &bodies
             bd.angle = registry.get<Components::AngularPosition>(e).angle;
         }
         if (registry.any_of<Components::Inertia>(e)) {
-            double I = registry.get<Components::Inertia>(e).I;
-            if (I < 1e29 && I > 1e-12) {
+            double const i = registry.get<Components::Inertia>(e).I;
+            if (i < 1e29 && i > 1e-12) {
                 bd.canRotate = true;
-                bd.invI = (1.0 / I);
+                bd.invI = (1.0 / i);
             }
         }
         // Check if it's "solid"
@@ -193,7 +191,7 @@ static void loadBodyData(entt::registry &registry, std::vector<BodyData> &bodies
  */
 static void storeBodyData(entt::registry &registry, const std::vector<BodyData> &bodies)
 {
-    for (auto &bd : bodies) {
+    for (const auto &bd : bodies) {
         if (!bd.valid) {
             continue;
         }
@@ -222,73 +220,73 @@ static void storeBodyData(entt::registry &registry, const std::vector<BodyData> 
 static void solvePositionContactsOnce(std::vector<BodyData> &bodies,
                                     const std::vector<PositionContact> &contacts)
 {
-    for (auto &c : contacts) {
-        int iA = c.indexA;
-        int iB = c.indexB;
+    for (const auto &c : contacts) {
+        int const iA = c.indexA;
+        int const iB = c.indexB;
         if (iA < 0 || iB < 0) {
             continue;
         }
-        BodyData &A = bodies[iA];
-        BodyData &B = bodies[iB];
+        BodyData &a = bodies[iA];
+        BodyData &b = bodies[iB];
 
         // If either is invalid (missing mass or position), skip
-        if (!A.valid || !B.valid) {
+        if (!a.valid || !b.valid) {
             continue;
         }
         // If neither is solid, skip
-        if (!A.isSolid && !B.isSolid) {
+        if (!a.isSolid && !b.isSolid) {
             continue;
         }
 
-        double pen = c.penetration - PENETRATION_SLOP;
+        double const pen = c.penetration - PenetrationSlop;
         if (pen <= 0.0) {
             continue;
         }
 
         // normal from A to B
-        Vector n = c.normal.normalized();
-        double corr = BAUMGARTE_FACTOR * pen;
+        Vector const n = c.normal.normalized();
+        double const corr = BaumgarteFactor * pen;
 
-        double invM_A = A.invMass;
-        double invM_B = B.invMass;
-        double invI_A = A.invI;
-        double invI_B = B.invI;
+        double const invMA = a.invMass;
+        double const invMB = b.invMass;
+        double const invIA = a.invI;
+        double const invIB = b.invI;
 
         // Compute lever arms
-        double rxA = c.contactPoint.x - A.x;
-        double ryA = c.contactPoint.y - A.y;
-        double rxB = c.contactPoint.x - B.x;
-        double ryB = c.contactPoint.y - B.y;
-        Vector rA(rxA, ryA);
-        Vector rB(rxB, ryB);
+        double const rxA = c.contactPoint.x - a.x;
+        double const ryA = c.contactPoint.y - a.y;
+        double const rxB = c.contactPoint.x - b.x;
+        double const ryB = c.contactPoint.y - b.y;
+        Vector const rA(rxA, ryA);
+        Vector const rB(rxB, ryB);
 
         // Effective mass denominator = (invM_A + invM_B) + (rA x n)^2 * invI_A + ...
-        double rA_cross_n = rA.cross(n);
-        double rB_cross_n = rB.cross(n);
-        double denom = invM_A + invM_B
-                     + (rA_cross_n*rA_cross_n)*invI_A
-                     + (rB_cross_n*rB_cross_n)*invI_B;
+        double const rACrossN = rA.cross(n);
+        double const rBCrossN = rB.cross(n);
+        double const denom = invMA + invMB
+                     + (rACrossN*rACrossN)*invIA
+                     + (rBCrossN*rBCrossN)*invIB;
         if (denom < 1e-12) {
             continue;
         }
-        double scalar = corr / denom;
-        double dx = n.x * scalar;
-        double dy = n.y * scalar;
+        double const scalar = corr / denom;
+        double const dx = n.x * scalar;
+        double const dy = n.y * scalar;
 
         // Move A opposite the normal
-        A.x -= dx * invM_A;
-        A.y -= dy * invM_A;
-        if (A.canRotate) {
-            double rotA = rA_cross_n * scalar * invI_A;
-            A.angle -= rotA;
+        a.x -= dx * invMA;
+        a.y -= dy * invMA;
+        if (a.canRotate) {
+            double const rotA = rACrossN * scalar * invIA;
+            a.angle -= rotA;
         }
 
         // Move B along the normal
-        B.x += dx * invM_B;
-        B.y += dy * invM_B;
-        if (B.canRotate) {
-            double rotB = rB_cross_n * scalar * invI_B;
-            B.angle += rotB;
+        b.x += dx * invMB;
+        b.y += dy * invMB;
+        if (b.canRotate) {
+            double const rotB = rBCrossN * scalar * invIB;
+            b.angle += rotB;
         }
     }
 }
@@ -316,7 +314,7 @@ void PositionSolver::positionalSolver(entt::registry &registry, const CollisionM
     loadBodyData(registry, bodies);
 
     // Perform a few solver iterations
-    for (int i = 0; i < POS_SOLVER_ITERATIONS; i++) {
+    for (int i = 0; i < PosSolverIterations; i++) {
         solvePositionContactsOnce(bodies, contacts);
     }
 

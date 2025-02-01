@@ -4,9 +4,10 @@
  */
 
 #include "nbody/core/profile.hpp"
-#include <iostream>
-#include <iomanip>
 #include <algorithm>
+#include <iomanip>
+#include <iostream>
+#include <utility>
 
 namespace Profiling {
 
@@ -71,11 +72,11 @@ void Profiler::endSection(const std::string& name) {
         return;
     }
 
-    auto end_time = Clock::now();
+    auto endTime = Clock::now();
     auto& section = instance.sections[name];
 
     // Calculate how long this scope took
-    Duration duration = end_time - section.start_time;
+    Duration const duration = endTime - section.start_time;
 
     // Update total time, self time, call count, min/max
     section.profile_data.total_time += duration;
@@ -113,31 +114,32 @@ void Profiler::printStats() {
     }
 
     // Compute total program time by summing top-level nodes
-    Duration total_time{0};
+    Duration totalTime{0};
     for (auto& r : roots) {
-        total_time += instance.sections[r].profile_data.total_time;
+        totalTime += instance.sections[r].profile_data.total_time;
     }
 
     // Print each root node (with the rest of the hierarchy inside)
     for (size_t i = 0; i < roots.size(); ++i) {
-        bool is_last = (i == roots.size() - 1);
-        printNode(roots[i], "", is_last, total_time);
+        bool const isLast = (i == roots.size() - 1);
+        printNode(roots[i], "", isLast, totalTime);
     }
 }
 
 void Profiler::printNode(const std::string& name,
                          const std::string& prefix,
-                         bool is_last,
-                         Duration total_program_time)
+                         bool isLast,
+                         Duration totalProgramTime)
 {
     const auto& instance = getInstance();
     const auto& pd       = instance.sections.at(name).profile_data;
 
     // Compute percentages (avoid div by zero)
-    double totalPercent = 0.0, selfPercent = 0.0;
-    if (total_program_time.count() > 0) {
-        totalPercent = (pd.total_time.count() * 100.0) / total_program_time.count();
-        selfPercent  = (pd.self_time.count()  * 100.0) / total_program_time.count();
+    double totalPercent = 0.0;
+    double selfPercent = 0.0;
+    if (totalProgramTime.count() > 0) {
+        totalPercent = (pd.total_time.count() * 100.0) / totalProgramTime.count();
+        selfPercent  = (pd.self_time.count()  * 100.0) / totalProgramTime.count();
     }
 
     // Convert total_time to ms for printing
@@ -145,7 +147,7 @@ void Profiler::printNode(const std::string& name,
     // auto selfMs  = std::chrono::duration_cast<std::chrono::milliseconds>(pd.self_time).count();
     // If you want to print self time in ms too, uncomment above and adapt printing.
 
-    std::cout << prefix << (is_last ? "└── " : "├── ")
+    std::cout << prefix << (isLast ? "└── " : "├── ")
               << name << " [" << pd.call_count << " calls] "
               << totalMs << "ms (total: "
               << std::fixed << std::setprecision(2) << totalPercent << "%, "
@@ -153,10 +155,10 @@ void Profiler::printNode(const std::string& name,
 
     // Print children
     for (size_t i = 0; i < pd.children.size(); ++i) {
-        bool childLast = (i == pd.children.size() - 1);
+        bool const childLast = (i == pd.children.size() - 1);
         // Next prefix includes vertical line or blank space
-        std::string childPrefix = prefix + (is_last ? "    " : "│   ");
-        printNode(pd.children[i], childPrefix, childLast, total_program_time);
+        std::string const childPrefix = prefix + (isLast ? "    " : "│   ");
+        printNode(pd.children[i], childPrefix, childLast, totalProgramTime);
     }
 }
 
@@ -167,8 +169,8 @@ void Profiler::reset() {
 
 // ------------------ ScopedProfiler RAII Wrapper ------------------
 
-ScopedProfiler::ScopedProfiler(const std::string& name)
-    : section_name(name)
+ScopedProfiler::ScopedProfiler(std::string  name)
+    : section_name(std::move(name))
 {
     Profiler::startSection(section_name);
 }

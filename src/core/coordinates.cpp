@@ -31,24 +31,24 @@ void CoordinateSystem::moveRight() {
     this->screenPos.x -= 10;  // Pan right in screen space
 }
 
-Position CoordinateSystem::screenToUniverse(Position pos) {
+Position CoordinateSystem::screenToUniverse(Position pos) const {
     // Convert screen coordinates to meters:
     // 1. Offset by screen pan position
     // 2. Center on screen
     // 3. Convert to meters using scale factor
-    return Position(
+    return {
         SimulatorConstants::pixelsToMeters(pos.x - screenPos.x + SimulatorConstants::ScreenLength / 2),
         SimulatorConstants::pixelsToMeters(pos.y - screenPos.y + SimulatorConstants::ScreenLength / 2)
-    );
+    };
 }
 
-Position CoordinateSystem::universeToScreen(Position pos) {
+Position CoordinateSystem::universeToScreen(Position pos) const {
     // Convert universe coordinates to screen space:
     // 1. Convert from meters to pixels
     // 2. Center on screen
     // 3. Apply screen pan offset
-    return Position(
+    return {
         SimulatorConstants::metersToPixels(pos.x) - SimulatorConstants::ScreenLength / 2 + screenPos.x,
         SimulatorConstants::metersToPixels(pos.y) - SimulatorConstants::ScreenLength / 2 + screenPos.y
-    );
+    };
 }

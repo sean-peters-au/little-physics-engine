@@ -18,8 +18,8 @@ public:
     void createEntities(entt::registry &registry) const override;
 
 private:
-    void createCentralBody(entt::registry &registry) const;
-    void createKeplerianDisk(entt::registry &registry) const;
+    static void createCentralBody(entt::registry &registry) ;
+    static void createKeplerianDisk(entt::registry &registry) ;
 };
 
 #endif // NBODY_KEPLERIAN_DISK_SCENARIO_HPP

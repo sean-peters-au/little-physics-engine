@@ -16,7 +16,7 @@
 static std::vector<std::pair<SimulatorConstants::SimulationType, std::string>> buildScenarioList() {
     std::vector<std::pair<SimulatorConstants::SimulationType, std::string>> scenarios;
     for (auto s : SimulatorConstants::getAllScenarios()) {
-        scenarios.push_back({s, SimulatorConstants::getScenarioName(s)});
+        scenarios.emplace_back(s, SimulatorConstants::getScenarioName(s));
     }
     return scenarios;
 }
@@ -48,7 +48,7 @@ static void updateSimulatorState(ECSSimulator& simulator,
     simulator.reset();
 }
 
-int main(int, char**) {
+int main(int /*unused*/, char** /*unused*/) {
     // Choose an initial scenario from your enum
     auto initialScenario = SimulatorConstants::SimulationType::KEPLERIAN_DISK;
 
@@ -72,14 +72,14 @@ int main(int, char**) {
     simulator.init();
 
     // Desired FPS
-    const int FPS = 120;
-    const int frameDelay = 1000 / FPS; // in ms
+    const int fps = 120;
+    const int frameDelay = 1000 / fps; // in ms
 
-    sf::Clock fpsClock;      // tracks time for fps calc
+    sf::Clock const fpsClock;      // tracks time for fps calc
     sf::Clock frameClock;    // tracks dt each frame
-    float avgFPS = 0.0f;
+    float avgFPS = 0.0F;
     int frameCount = 0;
-    float fpsTimer = 0.0f;   // accumulates time for 1-second check
+    float fpsTimer = 0.0F;   // accumulates time for 1-second check
 
     bool running = true;
     bool paused = false;
@@ -88,21 +88,19 @@ int main(int, char**) {
     // For UI highlights
     bool highlightPausePlay = false;
     bool highlightReset = false;
-    SimulatorConstants::SimulationType highlightedScenario =
-        (SimulatorConstants::SimulationType)-1;
-
-    auto lastProfileTime = std::chrono::steady_clock::now();
+    auto highlightedScenario =
+        static_cast<SimulatorConstants::SimulationType>(-1);
 
     while (running) {
         // Poll events
         sf::RenderWindow& window = renderer.getWindow();
-        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-        int mouseX = mousePos.x;
-        int mouseY = mousePos.y;
+        sf::Vector2i const mousePos = sf::Mouse::getPosition(window);
+        int const mouseX = mousePos.x;
+        int const mouseY = mousePos.y;
 
         highlightPausePlay = false;
         highlightReset = false;
-        highlightedScenario = (SimulatorConstants::SimulationType)-1;
+        highlightedScenario = static_cast<SimulatorConstants::SimulationType>(-1);
 
         // For "hover" effect on pause/play
         if (mouseX >= renderer.pausePlayButton.rect.left &&
@@ -183,12 +181,13 @@ int main(int, char**) {
                 // Color scheme buttons
                 for (auto& btn : renderer.colorSchemeButtons) {
                     if (btn.rect.contains(sf::Vector2i(mouseX, mouseY))) {
-                        if (btn.label == "Default") 
+                        if (btn.label == "Default") { 
                             renderer.setColorScheme(Renderer::ColorScheme::DEFAULT);
-                        else if (btn.label == "Sleep") 
+                        } else if (btn.label == "Sleep") { 
                             renderer.setColorScheme(Renderer::ColorScheme::SLEEP);
-                        else if (btn.label == "Temperature") 
+                        } else if (btn.label == "Temperature") { 
                             renderer.setColorScheme(Renderer::ColorScheme::TEMPERATURE);
+}
                         break;
                     }
                 }
@@ -208,7 +207,8 @@ int main(int, char**) {
             else if (event.type == sf::Event::KeyPressed) {
                 // Keyboard shortcuts
                 if (event.key.code == sf::Keyboard::Space) {  // Space for next frame
-                    if (paused) stepFrame = true;
+                    if (paused) { stepFrame = true;
+}
                 }
                 else if (event.key.code == sf::Keyboard::P) {  // P for pause
                     paused = !paused;
@@ -246,13 +246,13 @@ int main(int, char**) {
         renderer.renderParticles(simulator.getRegistry());
 
         // Frame-based FPS measure
-        float dt = frameClock.restart().asMilliseconds();
+        float const dt = frameClock.restart().asMilliseconds();
         fpsTimer += dt;
         frameCount++;
-        if (fpsTimer >= 1000.0f) {
-            avgFPS = float(frameCount) / (fpsTimer / 1000.0f);
+        if (fpsTimer >= 1000.0F) {
+            avgFPS = static_cast<float>(frameCount) / (fpsTimer / 1000.0F);
             frameCount = 0;
-            fpsTimer = 0.0f;
+            fpsTimer = 0.0F;
         }
 
         renderer.renderFPS(avgFPS);

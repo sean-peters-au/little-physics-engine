@@ -218,6 +218,6 @@ private:
     /**
      * @brief Builds a map from pixel -> aggregated properties
      */
-    std::unordered_map<std::pair<int,int>, PixelProperties, PixelCoordHash>
+    static std::unordered_map<std::pair<int,int>, PixelProperties, PixelCoordHash>
     aggregateParticlesByPixel(const entt::registry& registry);
 };

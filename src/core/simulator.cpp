@@ -40,7 +40,7 @@ ECSSimulator::ECSSimulator(CoordinateSystem* /*coordSystem*/) {
 void ECSSimulator::setScenario(SimulatorConstants::SimulationType scenario) {
     // We'll store the scenario type in a unique_ptr. Let's create it in reset()
     // so this function might just remember it, or do nothing:
-    std::cerr << "Scenario set to: " << (int)scenario << std::endl;
+    std::cerr << "Scenario set to: " << static_cast<int>(scenario) << std::endl;
 
     // For now, do nothing. We actually do the real scenario switching in reset().
 }
@@ -62,7 +62,7 @@ void ECSSimulator::reset() {
     // Suppose we have a local "scenario" variable in setScenario(), or we just pick one here:
     // For demonstration, let's say we always do RANDOM_POLYGONS:
     // In practice, store your scenario choice in a member variable or pass it in
-    SimulatorConstants::SimulationType chosen = SimulatorConstants::SimulationType::RANDOM_POLYGONS;
+    SimulatorConstants::SimulationType const chosen = SimulatorConstants::SimulationType::RANDOM_POLYGONS;
 
     // Reset global constants to default
     SimulatorConstants::initializeConstants(chosen);
@@ -82,7 +82,7 @@ void ECSSimulator::reset() {
     }
 
     // Grab config from scenario
-    ScenarioConfig cfg = scenarioPtr->getConfig();
+    ScenarioConfig const cfg = scenarioPtr->getConfig();
     // Apply config to SimulatorConstants
     applyScenarioConfig(cfg);
 

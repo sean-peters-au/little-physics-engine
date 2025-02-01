@@ -10,7 +10,7 @@ void MovementSystem::update(entt::registry &registry) {
     PROFILE_SCOPE("MovementSystem");
 
     // Time step in real seconds (with all time scaling)
-    double dt = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
+    double const dt = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
 
     // View of entities with Position and Velocity
     auto view = registry.view<Components::Position, Components::Velocity>();

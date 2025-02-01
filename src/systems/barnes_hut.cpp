@@ -25,7 +25,7 @@ void BarnesHutSystem::update(entt::registry& registry) {
     const auto& state = registry.get<Components::SimulatorState>(sv.front());
     
     auto root = buildTree(registry);
-    auto after_build = Clock::now();
+    auto afterBuild = Clock::now();
     
     auto view = registry.view<Components::Position, Components::Velocity, Components::Mass>();
     for (auto [entity, pos, vel, mass] : view.each()) {
@@ -48,7 +48,8 @@ std::unique_ptr<BarnesHutSystem::QuadTreeNode> BarnesHutSystem::buildTree(const 
     auto view = registry.view<Components::Position, Components::Mass>();
     int count=0;
     for (auto [entity, pos, mass] : view.each()) {
-        if (registry.all_of<Components::Boundary>(entity)) continue;
+        if (registry.all_of<Components::Boundary>(entity)) { continue;
+}
         if (pos.x >= 0 && pos.x < SimulatorConstants::UniverseSizeMeters &&
             pos.y >= 0 && pos.y < SimulatorConstants::UniverseSizeMeters)
         {
@@ -75,20 +76,20 @@ void BarnesHutSystem::insertParticle(QuadTreeNode* node, entt::entity entity,
     }
 
     if (node->is_leaf) {
-        auto old_entity = node->particle;
-        auto& old_pos = node->registry->get<Components::Position>(old_entity);
-        auto& old_mass = node->registry->get<Components::Mass>(old_entity);
+        auto oldEntity = node->particle;
+        const auto& oldPos = node->registry->get<Components::Position>(oldEntity);
+        const auto& oldMass = node->registry->get<Components::Mass>(oldEntity);
 
         subdivide(node);
-        insertParticle(node, old_entity, old_pos, old_mass);
+        insertParticle(node, oldEntity, oldPos, oldMass);
         insertParticle(node, entity, pos, mass);
     } else {
-        double new_total_mass = node->total_mass + mass.value;
-        node->center_of_mass_x = (node->center_of_mass_x * node->total_mass + pos.x * mass.value) / new_total_mass;
-        node->center_of_mass_y = (node->center_of_mass_y * node->total_mass + pos.y * mass.value) / new_total_mass;
-        node->total_mass = new_total_mass;
+        double const newTotalMass = node->total_mass + mass.value;
+        node->center_of_mass_x = (node->center_of_mass_x * node->total_mass + pos.x * mass.value) / newTotalMass;
+        node->center_of_mass_y = (node->center_of_mass_y * node->total_mass + pos.y * mass.value) / newTotalMass;
+        node->total_mass = newTotalMass;
         
-        int quadrant = node->getQuadrant(pos.x, pos.y);
+        int const quadrant = node->getQuadrant(pos.x, pos.y);
         QuadTreeNode* child = nullptr;
         switch (quadrant) {
             case 0: child = node->nw.get(); break;
@@ -96,39 +97,39 @@ void BarnesHutSystem::insertParticle(QuadTreeNode* node, entt::entity entity,
             case 2: child = node->sw.get(); break;
             case 3: child = node->se.get(); break;
         }
-        if (child) {  
+        if (child != nullptr) {  
             insertParticle(child, entity, pos, mass);
         }
     }
 }
 
 void BarnesHutSystem::subdivide(QuadTreeNode* node) {
-    double half_size = node->boundary_size / 2;
+    double const halfSize = node->boundary_size / 2;
     node->is_leaf = false;
 
     node->nw = std::make_unique<QuadTreeNode>();
     node->nw->registry = node->registry;  
     node->nw->boundary_x = node->boundary_x;
     node->nw->boundary_y = node->boundary_y;
-    node->nw->boundary_size = half_size;
+    node->nw->boundary_size = halfSize;
     
     node->ne = std::make_unique<QuadTreeNode>();
     node->ne->registry = node->registry; 
-    node->ne->boundary_x = node->boundary_x + half_size;
+    node->ne->boundary_x = node->boundary_x + halfSize;
     node->ne->boundary_y = node->boundary_y;
-    node->ne->boundary_size = half_size;
+    node->ne->boundary_size = halfSize;
     
     node->sw = std::make_unique<QuadTreeNode>();
     node->sw->registry = node->registry;  
     node->sw->boundary_x = node->boundary_x;
-    node->sw->boundary_y = node->boundary_y + half_size;
-    node->sw->boundary_size = half_size;
+    node->sw->boundary_y = node->boundary_y + halfSize;
+    node->sw->boundary_size = halfSize;
     
     node->se = std::make_unique<QuadTreeNode>();
     node->se->registry = node->registry;  
-    node->se->boundary_x = node->boundary_x + half_size;
-    node->se->boundary_y = node->boundary_y + half_size;
-    node->se->boundary_size = half_size;
+    node->se->boundary_x = node->boundary_x + halfSize;
+    node->se->boundary_y = node->boundary_y + halfSize;
+    node->se->boundary_size = halfSize;
 }
 
 void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
@@ -137,26 +138,28 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
                                    Components::Velocity& vel,
                                    const Components::Mass& mass,
                                    const Components::SimulatorState& state) {
-    if (!node || node->total_mass == 0.0) return;
+    if ((node == nullptr) || node->total_mass == 0.0) { return;
+}
     
-    double dx = pos.x - node->center_of_mass_x;
-    double dy = pos.y - node->center_of_mass_y;
-    double dist_sq = dx*dx + dy*dy + SimulatorConstants::GravitationalSoftener * SimulatorConstants::GravitationalSoftener;
-    double dist = std::sqrt(dist_sq);
+    double const dx = pos.x - node->center_of_mass_x;
+    double const dy = pos.y - node->center_of_mass_y;
+    double const distSq = dx*dx + dy*dy + SimulatorConstants::GravitationalSoftener * SimulatorConstants::GravitationalSoftener;
+    double const dist = std::sqrt(distSq);
 
-    if (node->is_leaf || (node->boundary_size * node->boundary_size / dist_sq < THETA * THETA)) {
-        if (node->is_leaf && node->particle == entity) return;
+    if (node->is_leaf || (node->boundary_size * node->boundary_size / distSq < THETA * THETA)) {
+        if (node->is_leaf && node->particle == entity) { return;
+}
 
-        double force = SimulatorConstants::RealG * node->total_mass * mass.value / dist_sq;
+        double const force = SimulatorConstants::RealG * node->total_mass * mass.value / distSq;
         DebugStats::updateForce(force);
         
-        double acc_x = force * (dx / (mass.value * dist));
-        double acc_y = force * (dy / (mass.value * dist));
+        double const accX = force * (dx / (mass.value * dist));
+        double const accY = force * (dy / (mass.value * dist));
         
-        double dt = SimulatorConstants::SecondsPerTick * state.baseTimeAcceleration * state.timeScale;
+        double const dt = SimulatorConstants::SecondsPerTick * state.baseTimeAcceleration * state.timeScale;
         
-        vel.x += acc_x * dt;
-        vel.y += acc_y * dt;
+        vel.x += accX * dt;
+        vel.y += accY * dt;
     } else {
         calculateForce(node->nw.get(), entity, pos, vel, mass, state);
         calculateForce(node->ne.get(), entity, pos, vel, mass, state);

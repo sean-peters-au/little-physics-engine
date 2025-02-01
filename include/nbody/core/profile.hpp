@@ -123,7 +123,7 @@ public:
     /**
      * @brief Constructor: immediately starts timing the given scope.
      */
-    explicit ScopedProfiler(const std::string& name);
+    explicit ScopedProfiler(std::string  name);
 
     /**
      * @brief Destructor: ends the scope’s timing.

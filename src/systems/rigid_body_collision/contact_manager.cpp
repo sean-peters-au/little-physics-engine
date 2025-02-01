@@ -12,9 +12,6 @@
 #include <utility>
 #include <cmath>
 
-#define ENABLE_CONTACT_MANAGER_DEBUG 0
-#define DEBUG(x) do { if (ENABLE_CONTACT_MANAGER_DEBUG) { std::cout << x; } } while(0)
-
 namespace RigidBodyCollision {
 
 /**
@@ -126,7 +123,7 @@ void ContactManager::updateContacts(const CollisionManifold &manifold)
     // 2) Build a temporary set of active keys from the new collisions
     std::unordered_map<ContactKey, bool, ContactKeyHash> activeKeys;
 
-    for (auto &col : manifold.collisions) {
+    for (const auto &col : manifold.collisions) {
         // Sort the pair
         ContactKey key;
         key.sortedPair = sortEntityPair(col.a, col.b);
@@ -194,7 +191,7 @@ std::vector<ContactManifoldRef> &ContactManager::getManifoldsForSolver()
         auto wIt = m_data->persistentManifolds.find(key);
         if (wIt == m_data->persistentManifolds.end()) {
             // Not found, create blank
-            WarmStartManifoldData blank;
+            WarmStartManifoldData const blank;
             m_data->persistentManifolds[key] = blank;
             wIt = m_data->persistentManifolds.find(key);
         }
@@ -202,7 +199,7 @@ std::vector<ContactManifoldRef> &ContactManager::getManifoldsForSolver()
 
         // If the normal changed drastically from old frame, we can reset
         if (manifoldData.hasOldNormal) {
-            double dot = manifoldRef.normal.dotProduct(manifoldData.oldNormal);
+            double const dot = manifoldRef.normal.dotProduct(manifoldData.oldNormal);
             const double threshold = 0.95;
             if (dot < threshold) {
                 // reset
@@ -211,7 +208,7 @@ std::vector<ContactManifoldRef> &ContactManager::getManifoldsForSolver()
         }
 
         // Build each contact point
-        for (auto &cinfo : cols) {
+        for (const auto &cinfo : cols) {
             ContactRef c;
             c.a = cinfo.a;
             c.b = cinfo.b;
@@ -223,9 +220,9 @@ std::vector<ContactManifoldRef> &ContactManager::getManifoldsForSolver()
             bool foundPrev = false;
             for (auto &cpd : manifoldData.contactPoints) {
                 // If same contact point (by position) or close enough, reuse accum
-                double dx = cinfo.contactPoint.x - cpd.contactPoint.x;
-                double dy = cinfo.contactPoint.y - cpd.contactPoint.y;
-                double dist2 = dx*dx + dy*dy;
+                double const dx = cinfo.contactPoint.x - cpd.contactPoint.x;
+                double const dy = cinfo.contactPoint.y - cpd.contactPoint.y;
+                double const dist2 = dx*dx + dy*dy;
                 if (dist2 < 1e-6) { 
                     // We'll use the previously accumulated impulses
                     c.normalImpulseAccum  = cpd.normalImpulseAccum;
@@ -254,7 +251,7 @@ std::vector<ContactManifoldRef> &ContactManager::getManifoldsForSolver()
  */
 void ContactManager::applySolverResults(const std::vector<ContactManifoldRef> &manifolds)
 {
-    for (auto &mref : manifolds) {
+    for (const auto &mref : manifolds) {
         // Build a key from the manifold
         ContactKey key;
         key.sortedPair = sortEntityPair(mref.a, mref.b);
@@ -265,7 +262,7 @@ void ContactManager::applySolverResults(const std::vector<ContactManifoldRef> &m
         wsd.contactPoints.clear();
 
         // Store all contact points with updated impulses
-        for (auto &c : mref.contacts) {
+        for (const auto &c : mref.contacts) {
             ContactPointData cpd;
             cpd.contactPoint = c.contactPoint;
             cpd.normalImpulseAccum = c.normalImpulseAccum;

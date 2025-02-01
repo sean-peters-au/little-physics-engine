@@ -18,7 +18,7 @@
  * @note The normal is always oriented to point away from the origin
  */
 static double edgeDistance(const Vector &a, const Vector &b, Vector &normal) {
-    Vector e = b - a;
+    Vector const e = b - a;
     normal = Vector(e.y, -e.x).normalized();
     double dist = normal.dotProduct(a);
     if (dist < 0) {
@@ -29,7 +29,7 @@ static double edgeDistance(const Vector &a, const Vector &b, Vector &normal) {
     return dist;
 }
 
-std::optional<EPAResult> EPA(const ShapeData &A, const ShapeData &B, const Simplex &simplex) {
+std::optional<EPAResult> EPA(const ShapeData &a, const ShapeData &b, const Simplex &simplex) {
     std::vector<Vector> poly = simplex.points;
 
     // Expect a triangle from GJK if intersection found
@@ -37,9 +37,9 @@ std::optional<EPAResult> EPA(const ShapeData &A, const ShapeData &B, const Simpl
 
     // Check for degenerate polygon (collinear points)
     {
-        Vector ab = poly[1] - poly[0];
-        Vector ac = poly[2] - poly[0];
-        double crossVal = ab.cross(ac);
+        Vector const ab = poly[1] - poly[0];
+        Vector const ac = poly[2] - poly[0];
+        double const crossVal = ab.cross(ac);
         if (std::fabs(crossVal) < 1e-14) {
             std::cerr << "Warning: EPA degenerate simplex (collinear points). Returning no penetration." << std::endl;
             return std::nullopt;
@@ -48,24 +48,24 @@ std::optional<EPAResult> EPA(const ShapeData &A, const ShapeData &B, const Simpl
 
     // Ensure CCW order
     {
-        double crossVal = (poly[1].x - poly[0].x)*(poly[2].y - poly[0].y)
+        double const crossVal = (poly[1].x - poly[0].x)*(poly[2].y - poly[0].y)
                         - (poly[1].y - poly[0].y)*(poly[2].x - poly[0].x);
         if (crossVal < 0) {
             std::reverse(poly.begin(), poly.end());
         }
     }
 
-    const int MAX_EPA_ITER = 100;
-    for (int iter=0; iter<MAX_EPA_ITER; iter++) {
+    const int maxEpaIter = 100;
+    for (int iter=0; iter<maxEpaIter; iter++) {
         double closestDist = std::numeric_limits<double>::max();
         int closestEdge = -1;
         Vector edgeNormal;
 
         // Find closest edge to origin
-        for (int i=0; i<(int)poly.size(); i++) {
-            int j=(i+1)%poly.size();
+        for (int i=0; i<static_cast<int>(poly.size()); i++) {
+            int const j=(i+1)%poly.size();
             Vector normal;
-            double dist = edgeDistance(poly[i], poly[j], normal);
+            double const dist = edgeDistance(poly[i], poly[j], normal);
             if (dist < closestDist) {
                 closestDist=dist;
                 closestEdge=i;
@@ -79,8 +79,8 @@ std::optional<EPAResult> EPA(const ShapeData &A, const ShapeData &B, const Simpl
         }
 
         // Get support in edgeNormal direction
-        Vector p = supportMinkowski(A,B,edgeNormal);
-        double d = p.dotProduct(edgeNormal);
+        Vector const p = supportMinkowski(a,b,edgeNormal);
+        double const d = p.dotProduct(edgeNormal);
 
         // If no improvement
         if (d - closestDist < EPSILON) {

@@ -7,19 +7,20 @@
 #include <cassert>
 
 static bool handleSimplex(Simplex &simplex, Vector &direction) {
-    size_t count = simplex.points.size();
+    size_t const count = simplex.points.size();
     assert(count > 0 && count <= 3 && "Simplex should have 1 to 3 points.");
 
     if (count == 2) {
-        Vector a = simplex.points[1];
-        Vector b = simplex.points[0];
-        Vector ab = b - a;
-        Vector ao = -a;
+        Vector const a = simplex.points[1];
+        Vector const b = simplex.points[0];
+        Vector const ab = b - a;
+        Vector const ao = -a;
 
         // If AO is in direction of AB
         if (ab.dotProduct(ao) > 0) {
             Vector perp(-ab.y, ab.x);
-            if (perp.dotProduct(ao) < 0) perp = Vector(ab.y, -ab.x);
+            if (perp.dotProduct(ao) < 0) { perp = Vector(ab.y, -ab.x);
+}
             direction = perp;
         } else {
             // Remove B
@@ -28,7 +29,7 @@ static bool handleSimplex(Simplex &simplex, Vector &direction) {
         }
         return false;
 
-    } else if (count == 3) {
+    } if (count == 3) {
         Vector a = simplex.points[2];
         Vector b = simplex.points[1];
         Vector c = simplex.points[0];
@@ -69,23 +70,23 @@ static bool handleSimplex(Simplex &simplex, Vector &direction) {
     }
 }
 
-bool GJKIntersect(const ShapeData &A, const ShapeData &B, Simplex &simplex) {
+bool GJKIntersect(const ShapeData &a, const ShapeData &b, Simplex &simplex) {
     // Defensive checks on shape data
-    if (A.isCircle) {
-        assert(A.radius > 0 && "Circle radius must be > 0.");
+    if (a.isCircle) {
+        assert(a.radius > 0 && "Circle radius must be > 0.");
     } else {
-        assert(A.poly.vertices.size() >= 3 && "Polygon must have at least 3 vertices.");
+        assert(a.poly.vertices.size() >= 3 && "Polygon must have at least 3 vertices.");
     }
 
-    if (B.isCircle) {
-        assert(B.radius > 0 && "Circle radius must be > 0.");
+    if (b.isCircle) {
+        assert(b.radius > 0 && "Circle radius must be > 0.");
     } else {
-        assert(B.poly.vertices.size() >= 3 && "Polygon must have at least 3 vertices.");
+        assert(b.poly.vertices.size() >= 3 && "Polygon must have at least 3 vertices.");
     }
 
     Vector direction(1,0);
     simplex.points.clear();
-    simplex.points.push_back(supportMinkowski(A,B,direction));
+    simplex.points.push_back(supportMinkowski(a,b,direction));
 
     if (simplex.points[0].dotProduct(direction) < 0) {
         // No collision
@@ -95,17 +96,17 @@ bool GJKIntersect(const ShapeData &A, const ShapeData &B, Simplex &simplex) {
     direction = -simplex.points[0];
 
     int iterationCount = 0;
-    const int MAX_GJK_ITER = 100;
+    const int maxGjkIter = 100;
 
     while (true) {
         iterationCount++;
-        if (iterationCount > MAX_GJK_ITER) {
+        if (iterationCount > maxGjkIter) {
             std::cerr << "Warning: GJK exceeded max iterations. Assuming no collision." << std::endl;
             return false;
         }
 
-        Vector newPoint = supportMinkowski(A,B,direction);
-        double proj = newPoint.dotProduct(direction);
+        Vector const newPoint = supportMinkowski(a,b,direction);
+        double const proj = newPoint.dotProduct(direction);
         if (proj < 0) {
             // No collision
             return false;

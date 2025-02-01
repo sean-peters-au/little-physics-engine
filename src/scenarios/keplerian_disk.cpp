@@ -13,16 +13,16 @@ ScenarioConfig KeplerianDiskScenario::getConfig() const {
     cfg.MetersPerPixel = 1e7;
     cfg.UniverseSizeMeters = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
 
-    double central_mass = 1e25;
-    double inner_r = 100 * cfg.MetersPerPixel;
-    double period = 2 * SimulatorConstants::Pi * std::sqrt(std::pow(inner_r, 3) /
-                  (SimulatorConstants::RealG * central_mass));
+    double const centralMass = 1e25;
+    double const innerR = 100 * cfg.MetersPerPixel;
+    double const period = 2 * SimulatorConstants::Pi * std::sqrt(std::pow(innerR, 3) /
+                  (SimulatorConstants::RealG * centralMass));
 
     cfg.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
     cfg.TimeAcceleration = period / (5.0 * SimulatorConstants::StepsPerSecond) * 20.0;
 
     cfg.GridSize = 100;
-    cfg.CellSizePixels = (double)SimulatorConstants::ScreenLength / cfg.GridSize;
+    cfg.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
 
     cfg.ParticleCount = 1000;
     cfg.ParticleMassMean = 1e22;
@@ -48,7 +48,7 @@ void KeplerianDiskScenario::createEntities(entt::registry &registry) const {
     createKeplerianDisk(registry);
 }
 
-void KeplerianDiskScenario::createCentralBody(entt::registry &registry) const {
+void KeplerianDiskScenario::createCentralBody(entt::registry &registry) {
     auto center = registry.create();
 
     double cx = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
@@ -77,23 +77,24 @@ namespace {
     }
 }
 
-void KeplerianDiskScenario::createKeplerianDisk(entt::registry &registry) const {
+void KeplerianDiskScenario::createKeplerianDisk(entt::registry &registry) {
     std::cerr << "Creating Keplerian Disk...\n";
 
-    std::default_random_engine gen{static_cast<unsigned int>(time(0))};
-    double cx = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
-    double cy = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
+    std::default_random_engine gen{static_cast<unsigned int>(time(nullptr))};
+    double const cx = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
+    double const cy = (SimulatorConstants::ScreenLength / 2.0) * SimulatorConstants::MetersPerPixel;
 
-    double minRpix = 100.0;
-    double maxRpix = SimulatorConstants::ScreenLength / 2.5;
-    double minRm = SimulatorConstants::pixelsToMeters(minRpix);
+    double const minRpix = 100.0;
+    double const maxRpix = SimulatorConstants::ScreenLength / 2.5;
+    double const minRm = SimulatorConstants::pixelsToMeters(minRpix);
 
-    double centralMass = SimulatorConstants::ParticleMassMean * 100.0;
+    double const centralMass = SimulatorConstants::ParticleMassMean * 100.0;
     std::uniform_real_distribution<> angleDist(0, 2 * SimulatorConstants::Pi);
 
     int created = 0;
     while (created < SimulatorConstants::ParticleCount - 1) {
-        double rpix, rm;
+        double rpix;
+        double rm;
         double densThresh;
         do {
             std::uniform_real_distribution<> radDist(minRpix, maxRpix);
@@ -104,25 +105,25 @@ void KeplerianDiskScenario::createKeplerianDisk(entt::registry &registry) const 
             densThresh = dDist(gen);
         } while (densThresh > diskDensity(rpix));
 
-        double angle = angleDist(gen);
+        double const angle = angleDist(gen);
 
-        double maxH = diskHeight(rpix);
-        double maxHm = SimulatorConstants::pixelsToMeters(maxH);
+        double const maxH = diskHeight(rpix);
+        double const maxHm = SimulatorConstants::pixelsToMeters(maxH);
         std::normal_distribution<> hDist(0.0, maxHm / 3.0);
-        double hOff = hDist(gen);
+        double const hOff = hDist(gen);
 
         double x = cx + rm * std::cos(angle);
         double y = cy + rm * std::sin(angle) + hOff;
 
-        double baseVel = keplerVel(rm, centralMass);
+        double const baseVel = keplerVel(rm, centralMass);
         std::normal_distribution<> velVar(1.0, 0.01);
-        double speed = baseVel * velVar(gen);
+        double const speed = baseVel * velVar(gen);
 
         double vx = -speed * std::sin(angle);
         double vy =  speed * std::cos(angle);
 
         std::normal_distribution<> rVar(0.0, speed * 0.001);
-        double rv = rVar(gen);
+        double const rv = rVar(gen);
         vx += rv * std::cos(angle);
         vy += rv * std::sin(angle);
 
@@ -131,8 +132,8 @@ void KeplerianDiskScenario::createKeplerianDisk(entt::registry &registry) const 
         registry.emplace<Components::Velocity>(e, vx, vy);
         registry.emplace<Components::ParticlePhase>(e, Components::Phase::Gas);
 
-        double baseMass = SimulatorConstants::ParticleMassMean;
-        double massFactor = std::pow(minRm / rm, 0.5);
+        double const baseMass = SimulatorConstants::ParticleMassMean;
+        double const massFactor = std::pow(minRm / rm, 0.5);
         std::normal_distribution<> mVar(massFactor * baseMass, baseMass * 0.1);
         registry.emplace<Components::Mass>(e, mVar(gen));
 

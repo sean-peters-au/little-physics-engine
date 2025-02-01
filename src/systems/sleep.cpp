@@ -23,7 +23,7 @@ void Systems::SleepSystem::update(entt::registry &registry) {
         }
 
         // Compute linear speed
-        double speed = std::sqrt(vel.x*vel.x + vel.y*vel.y);
+        double const speed = std::sqrt(vel.x*vel.x + vel.y*vel.y);
 
         // Check angular velocity if exists
         double angularSpeed = 0.0;

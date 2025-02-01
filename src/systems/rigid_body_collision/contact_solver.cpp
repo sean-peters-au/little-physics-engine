@@ -18,10 +18,11 @@
  */
 
 #include <arm_neon.h>         // NEON intrinsics for Apple M-series
+#include <cmath>
+#include <cstddef>
+#include <iostream>
 #include <unordered_map>
 #include <vector>
-#include <cmath>
-#include <iostream>
 
 #include "nbody/systems/rigid_body_collision/contact_solver.hpp"
 #include "nbody/systems/rigid_body_collision/contact_manager.hpp"
@@ -31,20 +32,6 @@
 
 namespace RigidBodyCollision
 {
-
-#if !defined(ENABLE_CONTACT_SOLVER_DEBUG)
-    #define ENABLE_CONTACT_SOLVER_DEBUG 0
-#endif
-
-static bool g_debugFilter = true;
-
-/**
- * @brief Logs debug messages if debugging is enabled
- *
- * @param x The message to log
- */
-#define DEBUG_LOG(x) \
-    do { if (ENABLE_CONTACT_SOLVER_DEBUG && g_debugFilter) { std::cout << x << std::endl; } } while(0)
 
 /**
  * @brief Represents how a body is mapped into the solver's velocity array
@@ -66,7 +53,7 @@ static bool isInfiniteMass(const entt::registry &registry, entt::entity e)
     if (!registry.valid(e) || !registry.all_of<Components::Mass>(e)) {
         return false;
     }
-    double m = registry.get<Components::Mass>(e).value;
+    double const m = registry.get<Components::Mass>(e).value;
     return (m > 1e29);
 }
 
@@ -82,8 +69,8 @@ static bool canRotate(const entt::registry &registry, entt::entity e)
     if (!registry.all_of<Components::AngularVelocity, Components::Inertia>(e)) {
         return false;
     }
-    double I = registry.get<Components::Inertia>(e).I;
-    return (I > 1e-12 && I < 1e29);
+    double const i = registry.get<Components::Inertia>(e).I;
+    return (i > 1e-12 && i < 1e29);
 }
 
 /**
@@ -111,7 +98,7 @@ static std::unordered_map<entt::entity, BodyDOF> buildBodyDOFTable(
     // Assign index if body is dynamic
     int currentIndex = 0;
     for (auto &kv : table) {
-        entt::entity e = kv.first;
+        entt::entity const e = kv.first;
         BodyDOF &dof   = kv.second;
 
         if (!isInfiniteMass(registry, e)) {
@@ -157,7 +144,7 @@ struct ContactRows
  */
 inline static float32x2_t toFloat2(const Vector &v)
 {
-    return {(float)v.x, (float)v.y};
+    return {static_cast<float>(v.x), static_cast<float>(v.y)};
 }
 
 /**
@@ -170,40 +157,39 @@ inline static float32x2_t toFloat2(const Vector &v)
  */
 static std::vector<ContactRows> buildConstraintRows(
     entt::registry &registry,
-    const std::vector<ContactManifoldRef> &manifolds,
-    float frictionCoeff)
+    const std::vector<ContactManifoldRef> &manifolds)
 {
     std::vector<ContactRows> out;
     out.reserve(manifolds.size() * 4);
 
-    for (auto &mref : manifolds) {
-        for (auto &c : mref.contacts) {
+    for (const auto &mref : manifolds) {
+        for (const auto &c : mref.contacts) {
             // Normal row
             ConstraintRow rowN;
             rowN.a = c.a;
             rowN.b = c.b;
 
             // Convert normal to single-precision
-            Vector unitN = c.normal.normalized();
-            rowN.dirX = (float)unitN.x;
-            rowN.dirY = (float)unitN.y;
+            Vector const unitN = c.normal.normalized();
+            rowN.dirX = static_cast<float>(unitN.x);
+            rowN.dirY = static_cast<float>(unitN.y);
 
             // Positions
             auto posA = registry.get<Components::Position>(c.a);
             auto posB = registry.get<Components::Position>(c.b);
 
             // Offsets rA, rB
-            rowN.rxA = (float)(c.contactPoint.x - posA.x);
-            rowN.ryA = (float)(c.contactPoint.y - posA.y);
-            rowN.rxB = (float)(c.contactPoint.x - posB.x);
-            rowN.ryB = (float)(c.contactPoint.y - posB.y);
+            rowN.rxA = static_cast<float>(c.contactPoint.x - posA.x);
+            rowN.ryA = static_cast<float>(c.contactPoint.y - posA.y);
+            rowN.rxB = static_cast<float>(c.contactPoint.x - posB.x);
+            rowN.ryB = static_cast<float>(c.contactPoint.y - posB.y);
 
             // Normal constraint bounds
-            rowN.lo = 0.0f;
-            rowN.hi = 1e20f;
-            rowN.lambda = (float)c.normalImpulseAccum;
-            rowN.rhs    = 0.0f;  // no restitution
-            rowN.effMass= 0.0f;
+            rowN.lo = 0.0F;
+            rowN.hi = 1e20F;
+            rowN.lambda = static_cast<float>(c.normalImpulseAccum);
+            rowN.rhs    = 0.0F;  // no restitution
+            rowN.effMass= 0.0F;
 
             // Friction row
             ConstraintRow rowF;
@@ -220,11 +206,11 @@ static std::vector<ContactRows> buildConstraintRows(
             rowF.ryB = rowN.ryB;
 
             // friction row bounds => ±∞ (clamp later)
-            rowF.lo     = -1e20f;
-            rowF.hi     =  1e20f;
-            rowF.lambda = (float)c.tangentImpulseAccum;
-            rowF.rhs    = 0.0f;
-            rowF.effMass= 0.0f;
+            rowF.lo     = -1e20F;
+            rowF.hi     =  1e20F;
+            rowF.lambda = static_cast<float>(c.tangentImpulseAccum);
+            rowF.rhs    = 0.0F;
+            rowF.effMass= 0.0F;
 
             ContactRows pair;
             pair.normal   = rowN;
@@ -243,12 +229,12 @@ static std::vector<ContactRows> buildConstraintRows(
  * @param b float32x2_t vector
  * @return float cross product
  */
-inline static float cross2f_NEON(const float32x2_t &a, const float32x2_t &b)
+inline static float cross2fNeon(const float32x2_t &a, const float32x2_t &b)
 {
     // cross = a.x * b.y - a.y * b.x
-    float32x2_t mul1 = vmul_f32(a, vrev64_f32(b)); // a.x*b.y, a.y*b.x
+    float32x2_t const mul1 = vmul_f32(a, vrev64_f32(b)); // a.x*b.y, a.y*b.x
     // cross in lane0 - lane1
-    float crossVal = vget_lane_f32(mul1, 0) - vget_lane_f32(mul1, 1);
+    float const crossVal = vget_lane_f32(mul1, 0) - vget_lane_f32(mul1, 1);
     return crossVal;
 }
 
@@ -268,36 +254,38 @@ static float computeEffectiveMass(
     const std::vector<float> &invMass,
     const std::vector<float> &invInertia)
 {
-    float imA = 0.f, imB = 0.f;
-    float iiA = 0.f, iiB = 0.f;
+    float imA = 0.f;
+    float imB = 0.f;
+    float iiA = 0.f;
+    float iiB = 0.f;
 
     // retrieve body A data
     auto itA = dofMap.find(row.a);
     if (itA != dofMap.end() && itA->second.isDynamic) {
-        int idxA = itA->second.index / 3;
+        int const idxA = itA->second.index / 3;
         imA = invMass[idxA];
         iiA = invInertia[idxA];
     }
     // retrieve body B data
     auto itB = dofMap.find(row.b);
     if (itB != dofMap.end() && itB->second.isDynamic) {
-        int idxB = itB->second.index / 3;
+        int const idxB = itB->second.index / 3;
         imB = invMass[idxB];
         iiB = invInertia[idxB];
     }
 
-    float32x2_t dir = { row.dirX, row.dirY };
-    float32x2_t rA  = { row.rxA, row.ryA };
-    float32x2_t rB  = { row.rxB, row.ryB };
+    float32x2_t const dir = { row.dirX, row.dirY };
+    float32x2_t const rA  = { row.rxA, row.ryA };
+    float32x2_t const rB  = { row.rxB, row.ryB };
 
-    float rAxn = cross2f_NEON(rA, dir); // (rA x dir)
-    float rBxn = cross2f_NEON(rB, dir);
+    float const rAxn = cross2fNeon(rA, dir); // (rA x dir)
+    float const rBxn = cross2fNeon(rB, dir);
 
-    float sum = imA + imB + (rAxn*rAxn)*iiA + (rBxn*rBxn)*iiB;
-    if (sum < 1e-12f) {
-        return 0.f;
+    float const sum = imA + imB + (rAxn*rAxn)*iiA + (rBxn*rBxn)*iiB;
+    if (sum < 1e-12F) {
+        return 0.F;
     }
-    return 1.f / sum;
+    return 1.F / sum;
 }
 
 /**
@@ -313,13 +301,17 @@ static float getRelativeVelocity(
     const std::unordered_map<entt::entity, BodyDOF> &dofMap,
     const std::vector<float> &v)
 {
-    float vxA=0.f, vyA=0.f, wA=0.f;
-    float vxB=0.f, vyB=0.f, wB=0.f;
+    float vxA=0.f;
+    float vyA=0.f;
+    float wA=0.f;
+    float vxB=0.f;
+    float vyB=0.f;
+    float wB=0.f;
 
     // Body A
     auto itA = dofMap.find(row.a);
     if (itA != dofMap.end() && itA->second.isDynamic) {
-        int baseA = itA->second.index;
+        int const baseA = itA->second.index;
         vxA = v[baseA + 0];
         vyA = v[baseA + 1];
         wA  = v[baseA + 2];
@@ -327,20 +319,20 @@ static float getRelativeVelocity(
     // Body B
     auto itB = dofMap.find(row.b);
     if (itB != dofMap.end() && itB->second.isDynamic) {
-        int baseB = itB->second.index;
+        int const baseB = itB->second.index;
         vxB = v[baseB + 0];
         vyB = v[baseB + 1];
         wB  = v[baseB + 2];
     }
 
-    float rxVAx = vxA - wA*row.ryA; // A contact vel x
-    float ryVAy = vyA + wA*row.rxA; // A contact vel y
-    float rxVBx = vxB - wB*row.ryB; // B contact vel x
-    float ryVBy = vyB + wB*row.rxB; // B contact vel y
+    float const rxVAx = vxA - wA*row.ryA; // A contact vel x
+    float const ryVAy = vyA + wA*row.rxA; // A contact vel y
+    float const rxVBx = vxB - wB*row.ryB; // B contact vel x
+    float const ryVBy = vyB + wB*row.rxB; // B contact vel y
 
     // rel = Vb - Va => (rxVBx - rxVAx, ryVBy - ryVAy)
-    float relX = rxVBx - rxVAx;
-    float relY = ryVBy - ryVAy;
+    float const relX = rxVBx - rxVAx;
+    float const relY = ryVBy - ryVAy;
 
     // dot( rel, row.dir )
     return relX * row.dirX + relY * row.dirY;
@@ -364,38 +356,38 @@ static void applyImpulse(
     const std::vector<float> &invMass,
     const std::vector<float> &invInertia)
 {
-    if (std::fabs(dLambda) < 1e-15f) {
+    if (std::fabs(dLambda) < 1e-15F) {
         return;
     }
     // Body A
     auto itA = dofMap.find(row.a);
     if (itA != dofMap.end() && itA->second.isDynamic) {
-        int iA = itA->second.index / 3;
-        int baseA = itA->second.index;
-        float imA = invMass[iA];
-        float iiA = invInertia[iA];
+        int const iA = itA->second.index / 3;
+        int const baseA = itA->second.index;
+        float const imA = invMass[iA];
+        float const iiA = invInertia[iA];
 
         v[baseA + 0] -= row.dirX * (dLambda * imA);
         v[baseA + 1] -= row.dirY * (dLambda * imA);
 
         // cross(rA, dir)
-        float crossA = row.rxA * row.dirY - row.ryA * row.dirX;
+        float const crossA = row.rxA * row.dirY - row.ryA * row.dirX;
         v[baseA + 2] -= crossA * dLambda * iiA;
     }
 
     // Body B
     auto itB = dofMap.find(row.b);
     if (itB != dofMap.end() && itB->second.isDynamic) {
-        int iB = itB->second.index / 3;
-        int baseB = itB->second.index;
-        float imB = invMass[iB];
-        float iiB = invInertia[iB];
+        int const iB = itB->second.index / 3;
+        int const baseB = itB->second.index;
+        float const imB = invMass[iB];
+        float const iiB = invInertia[iB];
 
         v[baseB + 0] += row.dirX * (dLambda * imB);
         v[baseB + 1] += row.dirY * (dLambda * imB);
 
         // cross(rB, dir)
-        float crossB = row.rxB * row.dirY - row.ryB * row.dirX;
+        float const crossB = row.rxB * row.dirY - row.ryB * row.dirX;
         v[baseB + 2] += crossB * dLambda * iiB;
     }
 }
@@ -411,7 +403,7 @@ static void applyImpulse(
  * @param frictionCoeff Global friction coefficient
  * @param iterations Number of solver iterations
  */
-static void solveLCP_PGS(
+static void solveLcpPgs(
     std::vector<ContactRows> &contacts,
     std::vector<float> &v,
     const std::unordered_map<entt::entity, BodyDOF> &dofMap,
@@ -432,13 +424,15 @@ static void solveLCP_PGS(
             // 1) Normal row
             {
                 auto &row = cr.normal;
-                float vn  = getRelativeVelocity(row, dofMap, v);
-                float old = row.lambda;
+                float const vn  = getRelativeVelocity(row, dofMap, v);
+                float const old = row.lambda;
                 float dLam= -row.effMass * (vn + row.rhs);
 
                 float newLam = old + dLam;
-                if (newLam < row.lo) newLam = row.lo;
-                if (newLam > row.hi) newLam = row.hi;
+                if (newLam < row.lo) { newLam = row.lo;
+}
+                if (newLam > row.hi) { newLam = row.hi;
+}
 
                 dLam = newLam - old;
                 row.lambda = newLam;
@@ -448,17 +442,19 @@ static void solveLCP_PGS(
             // 2) Friction row
             {
                 auto &frow = cr.friction;
-                float vt   = getRelativeVelocity(frow, dofMap, v);
-                float oldF = frow.lambda;
-                float limit= frictionCoeff * cr.normal.lambda;
+                float const vt   = getRelativeVelocity(frow, dofMap, v);
+                float const oldF = frow.lambda;
+                float const limit= frictionCoeff * cr.normal.lambda;
 
                 frow.lo = -limit;
                 frow.hi =  limit;
 
                 float dF = -frow.effMass*(vt + frow.rhs);
                 float newF = oldF + dF;
-                if (newF < frow.lo) newF = frow.lo;
-                if (newF > frow.hi) newF = frow.hi;
+                if (newF < frow.lo) { newF = frow.lo;
+}
+                if (newF > frow.hi) { newF = frow.hi;
+}
 
                 dF = newF - oldF;
                 frow.lambda = newF;
@@ -495,24 +491,24 @@ void ContactSolver::solveContactConstraints(entt::registry &registry, ContactMan
             bodyList.push_back(kv.first);
         }
     }
-    int bodyCount = (int)bodyList.size();
+    int const bodyCount = static_cast<int>(bodyList.size());
 
     // Single-precision arrays for velocity, invMass, invInertia
-    std::vector<float> velocity(bodyCount * 3, 0.f);
-    std::vector<float> invMassArr(bodyCount, 0.f);
-    std::vector<float> invInertiaArr(bodyCount, 0.f);
+    std::vector<float> velocity(static_cast<std::vector<float>::size_type>(bodyCount * 3), 0.F);
+    std::vector<float> invMassArr(bodyCount, 0.F);
+    std::vector<float> invInertiaArr(bodyCount, 0.F);
 
     // Load from ECS (convert double to float)
     for (int i = 0; i < bodyCount; i++) {
-        entt::entity e = bodyList[i];
-        double massVal  = registry.get<Components::Mass>(e).value;
-        float imVal     = (massVal > 1e29) ? 0.f : (float)(1.0 / massVal);
+        entt::entity const e = bodyList[i];
+        double const massVal  = registry.get<Components::Mass>(e).value;
+        float const imVal     = (massVal > 1e29) ? 0.F : static_cast<float>(1.0 / massVal);
 
-        float iInertVal = 0.f;
+        float iInertVal = 0.F;
         if (canRotate(registry, e)) {
-            double I = registry.get<Components::Inertia>(e).I;
-            if (I > 1e-12 && I < 1e29) {
-                iInertVal = (float)(1.0 / I);
+            double const i = registry.get<Components::Inertia>(e).I;
+            if (i > 1e-12 && i < 1e29) {
+                iInertVal = static_cast<float>(1.0 / i);
             }
         }
         invMassArr[i]     = imVal;
@@ -520,11 +516,11 @@ void ContactSolver::solveContactConstraints(entt::registry &registry, ContactMan
 
         // Current velocity
         const auto &vel = registry.get<Components::Velocity>(e);
-        float vx = (float)vel.x;
-        float vy = (float)vel.y;
-        float w  = 0.f;
+        auto const vx = static_cast<float>(vel.x);
+        auto const vy = static_cast<float>(vel.y);
+        float w  = 0.F;
         if (canRotate(registry, e)) {
-            w = (float)registry.get<Components::AngularVelocity>(e).omega;
+            w = static_cast<float>(registry.get<Components::AngularVelocity>(e).omega);
         }
         velocity[i*3 + 0] = vx;
         velocity[i*3 + 1] = vy;
@@ -532,17 +528,17 @@ void ContactSolver::solveContactConstraints(entt::registry &registry, ContactMan
     }
 
     // Build constraints in float
-    float frictionCoeff = 0.5f;
-    auto contactRows = buildConstraintRows(registry, manifolds, frictionCoeff);
+    float const frictionCoeff = 0.5F;
+    auto contactRows = buildConstraintRows(registry, manifolds);
 
     // Solve LCP
-    int solverIterations = 10;
-    solveLCP_PGS(contactRows, velocity, dofMap, invMassArr, invInertiaArr,
+    int const solverIterations = 10;
+    solveLcpPgs(contactRows, velocity, dofMap, invMassArr, invInertiaArr,
                  frictionCoeff, solverIterations);
 
     // Write velocities back to ECS
     for (int i = 0; i < bodyCount; i++) {
-        entt::entity e = bodyList[i];
+        entt::entity const e = bodyList[i];
         auto vel = registry.get<Components::Velocity>(e);
         vel.x = velocity[i*3 + 0];
         vel.y = velocity[i*3 + 1];
@@ -567,8 +563,6 @@ void ContactSolver::solveContactConstraints(entt::registry &registry, ContactMan
         }
     }
     manager.applySolverResults(manager.getManifoldsForSolver());
-
-    DEBUG_LOG("[ContactSolver] SIMD LCP solve complete.");
 }
 
 } // namespace RigidBodyCollision

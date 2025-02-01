@@ -24,7 +24,7 @@ void BasicGravitySystem::update(entt::registry& registry) {
     constexpr double GRAVITY = 9.8;
 
     // Calculate time step with all scaling factors applied
-    double dt = SimulatorConstants::SecondsPerTick * 
+    double const dt = SimulatorConstants::SecondsPerTick * 
                 state.baseTimeAcceleration * 
                 state.timeScale;
 
