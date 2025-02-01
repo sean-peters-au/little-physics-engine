@@ -5,10 +5,17 @@
 # Common settings
 # ---------------------------------------------------------------------------------
 
+# If on macOS, add flags so clang/clang-tidy can correctly find system headers 
+# and define the necessary feature macros to avoid "FP_NAN, ldiv_t not found" errors.
+ifeq ($(shell uname),Darwin)
+CXXFLAGS += -stdlib=libc++ -isysroot $(shell xcrun --show-sdk-path) -D_DARWIN_C_SOURCE -D_XOPEN_SOURCE=700
+endif
+
 CXXFLAGS := -Wall -Wextra -std=c++17 \
             -I./include \
             -isystem ./include/nbody/vendor/entt/include \
-            -isystem /opt/homebrew/include
+            -isystem /opt/homebrew/include \
+            $(CXXFLAGS)
 
 # Directory structure
 BUILD_DIR := build
@@ -22,9 +29,8 @@ BASE_SRCS := $(shell find $(SRC_DIR) -name '*.cpp' \
              ! -path "$(SRC_DIR)/arch/*")
 
 # Clang-tidy settings
-TIDY := clang-tidy
-TIDY_FLAGS := -checks=bugprone-*,modernize-*,performance-*,readability-*,-modernize-use-trailing-return-type
-TIDY_FIX_FLAGS := -fix -fix-errors
+TIDY := run-clang-tidy
+TIDY_FIX_FLAGS := -fix
 
 # ---------------------------------------------------------------------------------
 # Architecture-specific targets
@@ -41,15 +47,13 @@ print-debug:
 NATIVE_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/native/*.cpp)
 NATIVE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/native/%.o,$(BASE_SRCS)) \
                $(patsubst $(SRC_DIR)/arch/native/%.cpp,$(BUILD_DIR)/arch/native/%.o,$(NATIVE_ARCH_SRCS))
+NATIVE_SRCS := $(BASE_SRCS) $(NATIVE_ARCH_SRCS)
 
 # Define variables for wasm build
 WASM_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/wasm/*.cpp)
 WASM_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/wasm/%.o,$(BASE_SRCS)) \
              $(patsubst $(SRC_DIR)/arch/wasm/%.cpp,$(BUILD_DIR)/arch/wasm/%.o,$(WASM_ARCH_SRCS))
-
-# Entry points for each architecture
-NATIVE_MAIN := $(SRC_DIR)/arch/native/main_native.cpp
-WASM_MAIN := $(SRC_DIR)/arch/wasm/main_wasm.cpp
+WASM_SRCS := $(BASE_SRCS) $(WASM_ARCH_SRCS)
 
 native: CXX := clang++
 native: LDFLAGS := -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system
@@ -72,7 +76,6 @@ wasm: directories copy_assets $(WASM_OBJS)
 # Build rules
 # ---------------------------------------------------------------------------------
 
-# Generic object compilation rules
 $(BUILD_DIR)/native/%.o: $(SRC_DIR)/%.cpp
 	@echo "Compiling native $<"
 	@mkdir -p $(@D)
@@ -137,28 +140,45 @@ clean:
 
 rebuild: clean all
 
-compile_commands.json:
+compile_commands.json: directories
 	@echo "Generating compile_commands.json..."
-	@bear -- $(MAKE) -B native CXXFLAGS="$(CXXFLAGS) -w"  # Disable warnings during database generation
+	@cd $(BUILD_DIR) && \
+	CXXFLAGS="$(CXXFLAGS)" bear -- $(MAKE) -C .. -B native > /dev/null 2>&1 || true
+	@echo "Generated compile_commands.json"
+
+# ---------------------------------------------------------------------------------
+# Clang-Tidy Targets
+# ---------------------------------------------------------------------------------
+# We explicitly list only our own source files (NATIVE_SRCS or WASM_SRCS),
+# and we override header-filter to skip /opt/homebrew and vendor.
+# On macOS, use 'sysctl -n hw.ncpu' for parallel jobs; on Linux, 'nproc' is fine.
 
 lint: compile_commands.json
 	@echo "Running clang-tidy..."
 	@if [ "$(WASM)" = "1" ]; then \
 		echo "Checking WASM build..."; \
-		$(TIDY) $(WASM_MAIN) -p $(BUILD_DIR); \
+		$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
+			-p $(BUILD_DIR) -quiet -j $(shell sysctl -n hw.ncpu) \
+			$(WASM_SRCS); \
 	else \
 		echo "Checking native build..."; \
-		$(TIDY) $(NATIVE_MAIN) -p $(BUILD_DIR); \
+		$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
+			-p $(BUILD_DIR) -quiet -j $(shell sysctl -n hw.ncpu) \
+			$(NATIVE_SRCS); \
 	fi
 
 lint-fix: compile_commands.json
 	@echo "Running clang-tidy with auto-fix..."
 	@if [ "$(WASM)" = "1" ]; then \
 		echo "Checking WASM build..."; \
-		$(TIDY) $(WASM_MAIN) -p $(BUILD_DIR) $(TIDY_FIX_FLAGS); \
+		$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
+			-p $(BUILD_DIR) $(TIDY_FIX_FLAGS) \
+			$(WASM_SRCS); \
 	else \
 		echo "Checking native build..."; \
-		$(TIDY) $(NATIVE_MAIN) -p $(BUILD_DIR) $(TIDY_FIX_FLAGS); \
+		$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
+			-p $(BUILD_DIR) $(TIDY_FIX_FLAGS) \
+			$(NATIVE_SRCS); \
 	fi
 
 # Add new serve target
@@ -176,5 +196,4 @@ serve: wasm
 		exit 1; \
 	fi
 
-# Add to the .PHONY list
 .PHONY: all native wasm clean rebuild test directories copy_assets lint lint-fix compile_commands serve
