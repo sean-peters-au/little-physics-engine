@@ -11,7 +11,6 @@
 #include "nbody/systems/dampening.hpp"
 #include "nbody/systems/barnes_hut.hpp"
 #include "nbody/systems/thermodynamics.hpp"
-#include "nbody/systems/sph.hpp"
 #include "nbody/systems/gravity.hpp"
 #include "nbody/systems/rigid_body_collision/rigid_body_collision.hpp"
 #include "nbody/systems/rigid_body_collision/collision_data.hpp"
@@ -27,6 +26,8 @@
 #include "nbody/scenarios/keplerian_disk.hpp"
 #include "nbody/scenarios/isothermal_box.hpp"
 #include "nbody/scenarios/random_polygons.hpp"
+#include <nbody/scenarios/simple_fluid.hpp>
+#include <nbody/systems/fluid/fluid.hpp>
 
 ECSSimulator::ECSSimulator() {
     // e.g. set a default scenarioPtr if you like,
@@ -75,6 +76,9 @@ void ECSSimulator::reset() {
         case SimulatorConstants::SimulationType::ISOTHERMAL_BOX:
             scenarioPtr = std::make_unique<IsothermalBoxScenario>();
             break;
+        case SimulatorConstants::SimulationType::SIMPLE_FLUID:
+            scenarioPtr = std::make_unique<SimpleFluidScenario>();
+            break;
         case SimulatorConstants::SimulationType::RANDOM_POLYGONS:
         default:
             scenarioPtr = std::make_unique<RandomPolygonsScenario>();
@@ -106,6 +110,10 @@ void ECSSimulator::tick() {
     // Run the scenario's chosen ECS systems in order
     for (auto system : SimulatorConstants::ActiveSystems) {
         switch (system) {
+        case Systems::SystemType::FLUID: {
+            Systems::FluidSystem::update(registry);
+            break;
+        }
         case Systems::SystemType::COLLISION: {
             Systems::RigidBodyCollisionSystem::update(registry);
             break;
@@ -120,10 +128,6 @@ void ECSSimulator::tick() {
         }
         case Systems::SystemType::BARNES_HUT: {
             Systems::BarnesHutSystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::SPH: {
-            Systems::SPHSystem::update(registry);
             break;
         }
         case Systems::SystemType::GRID_THERMODYNAMICS: {

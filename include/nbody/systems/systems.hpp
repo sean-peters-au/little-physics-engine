@@ -18,12 +18,12 @@ enum class SystemType {
     BARNES_HUT,
     COLLISION,
     ROTATION,
-    SPH,
     GRID_THERMODYNAMICS,
     MOVEMENT,
     SLEEP,
     DAMPENING,
-    BOUNDARY
+    BOUNDARY,
+    FLUID
 };
 
 // (Optional) If you had logic to map a scenario to these systems, you'd do it here.

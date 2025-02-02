@@ -15,7 +15,8 @@ namespace SimulatorConstants {
     enum class SimulationType {
         KEPLERIAN_DISK,
         ISOTHERMAL_BOX,
-        RANDOM_POLYGONS
+        RANDOM_POLYGONS,
+        SIMPLE_FLUID
     };
 
     // Truly global constants
