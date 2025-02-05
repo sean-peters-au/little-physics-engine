@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <climits>  // For INT_MAX/INT_MIN
 #include <omp.h>    // For OpenMP
+#include <cassert>  // For assert()
 
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sph.hpp"
@@ -78,30 +79,51 @@ struct UniformGrid {
 };
 
 /**
- * @brief Builds a contiguous uniform grid from particle positions using a counting sort approach.
- *        The grid build is split into two main phases:
- *          1) A counting phase to tally the number of particles per cell (using thread-local counts),
- *          2) A scatter phase where, using precomputed per-cell offsets, particle indices are directly written into the final grid.
+ * @brief Builds a contiguous uniform grid from particle positions using a thread‑local counts
+ *        and offsets approach. This version separates counting and scattering entirely so that
+ *        no two threads write concurrently to the same grid cell.
  *
- * @param dat      The fluid particle data (positions).
- * @param cellSize The spatial cell size.
+ * Steps:
+ *   1. Compute global domain bounds in double precision.
+ *   2. Each thread tallies counts into a thread‑local vector (size numCells).
+ *   3. Serial aggregation: sum per‑cell counts, and allocate each cell's indices vector.
+ *   4. Compute per‑cell thread‑local offsets via prefix sum over threads.
+ *   5. In a parallel scatter phase, each thread writes its particle indices into its designated
+ *      range in the appropriate grid cell.
+ *   6. Finally, sort each cell's indices to enforce deterministic ordering.
  *
- * @return A UniformGrid with a contiguous cell array containing particle indices.
+ * Note: The particle data in dat must not be modified concurrently!
+ *
+ * @param dat      The fluid particle data (positions, etc.).
+ * @param cellSize The spatial cell size; must be > 0.
+ *
+ * @return A UniformGrid with a cell array containing particle indices.
  */
-UniformGrid buildUniformGridContiguousCountingSort(const FluidParticleData &dat, float cellSize)
+namespace {
+    constexpr double gridEpsilon = 1e-6;  // Adjust if necessary for stability.
+}
+
+UniformGrid buildUniformGridContiguousDomainPartition(const FluidParticleData &dat, float cellSize)
 {
+    // Ensure valid cellSize.
+    assert(cellSize > 0.f && "cellSize must be > 0");
+
     int n = static_cast<int>(dat.x.size());
     if (n == 0) {
         return {0, 0, 0, 0, {}};
     }
 
-    // Step 1: Compute Domain Bounds
+    // ------------------------------------------------------------------
+    // Step 1: Compute global domain bounds (grid indices) using double precision.
+    // ------------------------------------------------------------------
     int globalMinGx = INT_MAX, globalMinGy = INT_MAX;
     int globalMaxGx = INT_MIN, globalMaxGy = INT_MIN;
-#pragma omp parallel for reduction(min:globalMinGx,globalMinGy) reduction(max:globalMaxGx,globalMaxGy)
+#pragma omp parallel for reduction(min: globalMinGx,globalMinGy) reduction(max: globalMaxGx,globalMaxGy)
     for (int i = 0; i < n; i++) {
-        int gx = static_cast<int>(std::floor(dat.x[i] / cellSize));
-        int gy = static_cast<int>(std::floor(dat.y[i] / cellSize));
+        double posX = static_cast<double>(dat.x[i]) + gridEpsilon;
+        double posY = static_cast<double>(dat.y[i]) + gridEpsilon;
+        int gx = static_cast<int>(std::floor(posX / static_cast<double>(cellSize)));
+        int gy = static_cast<int>(std::floor(posY / static_cast<double>(cellSize)));
         globalMinGx = std::min(globalMinGx, gx);
         globalMinGy = std::min(globalMinGy, gy);
         globalMaxGx = std::max(globalMaxGx, gx);
@@ -109,67 +131,94 @@ UniformGrid buildUniformGridContiguousCountingSort(const FluidParticleData &dat,
     }
     int width  = globalMaxGx - globalMinGx + 1;
     int height = globalMaxGy - globalMinGy + 1;
-    const int numCells = width * height;
+    int numCells = width * height;
 
     UniformGrid grid;
-    grid.minX = globalMinGx;
-    grid.minY = globalMinGy;
+    grid.minX  = globalMinGx;
+    grid.minY  = globalMinGy;
     grid.width = width;
     grid.height = height;
     grid.cells.resize(numCells);
 
-    // Step 2: Counting Phase - Use thread-local counters.
-    int nThreads = 1;
+    // ------------------------------------------------------------------
+    // Step 2: Allocate thread-local counts.
+    // Each thread gets a vector (size = numCells) initialized to 0.
+    // ------------------------------------------------------------------
+    int nThreads = omp_get_max_threads();
+    std::vector<std::vector<size_t>> threadCounts(nThreads, std::vector<size_t>(numCells, 0));
+
 #pragma omp parallel
     {
-#pragma omp single
-        nThreads = omp_get_num_threads();
-    }
-    std::vector<std::vector<size_t>> localCounts(nThreads, std::vector<size_t>(numCells, 0));
-
-#pragma omp parallel for
-    for (int i = 0; i < n; i++) {
         int tid = omp_get_thread_num();
-        int gx = static_cast<int>(std::floor(dat.x[i] / cellSize));
-        int gy = static_cast<int>(std::floor(dat.y[i] / cellSize));
-        int cellIndex = (gy - globalMinGy) * width + (gx - globalMinGx);
-        localCounts[tid][cellIndex]++;
-    }
-
-    // Combine thread-local counts into a global count for each cell.
-    std::vector<size_t> globalCounts(numCells, 0);
-    for (int cell = 0; cell < numCells; cell++) {
-        for (int t = 0; t < nThreads; t++) {
-            globalCounts[cell] += localCounts[t][cell];
+#pragma omp for schedule(static)
+        for (int i = 0; i < n; i++) {
+            double posX = static_cast<double>(dat.x[i]) + gridEpsilon;
+            double posY = static_cast<double>(dat.y[i]) + gridEpsilon;
+            int gx = static_cast<int>(std::floor(posX / static_cast<double>(cellSize)));
+            int gy = static_cast<int>(std::floor(posY / static_cast<double>(cellSize)));
+            int cellIndex = (gy - globalMinGy) * width + (gx - globalMinGx);
+            assert(cellIndex >= 0 && cellIndex < numCells);
+            threadCounts[tid][cellIndex]++;
         }
     }
 
-    // Reserve exact space in each GridCell to avoid reallocations.
+    // ------------------------------------------------------------------
+    // Step 3: Aggregate global counts from all thread-local counts.
+    // ------------------------------------------------------------------
+    std::vector<size_t> globalCounts(numCells, 0);
+    for (int cell = 0; cell < numCells; cell++) {
+        for (int t = 0; t < nThreads; t++) {
+            globalCounts[cell] += threadCounts[t][cell];
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Step 4: Allocate exact space for each grid cell's indices.
+    // ------------------------------------------------------------------
     for (int cell = 0; cell < numCells; cell++) {
         grid.cells[cell].indices.resize(globalCounts[cell]);
     }
 
-    // Step 3: Compute per-thread starting offsets for each cell.
-    // For each cell, determine where in the final vector each thread should start writing.
+    // ------------------------------------------------------------------
+    // Step 5: Compute thread-local offsets for each cell via prefix-sum over threads.
+    // threadOffsets[t][cell] is the starting index in cell 'cell' for thread t.
+    // ------------------------------------------------------------------
     std::vector<std::vector<size_t>> threadOffsets(nThreads, std::vector<size_t>(numCells, 0));
     for (int cell = 0; cell < numCells; cell++) {
-        threadOffsets[0][cell] = 0;
-        for (int t = 1; t < nThreads; t++) {
-            threadOffsets[t][cell] = threadOffsets[t - 1][cell] + localCounts[t - 1][cell];
+        size_t offset = 0;
+        for (int t = 0; t < nThreads; t++) {
+            threadOffsets[t][cell] = offset;
+            offset += threadCounts[t][cell];
         }
     }
 
-    // Step 4: Scatter Phase - Write particle indices directly into pre-allocated slots.
-#pragma omp parallel for
-    for (int i = 0; i < n; i++) {
+    // ------------------------------------------------------------------
+    // Step 6: Scatter phase.
+    // Each thread writes its particle indices into the preallocated cells using its thread-local offset.
+    // ------------------------------------------------------------------
+#pragma omp parallel
+    {
         int tid = omp_get_thread_num();
-        int gx = static_cast<int>(std::floor(dat.x[i] / cellSize));
-        int gy = static_cast<int>(std::floor(dat.y[i] / cellSize));
-        int cellIndex = (gy - globalMinGy) * width + (gx - globalMinGx);
-        size_t offset = threadOffsets[tid][cellIndex];
-        grid.cells[cellIndex].indices[offset] = i;
-        // Increment the thread-local offset.
-        threadOffsets[tid][cellIndex]++;
+#pragma omp for schedule(static)
+        for (int i = 0; i < n; i++) {
+            double posX = static_cast<double>(dat.x[i]) + gridEpsilon;
+            double posY = static_cast<double>(dat.y[i]) + gridEpsilon;
+            int gx = static_cast<int>(std::floor(posX / static_cast<double>(cellSize)));
+            int gy = static_cast<int>(std::floor(posY / static_cast<double>(cellSize)));
+            int cellIndex = (gy - globalMinGy) * width + (gx - globalMinGx);
+            assert(cellIndex >= 0 && cellIndex < numCells);
+            size_t pos = threadOffsets[tid][cellIndex];
+            grid.cells[cellIndex].indices[pos] = i;
+            threadOffsets[tid][cellIndex]++;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Step 7: Enforce deterministic ordering.
+    // Sort the indices in each cell.
+    // ------------------------------------------------------------------
+    for (int cell = 0; cell < numCells; cell++) {
+        std::sort(grid.cells[cell].indices.begin(), grid.cells[cell].indices.end());
     }
 
     return grid;
@@ -296,8 +345,8 @@ void computeDensities(FluidParticleData &dat,
 
         float accum = 0.f;
 
-        int gx = static_cast<int>(std::floor(xi / cellSize));
-        int gy = static_cast<int>(std::floor(yi / cellSize));
+        int gx = static_cast<int>(std::floor(static_cast<double>(xi) / static_cast<double>(cellSize)));
+        int gy = static_cast<int>(std::floor(static_cast<double>(yi) / static_cast<double>(cellSize)));
 
         // Process neighbor cells in the 3x3 region
         for (int cx = gx - 1; cx <= gx + 1; cx++) {
@@ -371,8 +420,8 @@ void computeForces(FluidParticleData &dat,
             float sumAx = 0.f;
             float sumAy = 0.f;
 
-            int gx = static_cast<int>(std::floor(xi / cellSize));
-            int gy = static_cast<int>(std::floor(yi / cellSize));
+            int gx = static_cast<int>(std::floor(static_cast<double>(xi) / static_cast<double>(cellSize)));
+            int gy = static_cast<int>(std::floor(static_cast<double>(yi) / static_cast<double>(cellSize)));
 
             // Process neighbor cells in 3x3 block.
             for (int cx = gx - 1; cx <= gx + 1; cx++) {
@@ -458,8 +507,8 @@ void velocityVerletSubStep(FluidParticleData &dat,
     float cellSize = 2.f * h0;
     UniformGrid grid;
     {
-        PROFILE_SCOPE("BuildUniformGridContiguousCountingSort");
-        grid = buildUniformGridContiguousCountingSort(dat, cellSize);
+        PROFILE_SCOPE("BuildUniformGridContiguousDomainPartition");
+        grid = buildUniformGridContiguousDomainPartition(dat, cellSize);
     }
 
     // Compute densities using the new contiguous grid.
