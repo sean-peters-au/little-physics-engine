@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <climits>  // For INT_MAX/INT_MIN
+#include <omp.h>    // For OpenMP
 
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sph.hpp"
@@ -77,43 +78,77 @@ struct UniformGrid {
 };
 
 /**
- * @brief Builds a contiguous uniform grid from particle positions.
+ * @brief Builds a contiguous uniform grid from particle positions using a parallelized approach.
  *        Computes domain bounds (in cell indices) and creates a flat vector of GridCell.
+ *
+ * @param dat      The fluid particle data (positions).
+ * @param cellSize The spatial cell size.
+ *
+ * @return A UniformGrid with a contiguous cell array.
  */
-UniformGrid buildUniformGridContiguous(const FluidParticleData &dat, float cellSize)
+UniformGrid buildUniformGridContiguousParallel(const FluidParticleData &dat, float cellSize)
 {
     int n = static_cast<int>(dat.x.size());
     if (n == 0) {
         return {0, 0, 0, 0, {}};
     }
-
-    int minGx = INT_MAX, minGy = INT_MAX;
-    int maxGx = INT_MIN, maxGy = INT_MIN;
+    
+    // Step 1: Compute domain bounds in parallel
+    int globalMinGx = INT_MAX, globalMinGy = INT_MAX;
+    int globalMaxGx = INT_MIN, globalMaxGy = INT_MIN;
+    #pragma omp parallel for reduction(min:globalMinGx,globalMinGy) reduction(max:globalMaxGx,globalMaxGy)
     for (int i = 0; i < n; i++) {
         int gx = static_cast<int>(std::floor(dat.x[i] / cellSize));
         int gy = static_cast<int>(std::floor(dat.y[i] / cellSize));
-        if (gx < minGx) minGx = gx;
-        if (gy < minGy) minGy = gy;
-        if (gx > maxGx) maxGx = gx;
-        if (gy > maxGy) maxGy = gy;
+        if (gx < globalMinGx) globalMinGx = gx;
+        if (gy < globalMinGy) globalMinGy = gy;
+        if (gx > globalMaxGx) globalMaxGx = gx;
+        if (gy > globalMaxGy) globalMaxGy = gy;
     }
-
-    int width  = maxGx - minGx + 1;
-    int height = maxGy - minGy + 1;
+    
+    int width = globalMaxGx - globalMinGx + 1;
+    int height = globalMaxGy - globalMinGy + 1;
     UniformGrid grid;
-    grid.minX = minGx;
-    grid.minY = minGy;
+    grid.minX = globalMinGx;
+    grid.minY = globalMinGy;
     grid.width = width;
     grid.height = height;
-    grid.cells.resize(width * height);
-
+    int numCells = width * height;
+    grid.cells.resize(numCells);
+    
+    // Step 2: Allocate thread-local grids for parallel insertion.
+    int nThreads = 1;
+    #pragma omp parallel
+    {
+       #pragma omp single
+       {
+           nThreads = omp_get_num_threads();
+       }
+    }
+    // Each thread gets its own grid copy (of fixed size).
+    std::vector<std::vector<GridCell>> threadGrids(nThreads, std::vector<GridCell>(numCells));
+    
+    // Step 3: In parallel, assign each particle to its corresponding thread-local cell.
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
+        int tid = omp_get_thread_num();
         int gx = static_cast<int>(std::floor(dat.x[i] / cellSize));
         int gy = static_cast<int>(std::floor(dat.y[i] / cellSize));
-        int index = (gy - minGy) * width + (gx - minGx);
-        grid.cells[index].indices.push_back(i);
+        int index = (gy - globalMinGy) * width + (gx - globalMinGx);
+        threadGrids[tid][index].indices.push_back(i);
     }
-
+    
+    // Step 4: Merge all thread-local grids into the single contiguous grid.
+    for (int cell = 0; cell < numCells; cell++) {
+        for (int tid = 0; tid < nThreads; tid++) {
+            grid.cells[cell].indices.insert(
+                grid.cells[cell].indices.end(),
+                threadGrids[tid][cell].indices.begin(),
+                threadGrids[tid][cell].indices.end()
+            );
+        }
+    }
+    
     return grid;
 }
 
@@ -398,7 +433,7 @@ void velocityVerletSubStep(FluidParticleData &dat,
     // Use the first particle's h as an approximation for cellSize.
     float h0 = (n > 0 ? dat.h[0] : 0.05f);
     float cellSize = 2.f * h0;
-    auto grid = buildUniformGridContiguous(dat, cellSize);
+    auto grid = buildUniformGridContiguousParallel(dat, cellSize);
 
     // Compute densities using the new contiguous grid.
     computeDensities(dat, grid, cellSize);
