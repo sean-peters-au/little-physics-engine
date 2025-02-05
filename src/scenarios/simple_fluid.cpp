@@ -13,7 +13,7 @@
 #include <ctime>
 #include <iostream>
 
-static constexpr int    KFluidParticleCount = 500;    // number of fluid particles
+static constexpr int    KFluidParticleCount = 1000;    // number of fluid particles
 static constexpr double KFluidRestDensity   = 1000.0; // typical for water (kg/m^3 in a scaled sense)
 static constexpr double KFluidParticleMass  = 20.0;    // you can scale this as needed
 
@@ -85,8 +85,8 @@ ScenarioConfig SimpleFluidScenario::getConfig() const
 
     // We enable the "FLUID" system (defined below), plus movement, boundary, etc.
     cfg.activeSystems = {
-        Systems::SystemType::BASIC_GRAVITY,
         Systems::SystemType::FLUID,
+        Systems::SystemType::BASIC_GRAVITY,
         // Systems::SystemType::DAMPENING,
         // Systems::SystemType::SLEEP,
         // Systems::SystemType::MOVEMENT,

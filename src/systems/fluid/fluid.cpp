@@ -23,6 +23,7 @@
 #include <vector>
 #include <unordered_map>
 #include <algorithm>
+#include <climits>  // For INT_MAX/INT_MIN
 
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sph.hpp"
@@ -65,41 +66,54 @@ struct GridCell {
 };
 
 /**
- * @brief Key for uniform grid hashing in 2D
+ * @brief New cache-friendly grid structure:
  */
-struct CellKey {
-    int gx;
-    int gy;
-    bool operator==(const CellKey &o) const {
-        return gx == o.gx && gy == o.gy;
-    }
+struct UniformGrid {
+    int minX;    // Minimum cell x-index
+    int minY;    // Minimum cell y-index
+    int width;   // Number of cells in x-direction
+    int height;  // Number of cells in y-direction
+    std::vector<GridCell> cells;  // Stored in row-major order.
 };
 
-struct CellKeyHash {
-    size_t operator()(const CellKey &k) const {
-        auto h1 = std::hash<int>()(k.gx);
-        auto h2 = std::hash<int>()(k.gy);
-        return h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));
-    }
-};
-
-/** Builds a uniform grid for neighbor search (keyed by cell indices). */
-std::unordered_map<CellKey, GridCell, CellKeyHash> buildUniformGrid(const FluidParticleData &dat,
-                                                                    float cellSize)
+/**
+ * @brief Builds a contiguous uniform grid from particle positions.
+ *        Computes domain bounds (in cell indices) and creates a flat vector of GridCell.
+ */
+UniformGrid buildUniformGridContiguous(const FluidParticleData &dat, float cellSize)
 {
-    std::unordered_map<CellKey, GridCell, CellKeyHash> grid;
-    grid.reserve(dat.x.size()); // might help reduce rehash
-
     int n = static_cast<int>(dat.x.size());
-    for (int i = 0; i < n; i++) {
-        float px = dat.x[i];
-        float py = dat.y[i];
-        int gx = static_cast<int>(std::floor(px / cellSize));
-        int gy = static_cast<int>(std::floor(py / cellSize));
-
-        CellKey key{gx, gy};
-        grid[key].indices.push_back(i);
+    if (n == 0) {
+        return {0, 0, 0, 0, {}};
     }
+
+    int minGx = INT_MAX, minGy = INT_MAX;
+    int maxGx = INT_MIN, maxGy = INT_MIN;
+    for (int i = 0; i < n; i++) {
+        int gx = static_cast<int>(std::floor(dat.x[i] / cellSize));
+        int gy = static_cast<int>(std::floor(dat.y[i] / cellSize));
+        if (gx < minGx) minGx = gx;
+        if (gy < minGy) minGy = gy;
+        if (gx > maxGx) maxGx = gx;
+        if (gy > maxGy) maxGy = gy;
+    }
+
+    int width  = maxGx - minGx + 1;
+    int height = maxGy - minGy + 1;
+    UniformGrid grid;
+    grid.minX = minGx;
+    grid.minY = minGy;
+    grid.width = width;
+    grid.height = height;
+    grid.cells.resize(width * height);
+
+    for (int i = 0; i < n; i++) {
+        int gx = static_cast<int>(std::floor(dat.x[i] / cellSize));
+        int gy = static_cast<int>(std::floor(dat.y[i] / cellSize));
+        int index = (gy - minGy) * width + (gx - minGx);
+        grid.cells[index].indices.push_back(i);
+    }
+
     return grid;
 }
 
@@ -202,7 +216,7 @@ FluidParticleData gatherFluidParticles(entt::registry &registry)
  *        distance computations in small batches.
  */
 void computeDensities(FluidParticleData &dat,
-                      const std::unordered_map<CellKey, GridCell, CellKeyHash> &grid,
+                      const UniformGrid &grid,
                       float cellSize)
 {
     PROFILE_SCOPE("ComputeDensities");
@@ -227,98 +241,27 @@ void computeDensities(FluidParticleData &dat,
         int gx = static_cast<int>(std::floor(xi / cellSize));
         int gy = static_cast<int>(std::floor(yi / cellSize));
 
-        // We'll collect neighbor coords in small arrays, then do NEON ops on them in batches of 4
-        float neighborX[128];
-        float neighborY[128];
-        float neighborMass[128];
-        int   neighborCount = 0;
-
-        // For each relevant cell
-        for (int cx = gx-1; cx <= gx+1; cx++) {
-            for (int cy = gy-1; cy <= gy+1; cy++) {
-                auto it = grid.find(CellKey{cx, cy});
-                if (it == grid.end()) continue;
-                for (auto j : it->second.indices) {
+        // Process neighbor cells in the 3x3 region
+        for (int cx = gx - 1; cx <= gx + 1; cx++) {
+            for (int cy = gy - 1; cy <= gy + 1; cy++) {
+                // Check if the cell exists in the grid.
+                if (cx < grid.minX || cx >= grid.minX + grid.width ||
+                    cy < grid.minY || cy >= grid.minY + grid.height)
+                    continue;
+                const GridCell &cell = grid.cells[(cy - grid.minY) * grid.width + (cx - grid.minX)];
+                for (auto j : cell.indices) {
                     // If we exceed local array, process now (rare if spacing is decent)
-                    if (neighborCount == 128) {
-                        // We'll process them now
-                        for (int idx = 0; idx < neighborCount; idx+=4) {
-                            float32x4_t x4  = vld1q_f32(&neighborX[idx]);
-                            float32x4_t y4  = vld1q_f32(&neighborY[idx]);
-                            float32x4_t dx4 = vsubq_f32(vdupq_n_f32(xi), x4);
-                            float32x4_t dy4 = vsubq_f32(vdupq_n_f32(yi), y4);
-                            // r2 = dx^2 + dy^2
-                            float32x4_t dx2 = vmulq_f32(dx4, dx4);
-                            float32x4_t dy2 = vmulq_f32(dy4, dy4);
-                            float32x4_t r2  = vaddq_f32(dx2, dy2);
-
-                            // compare r2 < h2
-                            float32x4_t mask = vcltq_f32(r2, vdupq_n_f32(h2));
-                            // if any are < h2, we do poly6 on them
-                            // We'll do a "bitmask" approach:
-                            uint32x4_t maskBits = vreinterpretq_u32_f32(mask);
-                            // We'll handle them individually
-                            float out[4]; vst1q_f32(out, vreinterpretq_f32_u32(maskBits));
-                            for (int k=0; k<4; k++) {
-                                // If mask is nonzero, we are inside
-                                if (reinterpret_cast<uint32_t&>(out[k]) == 0xFFFFFFFFu) {
-                                    // diff = (h^2 - r^2)
-                                    float r2f = (dx4[k]*dx4[k] + dy4[k]*dy4[k]);
-                                    float diff = h2 - r2f;
-                                    float w = coeff * diff*diff*diff;
-                                    accum += neighborMass[idx + k] * w;
-                                }
-                            }
-                        }
-                        neighborCount = 0; // reset
-                    }
-                    // stash j into the local arrays
-                    neighborX[neighborCount]   = dat.x[j];
-                    neighborY[neighborCount]   = dat.y[j];
-                    neighborMass[neighborCount]= dat.mass[j];
-                    neighborCount++;
-                }
-            }
-        }
-
-        // Process any leftover neighbors
-        if (neighborCount > 0) {
-            // do the same NEON batch approach, but partial
-            int alignedCount = (neighborCount / 4) * 4;
-            for (int idx=0; idx<alignedCount; idx+=4) {
-                float32x4_t x4  = vld1q_f32(&neighborX[idx]);
-                float32x4_t y4  = vld1q_f32(&neighborY[idx]);
-                float32x4_t dx4 = vsubq_f32(vdupq_n_f32(xi), x4);
-                float32x4_t dy4 = vsubq_f32(vdupq_n_f32(yi), y4);
-                float32x4_t dx2 = vmulq_f32(dx4, dx4);
-                float32x4_t dy2 = vmulq_f32(dy4, dy4);
-                float32x4_t r2  = vaddq_f32(dx2, dy2);
-
-                float32x4_t mask = vcltq_f32(r2, vdupq_n_f32(h2));
-                uint32x4_t maskBits = vreinterpretq_u32_f32(mask);
-                float out[4]; vst1q_f32(out, vreinterpretq_f32_u32(maskBits));
-                for (int k=0; k<4; k++) {
-                    if (reinterpret_cast<uint32_t&>(out[k]) == 0xFFFFFFFFu) {
-                        float r2f = (dx4[k]*dx4[k] + dy4[k]*dy4[k]);
-                        float diff = h2 - r2f;
-                        float w = coeff * diff*diff*diff;
-                        accum += neighborMass[idx + k] * w;
+                    float dx = xi - dat.x[j];
+                    float dy = yi - dat.y[j];
+                    float r2 = dx*dx + dy*dy;
+                    if (r2 < h2) {
+                        float diff = h2 - r2;
+                        float w = coeff * diff * diff * diff;
+                        accum += dat.mass[j] * w;
                     }
                 }
             }
-            // process remainder (1-3)
-            for (int idx = alignedCount; idx < neighborCount; idx++) {
-                float dx = xi - neighborX[idx];
-                float dy = yi - neighborY[idx];
-                float r2 = dx*dx + dy*dy;
-                if (r2 < h2) {
-                    float diff = (h2 - r2);
-                    float w = coeff * diff*diff*diff;
-                    accum += neighborMass[idx] * w;
-                }
-            }
         }
-
         dat.density[i] = accum;
     }
 }
@@ -328,7 +271,7 @@ void computeDensities(FluidParticleData &dat,
  *        Includes partial NEON usage for distance checks.
  */
 void computeForces(FluidParticleData &dat,
-                   const std::unordered_map<CellKey, GridCell, CellKeyHash> &grid,
+                   const UniformGrid &grid,
                    float cellSize,
                    float restDensity,
                    float stiffness,
@@ -354,146 +297,72 @@ void computeForces(FluidParticleData &dat,
     }
 
     // 2) Pressure + Viscosity loops
-    #pragma omp parallel for
-    for (int i = 0; i < n; i++) {
-        float xi = dat.x[i];
-        float yi = dat.y[i];
-        float pi = dat.pressure[i];
-        float rhoi = dat.density[i];
-        float hi = dat.h[i];
-        if (rhoi < 1e-12f) continue;
+    {
+        PROFILE_SCOPE("ComputeForces_Pressure");
+        #pragma omp parallel for
+        for (int i = 0; i < n; i++) {
+            float xi = dat.x[i];
+            float yi = dat.y[i];
+            float pi = dat.pressure[i];
+            float rhoi = dat.density[i];
+            float hi = dat.h[i];
+            if (rhoi < 1e-12f) continue;
 
-        // We'll gather neighbor data in small arrays for partial NEON usage:
-        float neighborX[128];
-        float neighborY[128];
-        float neighborVx[128];
-        float neighborVy[128];
-        float neighborMass[128];
-        float neighborP[128];
-        float neighborRho[128];
-        float neighborH[128];
+            // Temporary buffers for neighbor data can be used for NEON batching.
+            // For simplicity, we process neighbors directly in this version.
+            float sumAx = 0.f;
+            float sumAy = 0.f;
 
-        float sumAx = 0.f;
-        float sumAy = 0.f;
+            int gx = static_cast<int>(std::floor(xi / cellSize));
+            int gy = static_cast<int>(std::floor(yi / cellSize));
 
-        // building local neighbor list
-        int gx = static_cast<int>(std::floor(xi / cellSize));
-        int gy = static_cast<int>(std::floor(yi / cellSize));
+            // Process neighbor cells in 3x3 block.
+            for (int cx = gx - 1; cx <= gx + 1; cx++) {
+                for (int cy = gy - 1; cy <= gy + 1; cy++) {
+                    if (cx < grid.minX || cx >= grid.minX + grid.width ||
+                        cy < grid.minY || cy >= grid.minY + grid.height)
+                        continue;
+                    const GridCell &cell = grid.cells[(cy - grid.minY) * grid.width + (cx - grid.minX)];
+                    for (auto j : cell.indices) {
+                        if (j == i) continue;
+                        float dx = xi - dat.x[j];
+                        float dy = yi - dat.y[j];
+                        float r2 = dx * dx + dy * dy;
+                        if (r2 < 1e-14f) continue;
+                        float h_ij = 0.5f * (hi + dat.h[j]);
+                        if (r2 >= (h_ij * h_ij)) continue;
 
-        // We'll store partial results here, then do partial NEON
-        int neighborCount = 0;
+                        float r = std::sqrt(r2);
+                        float rhoj = dat.density[j];
+                        if (rhoj < 1e-12f) continue;
+                        float pj = dat.pressure[j];
+                        float term = (pi / (rhoi * rhoi)) + (pj / (rhoj * rhoj));
+                        float spikyFactor = spikyCoeff2D(h_ij);
+                        float diff = (h_ij - r);
+                        float w_spiky = spikyFactor * (diff * diff);
+                        float rx = dx / r;
+                        float ry = dy / r;
+                        float fPress = -dat.mass[j] * term * w_spiky;
+                        float fx = fPress * rx;
+                        float fy = fPress * ry;
 
-        for (int cx = gx-1; cx <= gx+1; cx++) {
-            for (int cy = gy-1; cy <= gy+1; cy++) {
-                auto it = grid.find(CellKey{cx, cy});
-                if (it == grid.end()) continue;
+                        // Viscosity
+                        float vx_ij = dat.vx[i] - dat.vx[j];
+                        float vy_ij = dat.vy[i] - dat.vy[j];
+                        float lapFactor = viscLaplacianCoeff2D(h_ij);
+                        float w_visc = lapFactor * (diff);
+                        float fVisc = viscosity * dat.mass[j] * (w_visc / rhoj);
+                        fx -= fVisc * vx_ij;
+                        fy -= fVisc * vy_ij;
 
-                for (auto j : it->second.indices) {
-                    if (j == i) continue;
-                    neighborX[neighborCount]   = dat.x[j];
-                    neighborY[neighborCount]   = dat.y[j];
-                    neighborVx[neighborCount]  = dat.vx[j];
-                    neighborVy[neighborCount]  = dat.vy[j];
-                    neighborMass[neighborCount]= dat.mass[j];
-                    neighborP[neighborCount]   = dat.pressure[j];
-                    neighborRho[neighborCount] = dat.density[j];
-                    neighborH[neighborCount]   = dat.h[j];
-                    neighborCount++;
-
-                    if (neighborCount == 128) {
-                        // Process them now
-                        // We'll do a simpler scalar approach to accumulate partial sums,
-                        // but do NEON for the distance check & weighting.
-                        for (int idx = 0; idx < neighborCount; idx++) {
-                            float dx = xi - neighborX[idx];
-                            float dy = yi - neighborY[idx];
-                            float r2 = dx*dx + dy*dy;
-                            if (r2 < 1e-14f) continue;
-
-                            // average smoothing length
-                            float h_ij = 0.5f*(hi + neighborH[idx]);
-                            if (r2 >= (h_ij*h_ij)) continue;
-
-                            float r = std::sqrt(r2);
-                            float rhoj = neighborRho[idx];
-                            if (rhoj < 1e-12f) continue;
-
-                            float pj = neighborP[idx];
-                            // symmetrical pressure term
-                            float term = (pi/(rhoi*rhoi)) + (pj/(rhoj*rhoj));
-
-                            float spikyFactor = spikyCoeff2D(h_ij);
-                            float diff = (h_ij - r);
-                            float w_spiky = spikyFactor*(diff*diff);
-
-                            float rx = dx / r;
-                            float ry = dy / r;
-
-                            float fPress = -neighborMass[idx]*term*w_spiky;
-                            float fx = fPress*rx;
-                            float fy = fPress*ry;
-
-                            // Viscosity
-                            float vx_ij = dat.vx[i] - neighborVx[idx];
-                            float vy_ij = dat.vy[i] - neighborVy[idx];
-                            float lapFactor = viscLaplacianCoeff2D(h_ij);
-                            float w_visc = lapFactor*(diff);
-                            float fVisc = viscosity*neighborMass[idx]*(w_visc/rhoj);
-                            fx -= fVisc*vx_ij; // minus because we did v_i - v_j
-                            fy -= fVisc*vy_ij;
-
-                            sumAx += fx;
-                            sumAy += fy;
-                        }
-                        neighborCount = 0; // reset
+                        sumAx += fx;
+                        sumAy += fy;
                     }
                 }
             }
+            dat.ax[i] = sumAx;
+            dat.ay[i] = sumAy;
         }
-
-        // process leftover
-        for (int idx=0; idx<neighborCount; idx++) {
-            float dx = xi - neighborX[idx];
-            float dy = yi - neighborY[idx];
-            float r2 = dx*dx + dy*dy;
-            if (r2 < 1e-14f) continue;
-            float h_ij = 0.5f*(hi + neighborH[idx]);
-            if (r2 >= (h_ij*h_ij)) continue;
-
-            float r = std::sqrt(r2);
-            float rhoj = neighborRho[idx];
-            if (rhoj < 1e-12f) continue;
-
-            float pj = neighborP[idx];
-            float term = (pi/(rhoi*rhoi)) + (pj/(rhoj*rhoj));
-
-            float spikyFactor = spikyCoeff2D(h_ij);
-            float diff = (h_ij - r);
-            float w_spiky = spikyFactor*(diff*diff);
-
-            float rx = dx / r;
-            float ry = dy / r;
-
-            float fPress = -neighborMass[idx]*term*w_spiky;
-            float fx = fPress*rx;
-            float fy = fPress*ry;
-
-            // Viscosity
-            float vx_ij = dat.vx[i] - neighborVx[idx];
-            float vy_ij = dat.vy[i] - neighborVy[idx];
-            float lapFactor = viscLaplacianCoeff2D(h_ij);
-            float w_visc = lapFactor*(diff);
-            float fVisc = viscosity*neighborMass[idx]*(w_visc/rhoj);
-            fx -= fVisc*vx_ij;
-            fy -= fVisc*vy_ij;
-
-            sumAx += fx;
-            sumAy += fy;
-        }
-
-        // store
-        dat.ax[i] = sumAx;
-        dat.ay[i] = sumAy;
     }
 }
 
@@ -525,16 +394,16 @@ void velocityVerletSubStep(FluidParticleData &dat,
         dat.y[i] += dat.vHalfy[i]*subDt;
     }
 
-    // build uniform grid from updated x,y
-    // pick cellSize ~ 2*h. For simplicity, use first particle's h
+    // Build uniform grid from updated x,y.
+    // Use the first particle's h as an approximation for cellSize.
     float h0 = (n > 0 ? dat.h[0] : 0.05f);
-    float cellSize = 2.f*h0;
-    auto grid = buildUniformGrid(dat, cellSize);
+    float cellSize = 2.f * h0;
+    auto grid = buildUniformGridContiguous(dat, cellSize);
 
-    // compute densities
+    // Compute densities using the new contiguous grid.
     computeDensities(dat, grid, cellSize);
 
-    // compute new forces (a)
+    // Compute new forces (a) using the new grid.
     computeForces(dat, grid, cellSize, restDensity, stiffness, viscosity);
 
     // (3) v = vHalf + 0.5 a dt
