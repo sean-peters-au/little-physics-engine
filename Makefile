@@ -10,6 +10,9 @@ ifeq ($(shell uname),Darwin)
 NATIVE_CXXFLAGS += -stdlib=libc++ -isysroot $(shell xcrun --show-sdk-path) -D_DARWIN_C_SOURCE -D_XOPEN_SOURCE=700
 endif
 
+# Determine the Homebrew prefix for libomp
+LIBOMP_PREFIX := $(shell brew --prefix libomp)
+
 # Base flags for all builds
 CXXFLAGS := -Wall -Wextra -std=c++17 \
             -I./include \
@@ -55,8 +58,8 @@ WASM_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/wasm/%.o,$(BASE_SRCS)) \
 WASM_SRCS := $(BASE_SRCS) $(WASM_ARCH_SRCS)
 
 native: CXX := clang++
-native: CXXFLAGS += $(NATIVE_CXXFLAGS)  # Add macOS flags only for native
-native: LDFLAGS := -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system
+native: CXXFLAGS += $(NATIVE_CXXFLAGS) -Xpreprocessor -fopenmp -I$(LIBOMP_PREFIX)/include
+native: LDFLAGS := -L/opt/homebrew/lib -L$(LIBOMP_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system -lomp
 native: directories copy_assets $(NATIVE_OBJS)
 	@echo "Building native target with objects: $(NATIVE_OBJS)"
 	$(CXX) $(CXXFLAGS) $(NATIVE_OBJS) -o $(BUILD_DIR)/simulator_native $(LDFLAGS)
