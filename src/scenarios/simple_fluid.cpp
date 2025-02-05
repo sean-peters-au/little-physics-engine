@@ -15,7 +15,7 @@
 
 static constexpr int    KFluidParticleCount = 500;    // number of fluid particles
 static constexpr double KFluidRestDensity   = 1000.0; // typical for water (kg/m^3 in a scaled sense)
-static constexpr double KFluidParticleMass  = 1.0;    // you can scale this as needed
+static constexpr double KFluidParticleMass  = 20.0;    // you can scale this as needed
 
 static constexpr double KWallThickness      = 0.1;    // thickness of bounding walls
 static constexpr double KWallMass           = 1e30;   // effectively infinite
@@ -85,10 +85,12 @@ ScenarioConfig SimpleFluidScenario::getConfig() const
 
     // We enable the "FLUID" system (defined below), plus movement, boundary, etc.
     cfg.activeSystems = {
-        Systems::SystemType::MOVEMENT,
-        Systems::SystemType::FLUID,   // <-- our custom fluid solver
+        Systems::SystemType::BASIC_GRAVITY,
+        Systems::SystemType::FLUID,
+        // Systems::SystemType::DAMPENING,
+        // Systems::SystemType::SLEEP,
+        // Systems::SystemType::MOVEMENT,
         Systems::SystemType::BOUNDARY,
-        // Potentially also SLEEP, or DAMPENING, or collisions, etc.
     };
 
     return cfg;
@@ -109,39 +111,59 @@ void SimpleFluidScenario::createEntities(entt::registry &registry) const
     // Top wall
     makeBoundaryWall(registry, sizeM*0.5, sizeM, sizeM*0.5, halfWall);
 
-    // 2) Spawn fluid particles in a block in the lower half of the container
+    // 2) Spawn fluid particles using a grid-based layout with a small jitter 
+    // to prevent particles from aligning perfectly.
+    int numParticles = KFluidParticleCount;
+    double x_min = sizeM * 0.3;
+    double x_max = sizeM * 0.7;
+    double y_min = sizeM * 0.3;
+    double y_max = sizeM * 0.7;
+    double regionWidth = x_max - x_min;
+    double regionHeight = y_max - y_min;
+
+    // Choose grid resolution based on the particle count.
+    // Here we choose the number of columns as the integer square root
+    // and compute rows accordingly.
+    int nCols = static_cast<int>(std::sqrt(numParticles));
+    int nRows = (numParticles + nCols - 1) / nCols; // ceiling division
+
+    // Compute spacing (with some margin from the region boundaries).
+    double dx = regionWidth / (nCols + 1);
+    double dy = regionHeight / (nRows + 1);
+
+    // Use a small jitter to break the grid symmetry.
     std::default_random_engine generator{static_cast<unsigned int>(time(nullptr))};
-    std::uniform_real_distribution<double> xDist(sizeM*0.2, sizeM*0.8);
-    std::uniform_real_distribution<double> yDist(sizeM*0.2, sizeM*0.5);
+    std::uniform_real_distribution<double> jitterDist(-0.1, 0.1);  // ±10% of a grid cell
 
-    for(int i = 0; i < KFluidParticleCount; i++) {
-        auto e = registry.create();
+    int count = 0;
+    for (int row = 0; row < nRows && count < numParticles; row++) {
+        for (int col = 0; col < nCols && count < numParticles; col++) {
+            double jitterX = jitterDist(generator) * dx;
+            double jitterY = jitterDist(generator) * dy;
+            double x = x_min + (col + 1) * dx + jitterX;
+            double y = y_min + (row + 1) * dy + jitterY;
 
-        // Position in a random region
-        double x = xDist(generator);
-        double y = yDist(generator);
-        registry.emplace<Components::Position>(e, x, y);
-        registry.emplace<Components::Velocity>(e, 0.0, 0.0);
+            auto e = registry.create();
+            registry.emplace<Components::Position>(e, x, y);
+            registry.emplace<Components::Velocity>(e, 0.0, 0.0);
+            registry.emplace<Components::Mass>(e, KFluidParticleMass);
+            registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
+            registry.emplace<Components::Material>(e, KFluidStaticFriction, KFluidDynamicFriction);
 
-        // Mass, phase, shape
-        registry.emplace<Components::Mass>(e, KFluidParticleMass);
-        registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
+            // Use a circle shape for fluid particles
+            double const r = 0.02; 
+            registry.emplace<Components::Shape>(e, Components::ShapeType::Circle, r);
+            registry.emplace<CircleShape>(e, r);
 
-        // Minimal friction
-        registry.emplace<Components::Material>(e, KFluidStaticFriction, KFluidDynamicFriction);
+            // SPH-related properties
+            registry.emplace<Components::SmoothingLength>(e, 0.06);
+            registry.emplace<Components::SpeedOfSound>(e, 1000.0);
+            registry.emplace<Components::SPHTemp>(e);
 
-        // We'll treat fluid as small circles for collision
-        double const r = 0.02; 
-        registry.emplace<Components::Shape>(e, Components::ShapeType::Circle, r);
-        registry.emplace<CircleShape>(e, r);
-
-        // For SPH computations, store smoothing length etc. 
-        registry.emplace<Components::SmoothingLength>(e, 0.06); // example smoothing length
-        registry.emplace<Components::SpeedOfSound>(e, 1000.0);  // speed of sound (for pressure eq.)
-        registry.emplace<Components::SPHTemp>(e);               // to store density/pressure each frame
-
-        // A random color tinted bluish
-        registry.emplace<Components::Color>(e, 20, 20 + (i % 50), 200 + (i % 55));
+            // A random bluish color (tinted by count)
+            registry.emplace<Components::Color>(e, 20, 20 + (count % 50), 200 + (count % 55));
+            count++;
+        }
     }
-    std::cerr << "Created " << KFluidParticleCount << " fluid particles in scenario." << std::endl;
+    std::cerr << "Created " << count << " fluid particles in scenario." << std::endl;
 }

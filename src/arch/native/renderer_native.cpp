@@ -28,6 +28,7 @@ Renderer::Renderer(int screenWidth, int screenHeight)
     , screenWidth(screenWidth)
     , screenHeight(screenHeight)
 {
+   fluidShader->loadFromFile("shaders/FluidMetaballs.frag", sf::Shader::Fragment);
 }
 
 Renderer::~Renderer() = default;
@@ -85,6 +86,11 @@ Renderer::aggregateParticlesByPixel(const entt::registry &registry)
 }
 
 void Renderer::renderParticles(const entt::registry &registry) {
+    renderSolidParticles(registry);
+    renderFluidParticles(registry);
+}
+
+void Renderer::renderSolidParticles(const entt::registry &registry) {
     ColorMapper mapper;
     switch (currentColorScheme) {
         case ColorScheme::SLEEP:
@@ -105,6 +111,13 @@ void Renderer::renderParticles(const entt::registry &registry) {
     // Now draw each entity
     auto view = registry.view<Components::Position, Components::Shape>();
     for (auto entity : view) {
+        if (registry.any_of<Components::ParticlePhase>(entity)) {
+            const auto &phase = registry.get<Components::ParticlePhase>(entity);
+            if (phase.phase != Components::Phase::Solid) {
+                continue;
+            }
+        }
+
         const auto &pos = view.get<Components::Position>(entity);
         const auto &shape = view.get<Components::Shape>(entity);
 
@@ -230,7 +243,7 @@ void Renderer::renderText(const std::string &text, int x, int y, sf::Color color
     sf::Text sfText;
     sfText.setFont(font);
     sfText.setString(text);
-    sfText.setCharacterSize(16);
+    sfText.setCharacterSize(12);
     sfText.setFillColor(color);
     sfText.setPosition(static_cast<float>(x), static_cast<float>(y));
     window.draw(sfText);
@@ -253,7 +266,7 @@ void Renderer::renderUI(const entt::registry &registry,
 
     // Pause/Play button
     std::string const pauseLabel = paused ? "Play" : "Pause";
-    pausePlayButton.rect = sf::IntRect(panelX, panelY, 80, 30);
+    pausePlayButton.rect = sf::IntRect(panelX, panelY, 60, 20);
     pausePlayButton.label = pauseLabel;
     pausePlayButton.isSpecialButton = true;
     pausePlayButton.scenario = currentScenario;
@@ -273,10 +286,10 @@ void Renderer::renderUI(const entt::registry &registry,
 
         renderText(pauseLabel, panelX + 5, panelY + 5);
     }
-    panelY += 40;
+    panelY += 25;
 
     // Add Next Frame button (only enabled when paused)
-    nextFrameButton.rect = sf::IntRect(panelX, panelY, 100, 30);
+    nextFrameButton.rect = sf::IntRect(panelX, panelY, 80, 20);
     nextFrameButton.label = "Next Frame";
     nextFrameButton.isSpecialButton = true;
     nextFrameButton.scenario = currentScenario;
@@ -298,10 +311,10 @@ void Renderer::renderUI(const entt::registry &registry,
 
         renderText("Next Frame", panelX + 5, panelY + 5, paused ? sf::Color::White : sf::Color(150, 150, 150));
     }
-    panelY += 50;
+    panelY += 25;
 
     // Reset button
-    resetButton.rect = sf::IntRect(panelX, panelY, 80, 30);
+    resetButton.rect = sf::IntRect(panelX, panelY, 60, 20);
     resetButton.label = "Reset";
     resetButton.isSpecialButton = true;
     resetButton.scenario = currentScenario;
@@ -321,7 +334,7 @@ void Renderer::renderUI(const entt::registry &registry,
 
         renderText("Reset", panelX + 5, panelY + 5);
     }
-    panelY += 50;
+    panelY += 25;
 
     // Speed section
     renderText("Playback Speed:", panelX, panelY, sf::Color::White);
@@ -343,7 +356,7 @@ void Renderer::renderUI(const entt::registry &registry,
 
     for (const auto& sp : speeds) {
         UIButton btn;
-        btn.rect = sf::IntRect(panelX, panelY, 60, 25);
+        btn.rect = sf::IntRect(panelX, panelY, 50, 20);
         btn.label = sp.second;
         btn.isSpecialButton = true;
         btn.scenario = currentScenario;
@@ -366,7 +379,7 @@ void Renderer::renderUI(const entt::registry &registry,
         renderText(btn.label, panelX + 5, panelY + 3);
 
         speedButtons.push_back(btn);
-        panelY += 35;
+        panelY += 25;
     }
 
     panelY += 20;
@@ -402,7 +415,7 @@ void Renderer::renderUI(const entt::registry &registry,
         renderText(btn.label, panelX + 5, panelY + 3);
 
         colorSchemeButtons.push_back(btn);
-        panelY += 35;
+        panelY += 25;
     }
 
     panelY += 20;
@@ -421,16 +434,16 @@ void Renderer::renderUI(const entt::registry &registry,
     window.draw(shape);
     
     renderText(debugButton.label, panelX + 5, panelY + 3);
-    panelY += 35;
+    panelY += 25;
 
     panelY += 20;
     renderText("Scenarios:", panelX, panelY, sf::Color::White);
-    panelY += 30;
+    panelY += 25;
 
     // Build scenario buttons
     for (const auto &sc : scenarios) {
         UIButton btn;
-        btn.rect = sf::IntRect(panelX, panelY, 150, 30);
+        btn.rect = sf::IntRect(panelX, panelY, 120, 20);
         btn.label = sc.second;
         btn.isSpecialButton = false;
         btn.scenario = sc.first;
@@ -459,7 +472,7 @@ void Renderer::renderUI(const entt::registry &registry,
         renderText(btn.label, panelX + 5, panelY + 5);
 
         scenarioButtons.push_back(btn);
-        panelY += 40;
+        panelY += 25;
     }
 }
 
@@ -658,6 +671,70 @@ void Renderer::renderPolygonDebug(const entt::registry &registry) {
             dot.setPosition(vxPx - 2.0F, vyPx - 2.0F);
             window.draw(dot);
         }
+    }
+}
+
+void Renderer::renderFluidParticles(const entt::registry &registry) {
+    // Create an offscreen render texture sized to your window.
+    sf::RenderTexture fluidTexture;
+    if (!fluidTexture.create(window.getSize().x, window.getSize().y)) {
+        return; // Handle error as needed.
+    }
+    fluidTexture.clear(sf::Color::Black);
+
+    // Configure additive blending for drawing metaball circles.
+    sf::RenderStates additive;
+    additive.blendMode = sf::BlendAdd;
+
+    // Retrieve fluid particles with the appropriate components.
+    auto view = registry.view<Components::Position, Components::Shape, CircleShape, Components::Color, Components::ParticlePhase>();
+    for (auto entity : view) {
+        const auto &phase = view.get<Components::ParticlePhase>(entity);
+        if (phase.phase != Components::Phase::Liquid)
+            continue;
+        
+        const auto &position = view.get<Components::Position>(entity);
+        const auto &shape    = view.get<Components::Shape>(entity);
+        const auto &circle   = view.get<CircleShape>(entity);
+        const auto &color    = view.get<Components::Color>(entity);
+        
+        // Only render circles defined for liquid-phase.
+        if (shape.type != Components::ShapeType::Circle)
+            continue;
+        
+        // Create a larger circle to represent the particle's influence.
+        float pixelRadius = static_cast<float>(SimulatorConstants::metersToPixels(circle.radius));
+        float influenceRadius = pixelRadius * 4.f;
+        
+        sf::CircleShape metaball(influenceRadius);
+        // Use low alpha so overlapping contributions add up.
+        metaball.setFillColor(sf::Color(color.r, color.g, color.b, 70));
+        metaball.setOrigin(influenceRadius, influenceRadius);
+        
+        float pixelX = static_cast<float>(SimulatorConstants::metersToPixels(position.x));
+        float pixelY = static_cast<float>(SimulatorConstants::metersToPixels(position.y));
+        metaball.setPosition(pixelX, pixelY);
+        
+        fluidTexture.draw(metaball, additive);
+    }
+    fluidTexture.display();
+
+    // Create an SFML sprite from the offscreen render texture.
+    sf::Sprite fluidSprite(fluidTexture.getTexture());
+    
+    // If the shader is available, set uniforms and draw with it.
+    if (fluidShader && fluidShader->isAvailable()) {
+        fluidShader->setUniform("texture", fluidSprite.getTexture());
+        fluidShader->setUniform("threshold", 0.5f);
+        fluidShader->setUniform("smoothness", 0.1f);
+        
+        // Use RenderStates to pass the shader.
+        sf::RenderStates states;
+        states.shader = fluidShader.get();
+        window.draw(fluidSprite, states);
+    } else {
+        // Fallback: draw the sprite directly.
+        window.draw(fluidSprite);
     }
 }
 

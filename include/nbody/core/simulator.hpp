@@ -15,7 +15,8 @@ class ECSSimulator {
 private:
     entt::registry registry;
     // We hold a scenario pointer if you want to keep track of the current scenario object
-    std::unique_ptr<IScenario> scenarioPtr; 
+    std::unique_ptr<IScenario> scenarioPtr;
+    SimulatorConstants::SimulationType currentScenario = SimulatorConstants::SimulationType::KEPLERIAN_DISK;
 
 public:
     ECSSimulator();
@@ -34,7 +35,7 @@ public:
     /**
      * @brief Sets the scenario type (Keplerian, Isothermal, etc.)
      */
-    static void setScenario(SimulatorConstants::SimulationType scenario);
+    void setScenario(SimulatorConstants::SimulationType scenario);
 
     /**
      * @brief Resets the ECS with the newly selected scenario

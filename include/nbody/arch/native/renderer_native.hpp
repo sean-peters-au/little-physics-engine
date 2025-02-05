@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <vector>
 #include <SFML/Graphics.hpp>
+#include <memory>
 
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sim.hpp"
@@ -121,6 +122,9 @@ public:
      */
     void renderParticles(const entt::registry& registry);
 
+    void renderSolidParticles(const entt::registry& registry);
+    void renderFluidParticles(const entt::registry& registry);
+
     /**
      * @brief Renders the current FPS in top-left corner
      * @param fps The frames-per-second value
@@ -206,6 +210,9 @@ private:
     /** Dimensions of the window */
     int screenWidth;
     int screenHeight;
+
+    // Added member: fluidShader for fluid metaballs rendering.
+    std::unique_ptr<sf::Shader> fluidShader;
 
     bool debugVisualization = false;
     UIButton debugButton;

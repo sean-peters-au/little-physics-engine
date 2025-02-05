@@ -24,7 +24,6 @@
 
 // Our scenario classes
 #include "nbody/scenarios/keplerian_disk.hpp"
-#include "nbody/scenarios/isothermal_box.hpp"
 #include "nbody/scenarios/random_polygons.hpp"
 #include <nbody/scenarios/simple_fluid.hpp>
 #include <nbody/systems/fluid/fluid.hpp>
@@ -39,11 +38,9 @@ ECSSimulator::ECSSimulator(CoordinateSystem* /*coordSystem*/) {
 }
 
 void ECSSimulator::setScenario(SimulatorConstants::SimulationType scenario) {
-    // We'll store the scenario type in a unique_ptr. Let's create it in reset()
-    // so this function might just remember it, or do nothing:
+    // Store the scenario type for use in reset()
+    currentScenario = scenario;
     std::cerr << "Scenario set to: " << static_cast<int>(scenario) << std::endl;
-
-    // For now, do nothing. We actually do the real scenario switching in reset().
 }
 
 void ECSSimulator::reset() {
@@ -60,10 +57,8 @@ void ECSSimulator::reset() {
     // Clear ECS
     registry.clear();
 
-    // Suppose we have a local "scenario" variable in setScenario(), or we just pick one here:
-    // For demonstration, let's say we always do RANDOM_POLYGONS:
-    // In practice, store your scenario choice in a member variable or pass it in
-    SimulatorConstants::SimulationType const chosen = SimulatorConstants::SimulationType::RANDOM_POLYGONS;
+    // Use the stored scenario instead of hardcoding RANDOM_POLYGONS
+    SimulatorConstants::SimulationType const chosen = currentScenario;
 
     // Reset global constants to default
     SimulatorConstants::initializeConstants(chosen);
@@ -72,9 +67,6 @@ void ECSSimulator::reset() {
     switch (chosen) {
         case SimulatorConstants::SimulationType::KEPLERIAN_DISK:
             scenarioPtr = std::make_unique<KeplerianDiskScenario>();
-            break;
-        case SimulatorConstants::SimulationType::ISOTHERMAL_BOX:
-            scenarioPtr = std::make_unique<IsothermalBoxScenario>();
             break;
         case SimulatorConstants::SimulationType::SIMPLE_FLUID:
             scenarioPtr = std::make_unique<SimpleFluidScenario>();
