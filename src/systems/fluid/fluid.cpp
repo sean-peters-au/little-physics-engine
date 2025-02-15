@@ -31,6 +31,7 @@
 #include "nbody/components/sph.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/core/profile.hpp"
+#include "nbody/systems/fluid/aligned_allocator.hpp"
 
 namespace {
 
@@ -44,23 +45,27 @@ struct FluidParticleData {
     std::vector<entt::entity> entities;
 
     // SoA: positions, velocities, half-step velocities (vHalf), accelerations
-    std::vector<float> x;
-    std::vector<float> y;
-    std::vector<float> vx;
-    std::vector<float> vy;
-    std::vector<float> vHalfx;  // velocity at half-step (Velocity Verlet)
-    std::vector<float> vHalfy;
-    std::vector<float> ax;
-    std::vector<float> ay;
+    std::vector<float, AlignedAllocator<float, 32>> x;
+    std::vector<float, AlignedAllocator<float, 32>> y;
+    std::vector<float, AlignedAllocator<float, 32>> vx;
+    std::vector<float, AlignedAllocator<float, 32>> vy;
+    std::vector<float, AlignedAllocator<float, 32>> vHalfx;  // velocity at half-step (Velocity Verlet)
+    std::vector<float, AlignedAllocator<float, 32>> vHalfy;
+    std::vector<float, AlignedAllocator<float, 32>> ax;
+    std::vector<float, AlignedAllocator<float, 32>> ay;
 
     // Mass, smoothing length, speed of sound
-    std::vector<float> mass;
-    std::vector<float> h;
-    std::vector<float> c;
+    std::vector<float, AlignedAllocator<float, 32>> mass;
+    std::vector<float, AlignedAllocator<float, 32>> h;
+    std::vector<float, AlignedAllocator<float, 32>> c;
 
     // Computed each substep
-    std::vector<float> density;
-    std::vector<float> pressure;
+    std::vector<float, AlignedAllocator<float, 32>> density;
+    std::vector<float, AlignedAllocator<float, 32>> pressure;
+
+    // For lazy grid updates, store the positions from the last grid build.
+    std::vector<float, AlignedAllocator<float, 32>> lastGridX;
+    std::vector<float, AlignedAllocator<float, 32>> lastGridY;
 };
 
 struct GridCell {
@@ -552,6 +557,60 @@ void writeBackToECS(const FluidParticleData &dat, entt::registry &registry)
         temp.density = dat.density[i];
         temp.pressure = dat.pressure[i];
     }
+}
+
+/**
+ * @brief Lazily updates the uniform grid.
+ *
+ * This function checks whether particles have moved significantly (larger than lazyThreshold)
+ * since the last grid build. If no particle has moved enough, the old grid is reused.
+ * Otherwise, the grid is rebuilt (using buildUniformGridContiguousDomainPartition) and the
+ * stored positions in dat.lastGridX/lastGridY are updated.
+ *
+ * @param oldGrid       The grid from the previous update.
+ * @param dat           The fluid particle data (including positions).
+ * @param cellSize      The spatial cell size.
+ * @param lazyThreshold The distance a particle must have moved to trigger a grid update.
+ *
+ * @return The updated grid.
+ */
+UniformGrid updateUniformGridLazy(UniformGrid &oldGrid, FluidParticleData &dat, float cellSize, float lazyThreshold)
+{
+    int n = static_cast<int>(dat.x.size());
+
+    // On first call (or if lastGrid arrays haven't been initialized) copy current positions.
+    if (dat.lastGridX.size() != static_cast<size_t>(n) || dat.lastGridY.size() != static_cast<size_t>(n)) {
+        dat.lastGridX = dat.x;
+        dat.lastGridY = dat.y;
+        oldGrid = buildUniformGridContiguousDomainPartition(dat, cellSize);
+        return oldGrid;
+    }
+
+    // Check if any particle has moved more than lazyThreshold.
+    bool significantMovement = false;
+    for (int i = 0; i < n; i++) {
+        float dx = dat.x[i] - dat.lastGridX[i];
+        float dy = dat.y[i] - dat.lastGridY[i];
+        if (dx * dx + dy * dy > lazyThreshold * lazyThreshold) {
+            significantMovement = true;
+            break;
+        }
+    }
+
+    // If no particle moved enough, reuse the existing grid.
+    if (!significantMovement) {
+        return oldGrid;
+    }
+
+    // Otherwise, rebuild the grid.
+    UniformGrid newGrid = buildUniformGridContiguousDomainPartition(dat, cellSize);
+
+    // Update the stored positions.
+    for (int i = 0; i < n; i++) {
+        dat.lastGridX[i] = dat.x[i];
+        dat.lastGridY[i] = dat.y[i];
+    }
+    return newGrid;
 }
 
 } // end anonymous namespace
