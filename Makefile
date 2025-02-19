@@ -19,6 +19,16 @@ CXXFLAGS := -Wall -Wextra -std=c++17 \
             -isystem ./include/nbody/vendor/entt/include \
             -isystem /opt/homebrew/include
 
+# Define path for Metal framework headers on macOS.
+METAL_INCLUDE := -I$(shell xcrun --sdk macosx --show-sdk-path)/System/Library/Frameworks/Metal.framework/Headers
+
+# Add metal-cpp include directory (make sure you have downloaded metal-cpp!)
+METAL_CPP_INCLUDE := -I./vendor/metal-cpp
+
+# Define Metal compiler variables (for compiling .metal shaders)
+METAL := xcrun -sdk macosx metal
+METALLIB := xcrun -sdk macosx metallib
+
 # Directory structure
 BUILD_DIR := build
 SRC_DIR := src
@@ -58,9 +68,9 @@ WASM_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/wasm/%.o,$(BASE_SRCS)) \
 WASM_SRCS := $(BASE_SRCS) $(WASM_ARCH_SRCS)
 
 native: CXX := clang++
-native: CXXFLAGS += $(NATIVE_CXXFLAGS) -Xpreprocessor -fopenmp -I$(LIBOMP_PREFIX)/include
-native: LDFLAGS := -L/opt/homebrew/lib -L$(LIBOMP_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system -lomp
-native: directories copy_assets $(NATIVE_OBJS)
+native: CXXFLAGS += $(NATIVE_CXXFLAGS) -Xpreprocessor -fopenmp -I$(LIBOMP_PREFIX)/include $(METAL_INCLUDE) $(METAL_CPP_INCLUDE)
+native: LDFLAGS := -L/opt/homebrew/lib -L$(LIBOMP_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system -lomp -framework Metal -framework Cocoa -framework MetalKit
+native: directories copy_assets $(NATIVE_OBJS) $(BUILD_DIR)/fluid_kernels.metallib
 	@echo "Building native target with objects: $(NATIVE_OBJS)"
 	$(CXX) $(CXXFLAGS) $(NATIVE_OBJS) -o $(BUILD_DIR)/simulator_native $(LDFLAGS)
 
@@ -199,5 +209,15 @@ serve: wasm
 		echo "Error: python3 is not installed"; \
 		exit 1; \
 	fi
+
+# ---------------------------------------------------------------------------------
+# Build rule for Metal shader file
+# ---------------------------------------------------------------------------------
+
+$(BUILD_DIR)/fluid_kernels.metallib: $(SRC_DIR)/systems/fluid/fluid_kernels.metal | directories
+	@echo "Compiling Metal shader $<"
+	$(METAL) -c $< -o $(BUILD_DIR)/fluid_kernels.air
+	$(METALLIB) $(BUILD_DIR)/fluid_kernels.air -o $@
+	@rm $(BUILD_DIR)/fluid_kernels.air
 
 .PHONY: all native wasm clean rebuild test directories copy_assets lint lint-fix compile_commands serve

@@ -4,6 +4,7 @@
  */
 
 #include <vector>
+#include <iostream>
 
 #include "nbody/core/profile.hpp"
 #include "nbody/systems/rigid_body_collision/rigid_body_collision.hpp"
@@ -20,6 +21,8 @@ namespace Systems
 void RigidBodyCollisionSystem::update(entt::registry &registry)
 {
     PROFILE_SCOPE("RigidBodyCollisionSystem");
+    std::cout << " Position: " << registry.storage<Components::Position>().size() << std::endl << std::flush;
+    std::cout << "Total entities in registry before reserve: " << registry.size() << std::endl;
     using namespace RigidBodyCollision;
 
     // 1) Broad-phase: Quick AABB-based filtering (once per frame)
