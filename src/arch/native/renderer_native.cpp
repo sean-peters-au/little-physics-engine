@@ -675,12 +675,12 @@ void Renderer::renderPolygonDebug(const entt::registry &registry) {
 }
 
 void Renderer::renderFluidParticles(const entt::registry &registry) {
-    // Create an offscreen render texture sized to your window.
     sf::RenderTexture fluidTexture;
     if (!fluidTexture.create(window.getSize().x, window.getSize().y)) {
         return; // Handle error as needed.
     }
-    fluidTexture.clear(sf::Color::Black);
+    // Clear with transparent black instead of opaque black.
+    fluidTexture.clear(sf::Color(0, 0, 0, 0));
 
     // Configure additive blending for drawing metaball circles.
     sf::RenderStates additive;
