@@ -1,5 +1,4 @@
-#ifndef NBODY_SCENARIO_CONFIG_HPP
-#define NBODY_SCENARIO_CONFIG_HPP
+#pragma once
 
 #include <vector>
 #include "nbody/systems/systems.hpp"
@@ -34,5 +33,3 @@ struct ScenarioConfig {
  * @brief Applies a ScenarioConfig to the global SimulatorConstants variables.
  */
 void applyScenarioConfig(const ScenarioConfig &cfg);
-
-#endif // NBODY_SCENARIO_CONFIG_HPP

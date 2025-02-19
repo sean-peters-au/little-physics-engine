@@ -33,10 +33,6 @@ ECSSimulator::ECSSimulator() {
     // or just do nothing
 }
 
-ECSSimulator::ECSSimulator(CoordinateSystem* /*coordSystem*/) {
-    // Possibly store the coordSystem if you need it
-}
-
 void ECSSimulator::setScenario(SimulatorConstants::SimulationType scenario) {
     // Store the scenario type for use in reset()
     currentScenario = scenario;

@@ -1,9 +1,8 @@
-#ifndef SIMULATOR_CONSTANTS_H
-#define SIMULATOR_CONSTANTS_H
+#pragma once
 
 #include <vector>
 #include <string>
-#include "nbody/systems/systems.hpp"  // <-- includes Systems::SystemType
+#include "nbody/systems/systems.hpp"
 
 namespace SimulatorConstants {
 
@@ -66,5 +65,3 @@ namespace SimulatorConstants {
     std::vector<SimulationType> getAllScenarios();
     std::string getScenarioName(SimulationType scenario);
 }
-
-#endif // SIMULATOR_CONSTANTS_H

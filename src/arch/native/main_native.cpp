@@ -59,9 +59,7 @@ int main(int /*unused*/, char** /*unused*/) {
         return 1;
     }
 
-    // If we have a coordinate system class:
-    CoordinateSystem coordSystem;
-    ECSSimulator simulator(&coordSystem);
+    ECSSimulator simulator;
 
     // Build scenario list for the UI
     auto scenarioList = buildScenarioList();

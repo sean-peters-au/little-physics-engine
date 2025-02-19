@@ -1,11 +1,9 @@
-#ifndef ECS_SIMULATOR_H
-#define ECS_SIMULATOR_H
+#pragma once
 
-#include <memory>         // for std::unique_ptr
+#include <memory>
 #include <entt/entt.hpp>
 #include "nbody/core/constants.hpp"
-#include "nbody/core/coordinates.hpp"
-#include "nbody/core/i_scenario.hpp"     // for IScenario
+#include "nbody/core/i_scenario.hpp"
 
 /**
  * @class ECSSimulator
@@ -20,7 +18,6 @@ private:
 
 public:
     ECSSimulator();
-    explicit ECSSimulator(CoordinateSystem* coordSystem);
 
     /**
      * @brief Additional initialization steps after scenario reset
@@ -53,5 +50,3 @@ public:
      */
     IScenario& getCurrentScenario() const { return *scenarioPtr; }
 };
-
-#endif // ECS_SIMULATOR_H

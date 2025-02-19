@@ -1,5 +1,4 @@
-#ifndef NBODY_SYSTEMS_FLUID_FLUID_SYSTEM_HPP
-#define NBODY_SYSTEMS_FLUID_FLUID_SYSTEM_HPP
+#pragma once
 
 #include <entt/entt.hpp>
 
@@ -28,5 +27,3 @@ public:
 };
 
 } // namespace Systems
-
-#endif // NBODY_SYSTEMS_FLUID_FLUID_SYSTEM_HPP

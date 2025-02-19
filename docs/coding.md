@@ -11,23 +11,18 @@ Files should organize their includes in the following groups, separated by blank
 
 Example:
 ```cpp
-// 1. Corresponding header
 #include "foo.hpp"
 
-// 2. C system headers
 #include <stdio.h>
 #include <stdlib.h>
 
-// 3. C++ standard library headers
 #include <iostream>
 #include <string>
 #include <vector>
 
-// 4. Third-party library headers
 #include <SFML/Graphics.hpp>
 #include <boost/algorithm/string.hpp>
 
-// 5. Project headers
 #include "myproject/foo.hpp"
 #include "myproject/bar.hpp"
 ```

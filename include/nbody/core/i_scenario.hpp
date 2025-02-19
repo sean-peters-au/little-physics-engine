@@ -1,5 +1,4 @@
-#ifndef NBODY_I_SCENARIO_HPP
-#define NBODY_I_SCENARIO_HPP
+#pragma once
 
 #include <entt/entt.hpp>
 #include "nbody/core/scenario_config.hpp"
@@ -25,5 +24,3 @@ public:
      */
     virtual void createEntities(entt::registry &registry) const = 0;
 };
-
-#endif // NBODY_I_SCENARIO_HPP
