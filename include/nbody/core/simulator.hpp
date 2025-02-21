@@ -4,6 +4,7 @@
 #include <entt/entt.hpp>
 #include "nbody/core/constants.hpp"
 #include "nbody/core/i_scenario.hpp"
+#include "nbody/systems/fluid/fluid.hpp"
 
 /**
  * @class ECSSimulator
@@ -15,6 +16,7 @@ private:
     // We hold a scenario pointer if you want to keep track of the current scenario object
     std::unique_ptr<IScenario> scenarioPtr;
     SimulatorConstants::SimulationType currentScenario = SimulatorConstants::SimulationType::KEPLERIAN_DISK;
+    std::unique_ptr<Systems::FluidSystem> fluidSystem;
 
 public:
     ECSSimulator();

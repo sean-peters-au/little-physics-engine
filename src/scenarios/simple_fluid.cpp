@@ -90,7 +90,7 @@ ScenarioConfig SimpleFluidScenario::getConfig() const
         // Systems::SystemType::DAMPENING,
         // Systems::SystemType::SLEEP,
         // Systems::SystemType::MOVEMENT,
-        // Systems::SystemType::BOUNDARY,
+        Systems::SystemType::BOUNDARY,
     };
 
     return cfg;

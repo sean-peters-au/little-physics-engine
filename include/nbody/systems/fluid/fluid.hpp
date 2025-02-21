@@ -1,6 +1,7 @@
 #pragma once
 
 #include <entt/entt.hpp>
+#include <Metal/Metal.hpp>
 
 namespace Systems {
     
@@ -20,10 +21,36 @@ namespace Systems {
 class FluidSystem {
 public:
     /**
+     * @brief Constructor
+     */
+    FluidSystem();
+
+    /**
+     * @brief Destructor
+     */
+    ~FluidSystem();
+
+    /**
      * @brief Main update function called each frame/tick
      * @param registry ECS registry
      */
-    static void update(entt::registry &registry);
+    void update(entt::registry &registry);
+
+private:
+    // metal objects
+    MTL::Device*            device         = nullptr;
+    MTL::CommandQueue*      commandQueue   = nullptr;
+    MTL::Library*           metalLibrary   = nullptr;  // <-- Keep the library alive!
+    
+    // pipeline states
+    MTL::ComputePipelineState* clearGridPSO      = nullptr;
+    MTL::ComputePipelineState* assignCellsPSO    = nullptr;
+    MTL::ComputePipelineState* computeDensityPSO = nullptr;
+    MTL::ComputePipelineState* computeForcesPSO  = nullptr;
+    MTL::ComputePipelineState* verletHalfPSO     = nullptr;
+    MTL::ComputePipelineState* verletFinishPSO   = nullptr;
+
+    MTL::ComputePipelineState* createPSO(const char* fnName, MTL::Library* lib);
 };
 
 } // namespace Systems

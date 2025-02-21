@@ -44,7 +44,7 @@ struct FluidParams {
     float viscosity;
     float dt;
     float halfDt;
-    uint  particleCount; // Used for bounds checking in kernels.
+    uint  particleCount;
 };
 
 // For the clearGrid kernel.
@@ -268,10 +268,20 @@ kernel void velocityVerletHalf(device Particle *particles         [[ buffer(0) ]
         return;
 
     Particle p = particles[tid];
+    
+    // Add a constant gravitational acceleration (adjust sign as needed).
+    const float GRAVITY = 9.8f; // m/s^2 (assuming positive is downward)
+    // Combine SPH acceleration with gravity.
+    float totalAy = p.ay + GRAVITY;
+    
+    // Compute half-step velocity using total acceleration.
     float vxH = p.vx + 0.5f * p.ax * params.dt;
-    float vyH = p.vy + 0.5f * p.ay * params.dt;
+    float vyH = p.vy + 0.5f * totalAy * params.dt;
+    
+    // Update position using half-step velocity.
     p.x += vxH * params.dt;
     p.y += vyH * params.dt;
+    
     p.vxHalf = vxH;
     p.vyHalf = vyH;
     particles[tid] = p;
@@ -289,7 +299,27 @@ kernel void velocityVerletFinish(device Particle *particles         [[ buffer(0)
         return;
 
     Particle p = particles[tid];
+    const float GRAVITY = 9.8f; // m/s^2 (again, adjust sign if needed)
+    float totalAy = p.ay + GRAVITY;
+    
+    // Complete velocity update with the total acceleration.
     p.vx = p.vxHalf + 0.5f * p.ax * params.dt;
-    p.vy = p.vyHalf + 0.5f * p.ay * params.dt;
+    p.vy = p.vyHalf + 0.5f * totalAy * params.dt;
+    particles[tid] = p;
+}
+
+//---------------------------------------------------------------------
+// Kernel: debugSetX
+//---------------------------------------------------------------------
+kernel void debugSetX(device Particle *particles        [[ buffer(0) ]],
+                      constant uint &particleCount      [[ buffer(1) ]],
+                      constant float &value             [[ buffer(2) ]],
+                      uint tid                          [[ thread_position_in_grid ]])
+{
+    if(tid >= particleCount)
+        return;
+    
+    Particle p = particles[tid];
+    p.x = value;
     particles[tid] = p;
 }

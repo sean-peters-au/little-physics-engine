@@ -90,7 +90,12 @@ void ECSSimulator::reset() {
 }
 
 void ECSSimulator::init() {
-    // Extra steps if needed. Right now, do nothing.
+    std::cout << "ECSSimulator::init" << std::endl;
+    if (!fluidSystem) {  // Only construct if not already created.
+        fluidSystem = std::make_unique<Systems::FluidSystem>();
+    }
+    
+    // (Any other initialization code)
 }
 
 void ECSSimulator::tick() {
@@ -98,8 +103,12 @@ void ECSSimulator::tick() {
     // Run the scenario's chosen ECS systems in order
     for (auto system : SimulatorConstants::ActiveSystems) {
         switch (system) {
+        case Systems::SystemType::BASIC_GRAVITY: {
+            Systems::BasicGravitySystem::update(registry);
+            break;
+        }
         case Systems::SystemType::FLUID: {
-            Systems::FluidSystem::update(registry);
+            fluidSystem->update(registry);
             break;
         }
         case Systems::SystemType::COLLISION: {
@@ -108,10 +117,6 @@ void ECSSimulator::tick() {
         }
         case Systems::SystemType::ROTATION: {
             Systems::RotationSystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::BASIC_GRAVITY: {
-            Systems::BasicGravitySystem::update(registry);
             break;
         }
         case Systems::SystemType::BARNES_HUT: {
