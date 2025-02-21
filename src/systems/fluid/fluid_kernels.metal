@@ -1,325 +1,282 @@
-// file: fluid_kernels.metal
+/**
+ * @fileoverview fluid_kernels.metal
+ * @brief Metal compute kernels for 2D SPH fluid simulation with added gravity.
+ *
+ * - Clears and fills a grid for neighbor search.
+ * - Computes density and pressure via 2D poly6 kernel.
+ * - Computes forces (pressure + viscosity + gravity).
+ * - Integrates via velocity Verlet.
+ */
 
 #include <metal_stdlib>
+#include <metal_atomic>
+
 using namespace metal;
 
-// Define PI if not already defined.
-#ifndef M_PI
 #define M_PI 3.14159265358979323846
-#endif
 
-// Maximum number of particles per cell.
-constant int MAX_PER_CELL = 64;
+// Gravity constant for 2D (adjust as desired)
+constant float GRAVITY = -9.81f;
 
-//---------------------------------------------------------------------
-// Data Structures
-//---------------------------------------------------------------------
-
-// Particle structure (must match the CPU side).
-struct Particle {
-    float x, y;
-    float vx, vy;
-    float vxHalf, vyHalf;
-    float ax, ay;
-    float mass, h, c;
-    float density, pressure;
+/**
+ * @brief Matches the C++ struct GPUFluidParticle.
+ */
+struct GPUFluidParticle {
+  float x;
+  float y;
+  float vx;
+  float vy;
+  float vxHalf;
+  float vyHalf;
+  float ax;
+  float ay;
+  float mass;
+  float h;
+  float c;
+  float density;
+  float pressure;
 };
 
-// GridCell holds an atomic counter and an index list.
-// (Note: we never copy a GridCell because its copy constructor is deleted.)
-struct GridCell {
-    atomic_int count;
-    int indices[MAX_PER_CELL];
+/**
+ * @brief Matches the C++ struct GPUGridCell.
+ */
+constant int GPU_MAX_PER_CELL = 64;
+struct GPUGridCell {
+  atomic_int count;
+  int indices[GPU_MAX_PER_CELL];
 };
 
-// All fluid-simulation parameters (including particleCount) in one struct.
-struct FluidParams {
-    float cellSize;
-    int   gridDimX;
-    int   gridDimY;
-    int   gridMinX;
-    int   gridMinY;
-    float restDensity;
-    float stiffness;
-    float viscosity;
-    float dt;
-    float halfDt;
-    uint  particleCount;
+/**
+ * @brief Matches the C++ struct GPUFluidParams.
+ */
+struct GPUFluidParams {
+  float cellSize;
+  int gridDimX;
+  int gridDimY;
+  int gridMinX;
+  int gridMinY;
+  float restDensity;
+  float stiffness;
+  float viscosity;
+  float dt;
+  float halfDt;
+  uint particleCount;
 };
 
-// For the clearGrid kernel.
-struct GridParams {
-    uint gridCount;
-};
-
-//---------------------------------------------------------------------
-// Kernel: clearGrid
-//---------------------------------------------------------------------
-kernel void clearGrid(device GridCell *gridCells        [[ buffer(0) ]],
-                      constant GridParams &gridParams   [[ buffer(1) ]],
-                      uint tid                        [[ thread_position_in_grid ]])
-{
-    if (tid < gridParams.gridCount) {
-        atomic_store_explicit(&(gridCells[tid].count), 0, memory_order_relaxed);
-    }
+/**
+ * @brief Clears the grid cell counters to zero.
+ */
+kernel void clearGrid(device GPUGridCell* grid [[buffer(0)]],
+                      constant int& cellCount [[buffer(1)]],
+                      uint gid [[thread_position_in_grid]]) {
+  if (gid < cellCount) {
+    atomic_store_explicit(&grid[gid].count, 0, memory_order_relaxed);
+  }
 }
 
-//---------------------------------------------------------------------
-// Kernel: assignCells
-//---------------------------------------------------------------------
-kernel void assignCells(device Particle *particles            [[ buffer(0) ]],
-                        device GridCell *gridCells            [[ buffer(1) ]],
-                        constant FluidParams &params          [[ buffer(2) ]],
-                        uint tid                            [[ thread_position_in_grid ]])
-{
-    if (tid >= params.particleCount)
-        return;
+/**
+ * @brief Assigns each particle to a grid cell based on its position.
+ */
+kernel void assignCells(device GPUFluidParticle* particles [[buffer(0)]],
+                        constant int& particleCount [[buffer(1)]],
+                        device GPUGridCell* grid [[buffer(2)]],
+                        device const GPUFluidParams& params [[buffer(3)]],
+                        uint gid [[thread_position_in_grid]]) {
+  if (gid >= (uint)particleCount) {
+    return;
+  }
+  GPUFluidParticle p = particles[gid];
 
-    Particle p = particles[tid];
+  int cellX = int(floor((p.x - float(params.gridMinX)) / params.cellSize));
+  int cellY = int(floor((p.y - float(params.gridMinY)) / params.cellSize));
 
-    // Determine grid cell based on particle position.
-    int gx = int(floor(p.x / params.cellSize)) - params.gridMinX;
-    int gy = int(floor(p.y / params.cellSize)) - params.gridMinY;
+  if (cellX < 0 || cellX >= params.gridDimX ||
+      cellY < 0 || cellY >= params.gridDimY) {
+    return;
+  }
 
-    gx = clamp(gx, 0, params.gridDimX - 1);
-    gy = clamp(gy, 0, params.gridDimY - 1);
+  int cellIndex = cellY * params.gridDimX + cellX;
+  int oldCount = atomic_fetch_add_explicit(&grid[cellIndex].count, 1, memory_order_relaxed);
 
-    int cellIdx = gy * params.gridDimX + gx;
-
-    // Use atomic_fetch_add_explicit on the gridCells array.
-    int oldCount = atomic_fetch_add_explicit(&(gridCells[cellIdx].count), 1, memory_order_relaxed);
-    if (oldCount < MAX_PER_CELL) {
-        gridCells[cellIdx].indices[oldCount] = int(tid);
-    }
+  if (oldCount < GPU_MAX_PER_CELL) {
+    grid[cellIndex].indices[oldCount] = int(gid);
+  }
 }
 
-//---------------------------------------------------------------------
-// Helper: poly6 coefficient for 2D kernels
-//---------------------------------------------------------------------
-inline float poly6Coeff2D(float h) {
-    float h2 = h * h;
-    float h4 = h2 * h2;
-    float h8 = h4 * h4;
-    return 4.0f / (M_PI * h8);
-}
+/**
+ * @brief Computes density and pressure for each particle using 2D SPH poly6 kernel.
+ *
+ * 2D poly6: W(r) = (4/(πh^8)) * (h^2 - r^2)^3, for r < h.
+ */
+kernel void computeDensity(device GPUFluidParticle* particles [[buffer(0)]],
+                           constant int& particleCount [[buffer(1)]],
+                           device const GPUGridCell* grid [[buffer(2)]],
+                           device const GPUFluidParams& params [[buffer(3)]],
+                           uint gid [[thread_position_in_grid]]) {
+  if (gid >= (uint)particleCount) {
+    return;
+  }
 
-//---------------------------------------------------------------------
-// Kernel: computeDensity
-// (Compute density for each particle by looping over neighboring cells.)
-//---------------------------------------------------------------------
-kernel void computeDensity(device Particle *particles         [[ buffer(0) ]],
-                           device GridCell *gridCells         [[ buffer(1) ]],
-                           constant FluidParams &params       [[ buffer(2) ]],
-                           uint tid                         [[ thread_position_in_grid ]])
-{
-    if (tid >= params.particleCount)
-        return;
+  GPUFluidParticle self = particles[gid];
+  float density = 0.0f;
 
-    Particle pi = particles[tid];
-    float hi    = pi.h;
-    float h2    = hi * hi;
-    float coeff = poly6Coeff2D(hi);
+  float h2 = self.h * self.h;
+  float poly6Const = 4.0f / (M_PI * pow(self.h, 8.0f));  // 2D poly6 factor
 
-    int gx = int(floor(pi.x / params.cellSize)) - params.gridMinX;
-    int gy = int(floor(pi.y / params.cellSize)) - params.gridMinY;
-    gx = clamp(gx, 0, params.gridDimX - 1);
-    gy = clamp(gy, 0, params.gridDimY - 1);
+  int cellX = int(floor((self.x - float(params.gridMinX)) / params.cellSize));
+  int cellY = int(floor((self.y - float(params.gridMinY)) / params.cellSize));
 
-    float accum = 0.f;
-
-    // Loop over the 3x3 neighboring cells.
-    for (int nx = gx - 1; nx <= gx + 1; nx++) {
-        if (nx < 0 || nx >= params.gridDimX)
-            continue;
-        for (int ny = gy - 1; ny <= gy + 1; ny++) {
-            if (ny < 0 || ny >= params.gridDimY)
-                continue;
-            int cellID = ny * params.gridDimX + nx;
-            // Directly load the count without copying the GridCell.
-            int count = atomic_load_explicit(&(gridCells[cellID].count), memory_order_relaxed);
-            for (int c = 0; c < count; c++) {
-                int j = gridCells[cellID].indices[c];
-                Particle pj = particles[j];
-                float dx = pi.x - pj.x;
-                float dy = pi.y - pj.y;
-                float r2 = dx * dx + dy * dy;
-                if (r2 < h2) {
-                    float diff = (h2 - r2);
-                    float w = coeff * diff * diff * diff;
-                    accum += pj.mass * w;
-                }
-            }
+  for (int ny = -1; ny <= 1; ny++) {
+    for (int nx = -1; nx <= 1; nx++) {
+      int cx = cellX + nx;
+      int cy = cellY + ny;
+      if (cx < 0 || cx >= params.gridDimX ||
+          cy < 0 || cy >= params.gridDimY) {
+        continue;
+      }
+      int cellIndex = cy * params.gridDimX + cx;
+      int count = atomic_load_explicit(&grid[cellIndex].count, memory_order_relaxed);
+      for (int i = 0; i < count; i++) {
+        int neighborIndex = grid[cellIndex].indices[i];
+        if (neighborIndex >= particleCount) {
+          continue;
         }
-    }
+        GPUFluidParticle neighbor = particles[neighborIndex];
+        float dx = self.x - neighbor.x;
+        float dy = self.y - neighbor.y;
+        float r2 = dx * dx + dy * dy;
 
-    pi.density = accum;
-    particles[tid] = pi;
-}
-
-//---------------------------------------------------------------------
-// Helpers for force computation: spiky and viscosity coefficients
-//---------------------------------------------------------------------
-inline float spikyCoeff2D(float h) {
-    float h2 = h * h;
-    float h4 = h2 * h2;
-    float h5 = h4 * h;
-    return -30.0f / (M_PI * h5);
-}
-inline float viscLaplacianCoeff2D(float h) {
-    float h2 = h * h;
-    float h4 = h2 * h2;
-    float h5 = h4 * h;
-    return 40.0f / (M_PI * h5);
-}
-
-//---------------------------------------------------------------------
-// Kernel: computeForces
-// (Compute pressure and viscosity forces based on neighbor particle data.)
-//---------------------------------------------------------------------
-kernel void computeForces(device Particle *particles         [[ buffer(0) ]],
-                          device GridCell *gridCells         [[ buffer(1) ]],
-                          constant FluidParams &params       [[ buffer(2) ]],
-                          uint tid                         [[ thread_position_in_grid ]])
-{
-    if (tid >= params.particleCount)
-        return;
-
-    Particle pi = particles[tid];
-    float rhoi = pi.density;
-    if (rhoi < 1e-12f) {
-        pi.ax = 0.f;
-        pi.ay = 0.f;
-        particles[tid] = pi;
-        return;
-    }
-    float pressi = params.stiffness * (rhoi - params.restDensity);
-    pressi = (pressi > 0.f ? pressi : 0.f);
-
-    int gx = int(floor(pi.x / params.cellSize)) - params.gridMinX;
-    int gy = int(floor(pi.y / params.cellSize)) - params.gridMinY;
-    gx = clamp(gx, 0, params.gridDimX - 1);
-    gy = clamp(gy, 0, params.gridDimY - 1);
-
-    float sumAx = 0.f, sumAy = 0.f;
-    for (int nx = gx - 1; nx <= gx + 1; nx++) {
-        if (nx < 0 || nx >= params.gridDimX)
-            continue;
-        for (int ny = gy - 1; ny <= gy + 1; ny++) {
-            if (ny < 0 || ny >= params.gridDimY)
-                continue;
-            int cellID = ny * params.gridDimX + nx;
-            int count = atomic_load_explicit(&(gridCells[cellID].count), memory_order_relaxed);
-            for (int c = 0; c < count; c++) {
-                uint j = gridCells[cellID].indices[c];
-                if (j == tid)
-                    continue;
-                Particle pj = particles[j];
-                float rhoj = pj.density;
-                if (rhoj < 1e-12f)
-                    continue;
-                float dx = pi.x - pj.x;
-                float dy = pi.y - pj.y;
-                float r2 = dx * dx + dy * dy;
-                if (r2 < 1e-12f)
-                    continue;
-                float hj = pj.h;
-                float h_ij = 0.5f * (pi.h + hj);
-                if (r2 >= (h_ij * h_ij))
-                    continue;
-                float r = sqrt(r2);
-                float pressj = params.stiffness * (pj.density - params.restDensity);
-                pressj = (pressj > 0.f ? pressj : 0.f);
-                float term = (pressi / (rhoi * rhoi)) + (pressj / (rhoj * rhoj));
-                float spikyF = spikyCoeff2D(h_ij);
-                float diff = (h_ij - r);
-                float w_spiky = spikyF * (diff * diff);
-                float rx = dx / r;
-                float ry = dy / r;
-                float fPress = -pj.mass * term * w_spiky;
-                float fx = fPress * rx;
-                float fy = fPress * ry;
-                float vx_ij = pi.vx - pj.vx;
-                float vy_ij = pi.vy - pj.vy;
-                float lapF = viscLaplacianCoeff2D(h_ij);
-                float w_visc = lapF * diff;
-                float fVisc = params.viscosity * pj.mass * (w_visc / rhoj);
-                fx -= fVisc * vx_ij;
-                fy -= fVisc * vy_ij;
-                sumAx += fx;
-                sumAy += fy;
-            }
+        if (r2 < h2) {
+          float diff = (h2 - r2);
+          float w = poly6Const * diff * diff * diff;
+          density += neighbor.mass * w;
         }
+      }
     }
-    pi.pressure = pressi;
-    pi.ax = sumAx;
-    pi.ay = sumAy;
-    particles[tid] = pi;
+  }
+
+  // Pressure with Tait equation or linear approximation
+  self.density = max(density, 0.0001f);
+  self.pressure = params.stiffness * (self.density - params.restDensity);
+  particles[gid] = self;
 }
 
-//---------------------------------------------------------------------
-// Kernel: velocityVerletHalf
-// (First half update: compute vHalf then update position.)
-//---------------------------------------------------------------------
-kernel void velocityVerletHalf(device Particle *particles         [[ buffer(0) ]],
-                               constant FluidParams &params       [[ buffer(1) ]],
-                               uint tid                         [[ thread_position_in_grid ]])
-{
-    if (tid >= params.particleCount)
-        return;
+/**
+ * @brief Computes pressure, viscosity, and gravity forces for each particle (2D spiky + gravity).
+ */
+kernel void computeForces(device GPUFluidParticle* particles [[buffer(0)]],
+                          constant int& particleCount [[buffer(1)]],
+                          device const GPUGridCell* grid [[buffer(2)]],
+                          device const GPUFluidParams& params [[buffer(3)]],
+                          uint gid [[thread_position_in_grid]]) {
+  if (gid >= (uint)particleCount) {
+    return;
+  }
 
-    Particle p = particles[tid];
-    
-    // Add a constant gravitational acceleration (adjust sign as needed).
-    const float GRAVITY = 9.8f; // m/s^2 (assuming positive is downward)
-    // Combine SPH acceleration with gravity.
-    float totalAy = p.ay + GRAVITY;
-    
-    // Compute half-step velocity using total acceleration.
-    float vxH = p.vx + 0.5f * p.ax * params.dt;
-    float vyH = p.vy + 0.5f * totalAy * params.dt;
-    
-    // Update position using half-step velocity.
-    p.x += vxH * params.dt;
-    p.y += vyH * params.dt;
-    
-    p.vxHalf = vxH;
-    p.vyHalf = vyH;
-    particles[tid] = p;
+  GPUFluidParticle self = particles[gid];
+  float fx = 0.0f;
+  float fy = 0.0f;
+
+  // Add gravity
+  // (Here we do mass * gravity so that total force is f=ma => a=gravity.)
+  fy -= self.mass * GRAVITY;
+
+  // 2D spiky kernel constants for pressure force
+  // W_spiky_grad =  - (r/h) * (something). We'll approximate the magnitude factor:
+  //   Kspiky = 15 / (π * h^5) for 2D
+  // Typical or reference:  (Note: some references use different forms.)
+  float Kspiky = 15.0f / (M_PI * pow(self.h, 5.0f));
+
+  // 2D viscosity kernel:
+  // W_visc(r) =  (10 / (π * h^5)) * (h - r)
+  float Kvisc = 10.0f / (M_PI * pow(self.h, 5.0f));
+
+  int cellX = int(floor((self.x - float(params.gridMinX)) / params.cellSize));
+  int cellY = int(floor((self.y - float(params.gridMinY)) / params.cellSize));
+
+  for (int ny = -1; ny <= 1; ny++) {
+    for (int nx = -1; nx <= 1; nx++) {
+      int cx = cellX + nx;
+      int cy = cellY + ny;
+      if (cx < 0 || cx >= params.gridDimX ||
+          cy < 0 || cy >= params.gridDimY) {
+        continue;
+      }
+      int cellIndex = cy * params.gridDimX + cx;
+      int count = atomic_load_explicit(&grid[cellIndex].count, memory_order_relaxed);
+      for (int i = 0; i < count; i++) {
+        int neighborIndex = grid[cellIndex].indices[i];
+        if (neighborIndex >= particleCount || neighborIndex == int(gid)) {
+          continue;
+        }
+        GPUFluidParticle neighbor = particles[neighborIndex];
+
+        float dx = self.x - neighbor.x;
+        float dy = self.y - neighbor.y;
+        float r2 = dx * dx + dy * dy;
+        float r = sqrt(r2);
+        float h = self.h;
+
+        if (r > 0.0f && r < h) {
+          // Pressure force
+          float avgPressure = (self.pressure + neighbor.pressure) * 0.5f;
+          float term = (h - r);
+          float wSpiky = Kspiky * term * term * term;  // spiky kernel
+          float fPres = -neighbor.mass * (avgPressure / neighbor.density) * wSpiky;
+
+          fx += fPres * (dx / r);
+          fy += fPres * (dy / r);
+
+          // Viscosity force
+          float diffVx = neighbor.vx - self.vx;
+          float diffVy = neighbor.vy - self.vy;
+          float wVisc = Kvisc * (h - r);
+          float fVisc = params.viscosity * neighbor.mass * (1.0f / neighbor.density);
+
+          fx += fVisc * diffVx * wVisc;
+          fy += fVisc * diffVy * wVisc;
+        }
+      }
+    }
+  }
+
+  self.ax = fx;
+  self.ay = fy;
+  particles[gid] = self;
 }
 
-//---------------------------------------------------------------------
-// Kernel: velocityVerletFinish
-// (Final update: use vHalf to complete the velocity update.)
-//---------------------------------------------------------------------
-kernel void velocityVerletFinish(device Particle *particles         [[ buffer(0) ]],
-                                 constant FluidParams &params       [[ buffer(1) ]],
-                                 uint tid                         [[ thread_position_in_grid ]])
-{
-    if (tid >= params.particleCount)
-        return;
+/**
+ * @brief Velocity Verlet half-step: update velocity by half dt, then position by full dt.
+ */
+kernel void velocityVerletHalf(device GPUFluidParticle* particles [[buffer(0)]],
+                               device const GPUFluidParams& params [[buffer(1)]],
+                               uint gid [[thread_position_in_grid]]) {
+  if (gid >= params.particleCount) {
+    return;
+  }
 
-    Particle p = particles[tid];
-    const float GRAVITY = 9.8f; // m/s^2 (again, adjust sign if needed)
-    float totalAy = p.ay + GRAVITY;
-    
-    // Complete velocity update with the total acceleration.
-    p.vx = p.vxHalf + 0.5f * p.ax * params.dt;
-    p.vy = p.vyHalf + 0.5f * totalAy * params.dt;
-    particles[tid] = p;
+  GPUFluidParticle p = particles[gid];
+  float halfDt = params.halfDt;
+  p.vxHalf = p.vx + halfDt * p.ax;
+  p.vyHalf = p.vy + halfDt * p.ay;
+  p.x += p.vxHalf * params.dt;
+  p.y += p.vyHalf * params.dt;
+  particles[gid] = p;
 }
 
-//---------------------------------------------------------------------
-// Kernel: debugSetX
-//---------------------------------------------------------------------
-kernel void debugSetX(device Particle *particles        [[ buffer(0) ]],
-                      constant uint &particleCount      [[ buffer(1) ]],
-                      constant float &value             [[ buffer(2) ]],
-                      uint tid                          [[ thread_position_in_grid ]])
-{
-    if(tid >= particleCount)
-        return;
-    
-    Particle p = particles[tid];
-    p.x = value;
-    particles[tid] = p;
+/**
+ * @brief Velocity Verlet finish: finalize velocity using new acceleration from this step.
+ */
+kernel void velocityVerletFinish(device GPUFluidParticle* particles [[buffer(0)]],
+                                 device const GPUFluidParams& params [[buffer(1)]],
+                                 uint gid [[thread_position_in_grid]]) {
+  if (gid >= params.particleCount) {
+    return;
+  }
+
+  GPUFluidParticle p = particles[gid];
+  float halfDt = params.halfDt;
+  p.vx = p.vxHalf + halfDt * p.ax;
+  p.vy = p.vyHalf + halfDt * p.ay;
+  particles[gid] = p;
 }
