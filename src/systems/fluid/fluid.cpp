@@ -231,8 +231,8 @@ void FluidSystem::update(entt::registry& registry) {
     // (A) velocityVerletHalf
     {
       GPUFluidParams params{};
-      params.restDensity = float(SimulatorConstants::ParticleDensity); // e.g. 1000
-      params.stiffness   = 500.f;  // CPU code used 500
+      params.restDensity = 100.f; // float(SimulatorConstants::ParticleDensity); // e.g. 1000
+      params.stiffness   = 100.f;  // CPU code used 500
       params.viscosity   = 0.1f;
       params.dt      = subDt;
       params.halfDt  = 0.5f*subDt;
