@@ -4,15 +4,17 @@
  *
  * Main changes:
  * - N_SUB_STEPS = 10 (like the CPU).
- * - Recompute the bounding box *every sub-step* after velocityVerletHalf.
- * - Use 2D poly6/spiky. Clamp negative pressure. No gravity. h_ij = 0.5*(h_i + h_j).
+ * - Integer-based grid indexing to match CPU buildUniformGridContiguousDomainPartition:
+ *     gx = floor((x[i] + 1e-6) / cellSize), then globalMinGx = min(...)
+ * - Pass gridMinX, gridMinY, gridDimX, gridDimY as integers to the Metal kernels.
+ * - Use 2D poly6/spiky, clamp negative pressure, no gravity. h_ij = 0.5*(h_i + h_j).
  */
 
 #include <cmath>
 #include <vector>
 #include <iostream>
 #include <limits>
-
+#include <climits>
 #include <Metal/Metal.hpp>
 #include <Foundation/Foundation.hpp>
 #include <entt/entt.hpp>
@@ -28,19 +30,19 @@ namespace Systems {
  * Must match fluid_kernels.metal
  */
 struct GPUFluidParticle {
-  float x;
-  float y;
-  float vx;
-  float vy;
-  float vxHalf;
-  float vyHalf;
-  float ax;
-  float ay;
-  float mass;
-  float h;
-  float c;
-  float density;
-  float pressure;
+    float x;
+    float y;
+    float vx;
+    float vy;
+    float vxHalf;
+    float vyHalf;
+    float ax;
+    float ay;
+    float mass;
+    float h;
+    float c;
+    float density;
+    float pressure;
 };
 
 /**
@@ -48,25 +50,37 @@ struct GPUFluidParticle {
  */
 static constexpr int GPU_MAX_PER_CELL = 64;
 struct GPUGridCell {
-  int count;
-  int indices[GPU_MAX_PER_CELL];
+    int count;
+    int indices[GPU_MAX_PER_CELL];
 };
 
 /**
- * Must match fluid_kernels.metal
+ * Must match fluid_kernels.metal.
+ * Reordered to:
+ *   float cellSize;
+ *   int   gridMinX;
+ *   int   gridMinY;
+ *   int   gridDimX;
+ *   int   gridDimY;
+ *   float restDensity;
+ *   float stiffness;
+ *   float viscosity;
+ *   float dt;
+ *   float halfDt;
+ *   uint  particleCount;
  */
 struct GPUFluidParams {
-  float cellSize;
-  int gridDimX;
-  int gridDimY;
-  int gridMinX;
-  int gridMinY;
-  float restDensity;
-  float stiffness;
-  float viscosity;
-  float dt;
-  float halfDt;
-  uint particleCount;
+    float cellSize;
+    int   gridMinX;
+    int   gridMinY;
+    int   gridDimX;
+    int   gridDimY;
+    float restDensity;
+    float stiffness;
+    float viscosity;
+    float dt;
+    float halfDt;
+    uint  particleCount;
 };
 
 /**
@@ -92,8 +106,7 @@ class FluidSystem {
   MTL::ComputePipelineState* verletHalfPSO_     = nullptr;
   MTL::ComputePipelineState* verletFinishPSO_   = nullptr;
 
-  // CPU code used N_SUB_STEPS=10 by default
-  static constexpr int N_SUB_STEPS = 25;
+  static constexpr int N_SUB_STEPS = 10;
 
   MTL::ComputePipelineState* createPSO(const char* name, MTL::Library* lib);
 };
@@ -209,16 +222,14 @@ void FluidSystem::update(entt::registry& registry) {
   // 2) Like CPU code: N_SUB_STEPS=10
   float subDt = dt / float(N_SUB_STEPS);
 
-  // We'll replicate the CPU's approach to bounding box & grid each sub-step
-
-  // For convenience, we pad to power-of-two, but we only process realCount in kernels
-  int realCount = (int)cpuParticles.size();
+  // We'll replicate the CPU's approach to building an integer-based grid each sub-step.
+  int realCount = static_cast<int>(cpuParticles.size());
   int paddedCount = 1;
   while (paddedCount < realCount) {
     paddedCount <<= 1;
   }
 
-  // Create GPU buffers once, but re-do bounding box for each sub-step
+  // Create GPU buffers once (but we will refill them each sub-step as needed)
   auto particleBuf = device_->newBuffer(sizeof(GPUFluidParticle)*paddedCount,
                                         MTL::ResourceStorageModeShared);
   memset(particleBuf->contents(), 0, sizeof(GPUFluidParticle)*paddedCount);
@@ -231,14 +242,14 @@ void FluidSystem::update(entt::registry& registry) {
     // (A) velocityVerletHalf
     {
       GPUFluidParams params{};
-      params.restDensity = 100.f; // float(SimulatorConstants::ParticleDensity); // e.g. 1000
-      params.stiffness   = 100.f;  // CPU code used 500
+      params.restDensity = float(SimulatorConstants::ParticleDensity);
+      params.stiffness   = 500.f;
       params.viscosity   = 0.1f;
       params.dt      = subDt;
-      params.halfDt  = 0.5f*subDt;
+      params.halfDt  = 0.5f * subDt;
       params.particleCount = paddedCount;
 
-      // Copy updated accelerations into GPU buffer before half-step.
+      // Copy updated accelerations into the GPU buffer before half-step.
       memcpy(particleBuf->contents(), cpuParticles.data(), sizeof(GPUFluidParticle)*realCount);
       memcpy(paramsBuf->contents(), &params, sizeof(GPUFluidParams));
 
@@ -255,47 +266,53 @@ void FluidSystem::update(entt::registry& registry) {
       cmdBuf->commit();
       cmdBuf->waitUntilCompleted();
 
-      // Read back to CPU so we can rebuild bounding box with new positions
+      // Read back positions to CPU so we can compute new cell indices exactly like CPU code
       memcpy(cpuParticles.data(), particleBuf->contents(), sizeof(GPUFluidParticle)*realCount);
     }
 
-    // (B) Rebuild bounding box from updated positions (like CPU does every sub-step)
-    float minX = std::numeric_limits<float>::max();
-    float maxX = std::numeric_limits<float>::lowest();
-    float minY = std::numeric_limits<float>::max();
-    float maxY = std::numeric_limits<float>::lowest();
+    // (B) Determine integer cell bounds (like CPU buildUniformGridContiguousDomainPartition)
+    //     Using cellSize = 2*h0 from the first particle (like CPU).
+    float h0 = (realCount > 0 ? cpuParticles[0].h : 0.05f);
+    float cellSize = 2.f * h0;
+    int globalMinGx = INT_MAX;
+    int globalMaxGx = INT_MIN;
+    int globalMinGy = INT_MAX;
+    int globalMaxGy = INT_MIN;
 
-    for (auto& p : cpuParticles) {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
+    for (int i = 0; i < realCount; i++) {
+      float px = cpuParticles[i].x + 1e-6f;
+      float py = cpuParticles[i].y + 1e-6f;
+      int gx   = static_cast<int>(std::floor(px / cellSize));
+      int gy   = static_cast<int>(std::floor(py / cellSize));
+      if (gx < globalMinGx) globalMinGx = gx;
+      if (gx > globalMaxGx) globalMaxGx = gx;
+      if (gy < globalMinGy) globalMinGy = gy;
+      if (gy > globalMaxGy) globalMaxGy = gy;
     }
-    float pad = cpuParticles[0].h; // same approach as CPU
-    minX -= pad; maxX += pad;
-    minY -= pad; maxY += pad;
 
-    float domainSizeX = maxX - minX;
-    float domainSizeY = maxY - minY;
-    float cellSize    = 2.f * cpuParticles[0].h;
+    int gridDimX = globalMaxGx - globalMinGx + 1;
+    int gridDimY = globalMaxGy - globalMinGy + 1;
+    if (gridDimX < 1) gridDimX = 1;
+    if (gridDimY < 1) gridDimY = 1;
 
-    // (C) Now set GPUFluidParams for assignCells/density/forces
+    // (C) Fill GPUFluidParams for the next steps
     GPUFluidParams params{};
-    params.cellSize = cellSize;
-    params.gridMinX = int(floor(minX));
-    params.gridMinY = int(floor(minY));
-    params.gridDimX = int(ceil(domainSizeX / cellSize));
-    params.gridDimY = int(ceil(domainSizeY / cellSize));
-    params.restDensity = float(SimulatorConstants::ParticleDensity);
-    params.stiffness   = 500.f;
-    params.viscosity   = 0.1f;
-    params.dt      = subDt;
-    params.halfDt  = 0.5f*subDt;
+    params.cellSize   = cellSize;
+    params.gridMinX   = globalMinGx;
+    params.gridMinY   = globalMinGy;
+    params.gridDimX   = gridDimX;
+    params.gridDimY   = gridDimY;
+    params.restDensity= float(SimulatorConstants::ParticleDensity);
+    params.stiffness  = 500.f;
+    params.viscosity  = 0.1f;
+    params.dt         = subDt;
+    params.halfDt     = 0.5f * subDt;
     params.particleCount = paddedCount;
 
     memcpy(paramsBuf->contents(), &params, sizeof(GPUFluidParams));
 
-    int gridSize = params.gridDimX * params.gridDimY;
+    // Allocate grid
+    int gridSize = gridDimX * gridDimY;
     auto gridBuf = device_->newBuffer(sizeof(GPUGridCell)*gridSize,
                                       MTL::ResourceStorageModeShared);
     memset(gridBuf->contents(), 0, sizeof(GPUGridCell)*gridSize);
@@ -315,8 +332,12 @@ void FluidSystem::update(entt::registry& registry) {
       cmdBuf->commit();
       cmdBuf->waitUntilCompleted();
     }
+
     // (E) assignCells
     {
+      // Copy particles again in case they changed in the half-step
+      memcpy(particleBuf->contents(), cpuParticles.data(), sizeof(GPUFluidParticle)*realCount);
+
       auto cmdBuf = commandQueue_->commandBuffer();
       auto enc = cmdBuf->computeCommandEncoder();
       enc->setComputePipelineState(assignCellsPSO_);
@@ -332,6 +353,7 @@ void FluidSystem::update(entt::registry& registry) {
       cmdBuf->commit();
       cmdBuf->waitUntilCompleted();
     }
+
     // (F) computeDensity
     {
       auto cmdBuf = commandQueue_->commandBuffer();
@@ -349,6 +371,7 @@ void FluidSystem::update(entt::registry& registry) {
       cmdBuf->commit();
       cmdBuf->waitUntilCompleted();
     }
+
     // (G) computeForces
     {
       auto cmdBuf = commandQueue_->commandBuffer();
@@ -367,7 +390,6 @@ void FluidSystem::update(entt::registry& registry) {
       cmdBuf->waitUntilCompleted();
     }
 
-    // We no longer need gridBuf for velocityVerletFinish
     gridBuf->release();
 
     // (H) velocityVerletFinish
@@ -386,7 +408,7 @@ void FluidSystem::update(entt::registry& registry) {
       cmdBuf->waitUntilCompleted();
     }
 
-    // read back to CPU so next sub-step half-step sees new v
+    // Read back final velocity changes for next iteration
     memcpy(cpuParticles.data(), particleBuf->contents(), sizeof(GPUFluidParticle)*realCount);
   }
 

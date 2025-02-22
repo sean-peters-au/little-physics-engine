@@ -103,16 +103,16 @@ void ECSSimulator::tick() {
     // Run the scenario's chosen ECS systems in order
     for (auto system : SimulatorConstants::ActiveSystems) {
         switch (system) {
-        case Systems::SystemType::BASIC_GRAVITY: {
-            Systems::BasicGravitySystem::update(registry);
-            break;
-        }
         case Systems::SystemType::FLUID: {
             fluidSystem->update(registry);
             break;
         }
         case Systems::SystemType::COLLISION: {
             Systems::RigidBodyCollisionSystem::update(registry);
+            break;
+        }
+        case Systems::SystemType::BASIC_GRAVITY: {
+            Systems::BasicGravitySystem::update(registry);
             break;
         }
         case Systems::SystemType::ROTATION: {
