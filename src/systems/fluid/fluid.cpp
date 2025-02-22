@@ -1,12 +1,7 @@
 /**
  * @fileoverview fluid.cpp
- * @brief A GPU-based 2D SPH fluid system using Metal, refactored for readability and maintainability
- *
- * This version mirrors the CPU system's multi-sub-step Velocity Verlet integration and grid-based
- * neighbor search, but leverages GPU compute via Metal. To closely match the CPU code:
- *  - We compute integer cell indices and bounds, as in buildUniformGridContiguousDomainPartition.
- *  - We use poly6 and spiky kernels in 2D, clamping negative pressures to zero.
- *  - Boundary conditions and gravity are handled elsewhere.
+ * @brief A GPU-based 2D SPH fluid system using Metal, with GPU-based bounding box (1D dispatch),
+ *        correct threadgroup memory allocation, and debug prints.
  */
 
 #include <cmath>
@@ -27,8 +22,7 @@
 namespace Systems {
 
 /**
- * @class GPUFluidParticle
- * @brief Mirrors the struct declared in fluid_kernels.metal
+ * Mirrors fluid_kernels.metal
  */
 struct GPUFluidParticle {
     float x;
@@ -46,20 +40,12 @@ struct GPUFluidParticle {
     float pressure;
 };
 
-/**
- * @class GPUGridCell
- * @brief Mirrors the struct declared in fluid_kernels.metal
- */
 static constexpr int GPU_MAX_PER_CELL = 64;
 struct GPUGridCell {
     int count;
     int indices[GPU_MAX_PER_CELL];
 };
 
-/**
- * @class GPUFluidParams
- * @brief Matches fluid_kernels.metal for grid indexing and SPH constants
- */
 struct GPUFluidParams {
     float cellSize;
     int   gridMinX;
@@ -75,132 +61,100 @@ struct GPUFluidParams {
 };
 
 /**
+ * For bounding box
+ */
+struct BBoxParams {
+    int particleCount;
+    int numThreadgroups;
+};
+
+/**
  * @class FluidSystem
- * @brief Runs multi-sub-step SPH on the GPU using Metal. Refactored to improve readability.
  */
 class FluidSystem {
 public:
     FluidSystem();
     ~FluidSystem();
 
-    /**
-     * @brief Main entry point: updates the fluid system by running multiple Velocity Verlet sub-steps.
-     */
     void update(entt::registry& registry);
 
 private:
-    /**
-     * @brief Creates a Metal compute pipeline from a function name in the loaded library.
-     */
     MTL::ComputePipelineState* createComputePipeline(const char* name, MTL::Library* lib);
 
     /**
-     * @brief Dispatches a short Metal compute pass, performing all typical steps (command buffer,
-     *        encoder, setting pipeline state, dispatching threads).
-     *
-     * @param pipelineState The pipeline state to use
-     * @param encodeFunc    A callback to set any required buffers, bytes, etc.
-     * @param threadsCount  Number of threads to dispatch
+     * @brief Dispatches a short Metal compute pass, performing typical setup.
      */
     void dispatchComputePass(
         MTL::ComputePipelineState* pipelineState,
         const std::function<void(MTL::ComputeCommandEncoder*)>& encodeFunc,
-        size_t threadsCount) const;
+        size_t threadsCount,
+        size_t threadsPerGroup = 256) const;
 
-    /**
-     * @brief Gathers liquid-phase particles from ECS into a CPU-side array, returning a matching
-     *        list of entities for write-back after the simulation.
-     */
     std::vector<GPUFluidParticle> gatherFluidParticles(
         entt::registry& registry,
         std::vector<entt::entity>& entityList) const;
 
-    /**
-     * @brief Performs the velocity-verlet half-step on the GPU,
-     *        then reads back positions so we can compute cell indices.
-     */
     void dispatchVelocityVerletHalf(
-        const std::vector<GPUFluidParticle>& cpuParticles,
         MTL::Buffer* particleBuf,
         MTL::Buffer* paramsBuf,
         int realCount) const;
 
     /**
-     * @brief Determines integer-based global min/max cell indices among all particles.
-     *
-     * @param cpuParticles    The particle array
-     * @param[out] cellSize   Computed as 2*h0 from the first particle
-     * @param[out] globalMinGx The smallest cell index in x
-     * @param[out] globalMaxGx The largest cell index in x
-     * @param[out] globalMinGy The smallest cell index in y
-     * @param[out] globalMaxGy The largest cell index in y
+     * @brief Bounding box kernel dispatch, remembering to set threadgroupMemoryLength
+     *        for localShared[] and localValidCount[].
      */
-    void computeGlobalCellBounds(
-        const std::vector<GPUFluidParticle>& cpuParticles,
-        float& cellSize,
-        int& globalMinGx,
-        int& globalMaxGx,
-        int& globalMinGy,
-        int& globalMaxGy) const;
+    void dispatchComputeBoundingBox(
+        MTL::Buffer* particleBuf,
+        MTL::Buffer* boundingBoxParamsBuf,
+        MTL::Buffer* boundingBoxBuf,
+        int realCount,
+        int numThreadgroups) const;
 
-    /**
-     * @brief Clears the GPU grid using the clearGrid kernel.
-     */
+    void reduceBoundingBoxOnCPU(
+        MTL::Buffer* boundingBoxBuf,
+        int numThreadgroups,
+        float& minX,
+        float& maxX,
+        float& minY,
+        float& maxY) const;
+
     void dispatchClearGrid(MTL::Buffer* gridBuf, int gridSize) const;
-
-    /**
-     * @brief Assigns each particle to a grid cell on the GPU.
-     */
     void dispatchAssignCells(
-        const std::vector<GPUFluidParticle>& cpuParticles,
         MTL::Buffer* particleBuf,
         MTL::Buffer* gridBuf,
         MTL::Buffer* paramsBuf,
         int realCount) const;
 
-    /**
-     * @brief Runs the density compute kernel on the GPU.
-     */
     void dispatchComputeDensity(
         MTL::Buffer* particleBuf,
         MTL::Buffer* gridBuf,
         MTL::Buffer* paramsBuf,
         int realCount) const;
 
-    /**
-     * @brief Runs the pressure + viscosity forces kernel on the GPU.
-     */
     void dispatchComputeForces(
         MTL::Buffer* particleBuf,
         MTL::Buffer* gridBuf,
         MTL::Buffer* paramsBuf,
         int realCount) const;
 
-    /**
-     * @brief Finishes the velocity-verlet integration (final velocity update) on the GPU.
-     */
     void dispatchVelocityVerletFinish(
         MTL::Buffer* particleBuf,
         MTL::Buffer* paramsBuf,
         int realCount) const;
 
-    /**
-     * @brief Writes final positions and velocities back to ECS components.
-     */
     void writeBackToECS(
         entt::registry& registry,
         const std::vector<entt::entity>& entityList,
-        const std::vector<GPUFluidParticle>& cpuParticles) const;
+        MTL::Buffer* particleBuf,
+        int realCount) const;
 
-    /**
-     * @brief Performs the multi-sub-step Velocity Verlet integration on the GPU.
-     */
     void multiStepVelocityVerlet(
         entt::registry& registry,
-        std::vector<GPUFluidParticle>& cpuParticles,
-        const std::vector<entt::entity>& entityList,
+        std::vector<entt::entity>& entityList,
         MTL::Buffer* particleBuf,
         MTL::Buffer* paramsBuf,
+        MTL::Buffer* boundingBoxParamsBuf,
+        MTL::Buffer* boundingBoxBuf,
         int realCount,
         int paddedCount);
 
@@ -209,12 +163,13 @@ private:
     MTL::CommandQueue* commandQueue_ = nullptr;
     MTL::Library* metalLibrary_ = nullptr;
 
-    MTL::ComputePipelineState* clearGridPSO_      = nullptr;
-    MTL::ComputePipelineState* assignCellsPSO_    = nullptr;
-    MTL::ComputePipelineState* computeDensityPSO_ = nullptr;
-    MTL::ComputePipelineState* computeForcesPSO_  = nullptr;
-    MTL::ComputePipelineState* verletHalfPSO_     = nullptr;
-    MTL::ComputePipelineState* verletFinishPSO_   = nullptr;
+    MTL::ComputePipelineState* clearGridPSO_          = nullptr;
+    MTL::ComputePipelineState* assignCellsPSO_        = nullptr;
+    MTL::ComputePipelineState* computeDensityPSO_     = nullptr;
+    MTL::ComputePipelineState* computeForcesPSO_      = nullptr;
+    MTL::ComputePipelineState* verletHalfPSO_         = nullptr;
+    MTL::ComputePipelineState* verletFinishPSO_       = nullptr;
+    MTL::ComputePipelineState* computeBoundingBoxPSO_ = nullptr;
 
     static constexpr int N_SUB_STEPS = 10;
 };
@@ -236,22 +191,24 @@ FluidSystem::FluidSystem() {
         return;
     }
 
-    clearGridPSO_      = createComputePipeline("clearGrid",           metalLibrary_);
-    assignCellsPSO_    = createComputePipeline("assignCells",         metalLibrary_);
-    computeDensityPSO_ = createComputePipeline("computeDensity",      metalLibrary_);
-    computeForcesPSO_  = createComputePipeline("computeForces",       metalLibrary_);
-    verletHalfPSO_     = createComputePipeline("velocityVerletHalf",  metalLibrary_);
-    verletFinishPSO_   = createComputePipeline("velocityVerletFinish",metalLibrary_);
+    clearGridPSO_          = createComputePipeline("clearGrid",           metalLibrary_);
+    assignCellsPSO_        = createComputePipeline("assignCells",         metalLibrary_);
+    computeDensityPSO_     = createComputePipeline("computeDensity",      metalLibrary_);
+    computeForcesPSO_      = createComputePipeline("computeForces",       metalLibrary_);
+    verletHalfPSO_         = createComputePipeline("velocityVerletHalf",  metalLibrary_);
+    verletFinishPSO_       = createComputePipeline("velocityVerletFinish",metalLibrary_);
+    computeBoundingBoxPSO_ = createComputePipeline("computeBoundingBox",  metalLibrary_);
 }
 
 FluidSystem::~FluidSystem() {
-    if (clearGridPSO_)      { clearGridPSO_->release(); }
-    if (assignCellsPSO_)    { assignCellsPSO_->release(); }
-    if (computeDensityPSO_) { computeDensityPSO_->release(); }
-    if (computeForcesPSO_)  { computeForcesPSO_->release(); }
-    if (verletHalfPSO_)     { verletHalfPSO_->release(); }
-    if (verletFinishPSO_)   { verletFinishPSO_->release(); }
-    if (commandQueue_)      { commandQueue_->release(); }
+    if (clearGridPSO_)          { clearGridPSO_->release(); }
+    if (assignCellsPSO_)        { assignCellsPSO_->release(); }
+    if (computeDensityPSO_)     { computeDensityPSO_->release(); }
+    if (computeForcesPSO_)      { computeForcesPSO_->release(); }
+    if (verletHalfPSO_)         { verletHalfPSO_->release(); }
+    if (verletFinishPSO_)       { verletFinishPSO_->release(); }
+    if (computeBoundingBoxPSO_) { computeBoundingBoxPSO_->release(); }
+    if (commandQueue_)          { commandQueue_->release(); }
 }
 
 MTL::ComputePipelineState* FluidSystem::createComputePipeline(const char* name, MTL::Library* lib) {
@@ -274,7 +231,8 @@ MTL::ComputePipelineState* FluidSystem::createComputePipeline(const char* name, 
 void FluidSystem::dispatchComputePass(
     MTL::ComputePipelineState* pipelineState,
     const std::function<void(MTL::ComputeCommandEncoder*)>& encodeFunc,
-    size_t threadsCount) const
+    size_t threadsCount,
+    size_t threadsPerGroup) const
 {
     auto cmdBuf = commandQueue_->commandBuffer();
     if (!cmdBuf) {
@@ -289,9 +247,14 @@ void FluidSystem::dispatchComputePass(
     enc->setComputePipelineState(pipelineState);
     encodeFunc(enc);
 
-    MTL::Size threads(threadsCount, 1, 1);
-    MTL::Size tgroup(64, 1, 1);
-    enc->dispatchThreadgroups(threads, tgroup);
+    // For bounding box kernel or others that use threadgroup arrays, we typically
+    // do something like setThreadgroupMemoryLength(...) here if needed.
+    // But we allow the lambda to do it (so boundingBox can do it specifically).
+
+    size_t groups = (threadsCount + threadsPerGroup - 1) / threadsPerGroup;
+    MTL::Size tgSize(threadsPerGroup, 1, 1);
+    MTL::Size numGroups(groups, 1, 1);
+    enc->dispatchThreadgroups(numGroups, tgSize);
 
     enc->endEncoding();
     cmdBuf->commit();
@@ -350,60 +313,89 @@ std::vector<GPUFluidParticle> FluidSystem::gatherFluidParticles(
 }
 
 void FluidSystem::dispatchVelocityVerletHalf(
-    const std::vector<GPUFluidParticle>& cpuParticles,
     MTL::Buffer* particleBuf,
     MTL::Buffer* paramsBuf,
     int realCount) const
 {
-    // Copy updated particle data into GPU buffer
-    memcpy(particleBuf->contents(), cpuParticles.data(), sizeof(GPUFluidParticle) * realCount);
-
-    // Launch the half-step kernel
     dispatchComputePass(
         verletHalfPSO_,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
-            enc->setBuffer(paramsBuf, 0, 1);
+            enc->setBuffer(paramsBuf,   0, 1);
         },
-        realCount
+        realCount,
+        256
     );
 }
 
-void FluidSystem::computeGlobalCellBounds(
-    const std::vector<GPUFluidParticle>& cpuParticles,
-    float& cellSize,
-    int& globalMinGx,
-    int& globalMaxGx,
-    int& globalMinGy,
-    int& globalMaxGy) const
+void FluidSystem::dispatchComputeBoundingBox(
+    MTL::Buffer* particleBuf,
+    MTL::Buffer* boundingBoxParamsBuf,
+    MTL::Buffer* boundingBoxBuf,
+    int realCount,
+    int numThreadgroups) const
 {
-    globalMinGx = INT_MAX;
-    globalMaxGx = INT_MIN;
-    globalMinGy = INT_MAX;
-    globalMaxGy = INT_MIN;
+    // We'll produce one partial bounding box per threadgroup in boundingBoxBuf.
+    // The kernel defines:
+    //   threadgroup BBox localShared[256];
+    //   threadgroup atomic_int localValidCount[1];
+    // So we must allocate enough threadgroup memory for them.
+    // localShared = 256 * sizeof(BBox)
+    // localValidCount = 1 * sizeof(atomic_int)
+    // We'll set them as argument indexes 0..N after the buffers are set.
 
-    if (cpuParticles.empty()) {
-        cellSize = 0.1f;
-        return;
-    }
+    size_t blockSize = 256;
+    size_t localSharedBytes = sizeof(float)*4 * blockSize;  // BBox has 4 floats
+    // But safer to do: sizeof(BBox)*256
+    // We'll do that for clarity:
+    size_t localSharedBBox = sizeof(float)*4 * blockSize; // or sizeof(BBox)*256
+    size_t localValidCount = sizeof(int);                 // for atomic_int
 
-    // Like CPU code: cellSize = 2*h0 from the first particle
-    float h0 = cpuParticles[0].h;
-    if (h0 <= 0.f) {
-        h0 = 0.05f;
-    }
-    cellSize = 2.f * h0;
+    dispatchComputePass(
+        computeBoundingBoxPSO_,
+        [&](MTL::ComputeCommandEncoder* enc) {
+            enc->setBuffer(particleBuf,           0, 0);
+            enc->setBuffer(boundingBoxParamsBuf,  0, 1);
+            enc->setBuffer(boundingBoxBuf,        0, 2);
 
-    for (const auto& p : cpuParticles) {
-        float px = p.x + 1e-6f;
-        float py = p.y + 1e-6f;
-        int gx = static_cast<int>(std::floor(px / cellSize));
-        int gy = static_cast<int>(std::floor(py / cellSize));
+            // Now allocate threadgroup memory: argument index 3 => localShared
+            // argument index 4 => localValidCount (the kernel signature indexes)
+            enc->setThreadgroupMemoryLength(localSharedBBox, 3);
+            enc->setThreadgroupMemoryLength(localValidCount, 4);
+        },
+        realCount,
+        blockSize
+    );
+}
 
-        if (gx < globalMinGx) { globalMinGx = gx; }
-        if (gx > globalMaxGx) { globalMaxGx = gx; }
-        if (gy < globalMinGy) { globalMinGy = gy; }
-        if (gy > globalMaxGy) { globalMaxGy = gy; }
+void FluidSystem::reduceBoundingBoxOnCPU(
+    MTL::Buffer* boundingBoxBuf,
+    int numThreadgroups,
+    float& minX,
+    float& maxX,
+    float& minY,
+    float& maxY) const
+{
+    struct BBox {
+        float minX;
+        float maxX;
+        float minY;
+        float maxY;
+    };
+
+    const BBox* partials = static_cast<const BBox*>(boundingBoxBuf->contents());
+
+    minX =  std::numeric_limits<float>::max();
+    maxX = -std::numeric_limits<float>::max();
+    minY =  std::numeric_limits<float>::max();
+    maxY = -std::numeric_limits<float>::max();
+
+    for (int i = 0; i < numThreadgroups; i++) {
+        const BBox& box = partials[i];
+        if (box.minX < minX) { minX = box.minX; }
+        if (box.maxX > maxX) { maxX = box.maxX; }
+        if (box.minY < minY) { minY = box.minY; }
+        if (box.maxY > maxY) { maxY = box.maxY; }
     }
 }
 
@@ -414,29 +406,27 @@ void FluidSystem::dispatchClearGrid(MTL::Buffer* gridBuf, int gridSize) const {
             enc->setBuffer(gridBuf, 0, 0);
             enc->setBytes(&gridSize, sizeof(int), 1);
         },
-        static_cast<size_t>(gridSize)
+        static_cast<size_t>(gridSize),
+        256
     );
 }
 
 void FluidSystem::dispatchAssignCells(
-    const std::vector<GPUFluidParticle>& cpuParticles,
     MTL::Buffer* particleBuf,
     MTL::Buffer* gridBuf,
     MTL::Buffer* paramsBuf,
     int realCount) const
 {
-    // Copy updated CPU data into GPU buffer
-    memcpy(particleBuf->contents(), cpuParticles.data(), sizeof(GPUFluidParticle) * realCount);
-
     dispatchComputePass(
         assignCellsPSO_,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
-            enc->setBytes(&realCount, sizeof(int), 1);
-            enc->setBuffer(gridBuf, 0, 2);
-            enc->setBuffer(paramsBuf, 0, 3);
+            enc->setBytes(&realCount,  sizeof(int), 1);
+            enc->setBuffer(gridBuf,    0, 2);
+            enc->setBuffer(paramsBuf,  0, 3);
         },
-        realCount
+        realCount,
+        256
     );
 }
 
@@ -450,11 +440,12 @@ void FluidSystem::dispatchComputeDensity(
         computeDensityPSO_,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
-            enc->setBytes(&realCount, sizeof(int), 1);
-            enc->setBuffer(gridBuf, 0, 2);
-            enc->setBuffer(paramsBuf, 0, 3);
+            enc->setBytes(&realCount,   sizeof(int), 1);
+            enc->setBuffer(gridBuf,     0, 2);
+            enc->setBuffer(paramsBuf,   0, 3);
         },
-        realCount
+        realCount,
+        256
     );
 }
 
@@ -468,11 +459,12 @@ void FluidSystem::dispatchComputeForces(
         computeForcesPSO_,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
-            enc->setBytes(&realCount, sizeof(int), 1);
-            enc->setBuffer(gridBuf, 0, 2);
-            enc->setBuffer(paramsBuf, 0, 3);
+            enc->setBytes(&realCount,   sizeof(int), 1);
+            enc->setBuffer(gridBuf,     0, 2);
+            enc->setBuffer(paramsBuf,   0, 3);
         },
-        realCount
+        realCount,
+        256
     );
 }
 
@@ -485,25 +477,28 @@ void FluidSystem::dispatchVelocityVerletFinish(
         verletFinishPSO_,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
-            enc->setBuffer(paramsBuf, 0, 1);
+            enc->setBuffer(paramsBuf,   0, 1);
         },
-        realCount
+        realCount,
+        256
     );
 }
 
 void FluidSystem::writeBackToECS(
     entt::registry& registry,
     const std::vector<entt::entity>& entityList,
-    const std::vector<GPUFluidParticle>& cpuParticles) const
+    MTL::Buffer* particleBuf,
+    int realCount) const
 {
     PROFILE_SCOPE("FluidSystem::writeBackToECS");
-    for (size_t i = 0; i < entityList.size(); i++) {
-        entt::entity e = entityList[i];
+    const auto* finalParticles = static_cast<const GPUFluidParticle*>(particleBuf->contents());
+    for (int i = 0; i < realCount; i++) {
+        entt::entity e = entityList[static_cast<size_t>(i)];
         auto& pos  = registry.get<Components::Position>(e);
         auto& vel  = registry.get<Components::Velocity>(e);
         auto& spht = registry.get<Components::SPHTemp>(e);
 
-        const GPUFluidParticle& p = cpuParticles[i];
+        const GPUFluidParticle& p = finalParticles[i];
         pos.x = p.x;
         pos.y = p.y;
         vel.x = p.vx;
@@ -515,48 +510,79 @@ void FluidSystem::writeBackToECS(
 
 void FluidSystem::multiStepVelocityVerlet(
     entt::registry& registry,
-    std::vector<GPUFluidParticle>& cpuParticles,
-    const std::vector<entt::entity>& entityList,
+    std::vector<entt::entity>& entityList,
     MTL::Buffer* particleBuf,
     MTL::Buffer* paramsBuf,
+    MTL::Buffer* boundingBoxParamsBuf,
+    MTL::Buffer* boundingBoxBuf,
     int realCount,
     int paddedCount)
 {
     PROFILE_SCOPE("FluidSystem::multiStepVelocityVerlet");
-    float dt = static_cast<float>(SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration);
-    float subDt = dt / static_cast<float>(N_SUB_STEPS);
+    float dt = float(SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration);
+    float subDt = dt / float(N_SUB_STEPS);
+
+    // We'll fix the block size = 256 for bounding box kernel
+    const int BLOCK_SIZE = 256;
+    int numThreadgroups = (realCount + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     for (int step = 0; step < N_SUB_STEPS; step++) {
-        // (A) Velocity Verlet half-step
+        // (A) velocityVerletHalf
         {
             GPUFluidParams params{};
-            params.restDensity = static_cast<float>(SimulatorConstants::ParticleDensity);
+            params.restDensity = float(SimulatorConstants::ParticleDensity);
             params.stiffness   = 500.f;
             params.viscosity   = 0.1f;
             params.dt          = subDt;
             params.halfDt      = 0.5f * subDt;
             params.particleCount = static_cast<uint>(paddedCount);
 
-            // Copy the initial params
             memcpy(paramsBuf->contents(), &params, sizeof(GPUFluidParams));
-
-            dispatchVelocityVerletHalf(cpuParticles, particleBuf, paramsBuf, realCount);
-
-            // Read back new positions for cell indexing
-            memcpy(cpuParticles.data(), particleBuf->contents(), sizeof(GPUFluidParticle) * realCount);
+            dispatchVelocityVerletHalf(particleBuf, paramsBuf, realCount);
         }
 
-        // (B) Compute global cell bounds (integer-based indexing)
-        float cellSize;
-        int globalMinGx, globalMaxGx, globalMinGy, globalMaxGy;
-        computeGlobalCellBounds(
-            cpuParticles,
-            cellSize,
-            globalMinGx,
-            globalMaxGx,
-            globalMinGy,
-            globalMaxGy
+        // (B) bounding box
+        {
+            BBoxParams bboxp;
+            bboxp.particleCount   = realCount;
+            bboxp.numThreadgroups = numThreadgroups;
+            memcpy(boundingBoxParamsBuf->contents(), &bboxp, sizeof(bboxp));
+        }
+        dispatchComputeBoundingBox(
+            particleBuf,
+            boundingBoxParamsBuf,
+            boundingBoxBuf,
+            realCount,
+            numThreadgroups
         );
+
+        float minX =  std::numeric_limits<float>::max();
+        float maxX = -std::numeric_limits<float>::max();
+        float minY =  std::numeric_limits<float>::max();
+        float maxY = -std::numeric_limits<float>::max();
+        reduceBoundingBoxOnCPU(boundingBoxBuf, numThreadgroups, minX, maxX, minY, maxY);
+
+        // (C) find maximum h among all particles on CPU
+        float maxH = 0.05f;
+        {
+            const auto* pData = static_cast<const GPUFluidParticle*>(particleBuf->contents());
+            for (int i = 0; i < realCount; i++) {
+                float hi = pData[i].h;
+                if (hi > maxH) {
+                    maxH = hi;
+                }
+            }
+        }
+        float cellSize = 2.f * maxH;
+
+        // tiny offset
+        minX -= 1e-6f;
+        minY -= 1e-6f;
+
+        int globalMinGx = int(std::floor(minX / cellSize));
+        int globalMinGy = int(std::floor(minY / cellSize));
+        int globalMaxGx = int(std::floor(maxX / cellSize));
+        int globalMaxGy = int(std::floor(maxY / cellSize));
 
         int gridDimX = globalMaxGx - globalMinGx + 1;
         int gridDimY = globalMaxGy - globalMinGy + 1;
@@ -564,7 +590,7 @@ void FluidSystem::multiStepVelocityVerlet(
         if (gridDimY < 1) { gridDimY = 1; }
         int gridSize = gridDimX * gridDimY;
 
-        // (C) Prepare updated simulation parameters for the next kernels
+        // (D) fluid params
         {
             GPUFluidParams params{};
             params.cellSize    = cellSize;
@@ -572,7 +598,7 @@ void FluidSystem::multiStepVelocityVerlet(
             params.gridMinY    = globalMinGy;
             params.gridDimX    = gridDimX;
             params.gridDimY    = gridDimY;
-            params.restDensity = static_cast<float>(SimulatorConstants::ParticleDensity);
+            params.restDensity = float(SimulatorConstants::ParticleDensity);
             params.stiffness   = 500.f;
             params.viscosity   = 0.1f;
             params.dt          = subDt;
@@ -582,7 +608,6 @@ void FluidSystem::multiStepVelocityVerlet(
             memcpy(paramsBuf->contents(), &params, sizeof(GPUFluidParams));
         }
 
-        // (D) Allocate and clear a GPU grid
         auto gridBuf = device_->newBuffer(
             sizeof(GPUGridCell) * gridSize,
             MTL::ResourceStorageModeShared
@@ -590,19 +615,15 @@ void FluidSystem::multiStepVelocityVerlet(
         memset(gridBuf->contents(), 0, sizeof(GPUGridCell) * gridSize);
         dispatchClearGrid(gridBuf, gridSize);
 
-        // (E) Assign cells, compute densities, compute forces
-        dispatchAssignCells(cpuParticles, particleBuf, gridBuf, paramsBuf, realCount);
+        // (E) neighbor steps
+        dispatchAssignCells(particleBuf, gridBuf, paramsBuf, realCount);
         dispatchComputeDensity(particleBuf, gridBuf, paramsBuf, realCount);
-        dispatchComputeForces(particleBuf, gridBuf, paramsBuf, realCount);
 
-        // Release the grid before finishing
+        dispatchComputeForces(particleBuf, gridBuf, paramsBuf, realCount);
         gridBuf->release();
 
-        // (F) Velocity Verlet finish
+        // (F) velocityVerletFinish
         dispatchVelocityVerletFinish(particleBuf, paramsBuf, realCount);
-
-        // Read back the final velocity for the next iteration
-        memcpy(cpuParticles.data(), particleBuf->contents(), sizeof(GPUFluidParticle) * realCount);
     }
 }
 
@@ -613,42 +634,58 @@ void FluidSystem::update(entt::registry& registry) {
         return;
     }
 
-    // 1) Gather fluid particles (CPU) and their ECS entities
+    // 1) gather CPU fluid
     std::vector<entt::entity> entityList;
-    std::vector<GPUFluidParticle> cpuParticles = gatherFluidParticles(registry, entityList);
+    auto cpuParticles = gatherFluidParticles(registry, entityList);
     if (cpuParticles.empty()) {
         return;
     }
+    int realCount = int(cpuParticles.size());
 
-    int realCount = static_cast<int>(cpuParticles.size());
-
-    // 2) Pad to next power-of-two (common for GPU optimizations)
+    // 2) pad
     int paddedCount = 1;
     while (paddedCount < realCount) {
         paddedCount <<= 1;
     }
 
-    // 3) Create GPU buffers for particles and simulation parameters
-    auto particleBuf = device_->newBuffer(
-        sizeof(GPUFluidParticle) * paddedCount,
-        MTL::ResourceStorageModeShared
-    );
-    memset(particleBuf->contents(), 0, sizeof(GPUFluidParticle) * paddedCount);
+    // 3) create GPU buffers
+    auto particleBuf = device_->newBuffer(sizeof(GPUFluidParticle)*paddedCount,
+                                          MTL::ResourceStorageModeShared);
+    memset(particleBuf->contents(), 0, sizeof(GPUFluidParticle)*paddedCount);
+    memcpy(particleBuf->contents(), cpuParticles.data(), sizeof(GPUFluidParticle)*realCount);
 
-    auto paramsBuf = device_->newBuffer(
-        sizeof(GPUFluidParams),
-        MTL::ResourceStorageModeShared
-    );
+    auto paramsBuf = device_->newBuffer(sizeof(GPUFluidParams),
+                                        MTL::ResourceStorageModeShared);
 
-    // 4) Perform the multi-sub-step Velocity Verlet
-    multiStepVelocityVerlet(registry, cpuParticles, entityList, particleBuf, paramsBuf, realCount, paddedCount);
+    // boundingBoxParams: has BBoxParams { particleCount, numThreadgroups }
+    auto boundingBoxParamsBuf = device_->newBuffer(sizeof(BBoxParams),
+                                                   MTL::ResourceStorageModeShared);
+    memset(boundingBoxParamsBuf->contents(), 0, sizeof(BBoxParams));
 
-    // 5) After all sub-steps, write final results back to ECS
-    writeBackToECS(registry, entityList, cpuParticles);
+    // boundingBoxBuf: array of BBox partial results, length = #threadgroups
+    const int BLOCK_SIZE = 256;
+    int numThreadgroups = (realCount + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    auto boundingBoxBuf = device_->newBuffer(sizeof(float)*4*numThreadgroups,
+                                             MTL::ResourceStorageModeShared);
+    memset(boundingBoxBuf->contents(), 0, sizeof(float)*4*numThreadgroups);
 
-    // Release resources
+    // 4) multi-step velocity-verlet
+    multiStepVelocityVerlet(registry,
+                            entityList,
+                            particleBuf,
+                            paramsBuf,
+                            boundingBoxParamsBuf,
+                            boundingBoxBuf,
+                            realCount,
+                            paddedCount);
+
+    // 5) final writeback
+    writeBackToECS(registry, entityList, particleBuf, realCount);
+
+    boundingBoxBuf->release();
+    boundingBoxParamsBuf->release();
     particleBuf->release();
     paramsBuf->release();
 }
 
-}  // namespace Systems
+} // namespace Systems

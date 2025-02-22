@@ -28,16 +28,13 @@ void BasicGravitySystem::update(entt::registry& registry) {
                 state.baseTimeAcceleration * 
                 state.timeScale;
 
-    // Update velocities for all entities with required components
-    auto view = registry.view<Components::ParticlePhase, 
-                            Components::Velocity, 
-                            Components::Mass>();
+    // Create a view that automatically excludes Boundary entities
+    auto view = registry.view<Components::ParticlePhase, Components::Velocity, Components::Mass>(
+        entt::exclude<Components::Boundary>
+    );
     
+    // Update velocities for entities not tagged as a Boundary
     for (auto [entity, phase, vel, mass] : view.each()) {
-        if (registry.any_of<Components::Boundary>(entity)) {
-            continue;
-        }
-        // Apply gravitational acceleration in negative y direction
         vel.y += GRAVITY * dt;
     }
 }
