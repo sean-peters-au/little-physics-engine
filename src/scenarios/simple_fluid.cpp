@@ -86,7 +86,7 @@ ScenarioConfig SimpleFluidScenario::getConfig() const
     // We enable the "FLUID" system (defined below), plus movement, boundary, etc.
     cfg.activeSystems = {
         Systems::SystemType::FLUID,
-        // Systems::SystemType::BASIC_GRAVITY,
+        Systems::SystemType::BASIC_GRAVITY,
         // Systems::SystemType::DAMPENING,
         // Systems::SystemType::SLEEP,
         // Systems::SystemType::MOVEMENT,
