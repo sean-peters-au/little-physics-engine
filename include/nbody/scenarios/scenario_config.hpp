@@ -1,6 +1,6 @@
 /**
  * @file scenario_config.hpp
- * @brief Declaration of the ScenarioConfig struct
+ * @brief Configuration for a simulation scenario.
  */
 
 #pragma once
@@ -9,8 +9,11 @@
 #include "nbody/systems/systems.hpp"
 
 /**
- * @struct ScenarioConfig
- * @brief Holds scenario-defined constants & ECS system selection.
+ * @brief Container for simulation constants and active ECS systems.
+ *
+ * This structure holds key simulation parameters including universe scaling, timing,
+ * physical properties (gravity, collision, drag, density), spatial grid sizing, and particle properties.
+ * It also specifies which ECS systems are active for the scenario.
  */
 struct ScenarioConfig {
     double UniverseSizeMeters;
@@ -30,11 +33,17 @@ struct ScenarioConfig {
     double ParticleMassStdDev;
     double InitialVelocityFactor;
 
-    // The ECS systems to run in this scenario
+    // Active ECS systems for this scenario.
     std::vector<Systems::SystemType> activeSystems;
 };
 
 /**
- * @brief Applies a ScenarioConfig to the global SimulatorConstants variables.
+ * @brief Applies simulation configuration to global constants.
+ *
+ * Updates the global simulation constants based on the provided ScenarioConfig.
+ * This function is typically called during the configuration phase of a scenario,
+ * before any entities are created.
+ *
+ * @param cfg The ScenarioConfig containing simulation parameters and active ECS systems.
  */
 void applyScenarioConfig(const ScenarioConfig &cfg);
