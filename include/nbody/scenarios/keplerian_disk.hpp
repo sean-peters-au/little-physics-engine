@@ -1,8 +1,12 @@
-#ifndef NBODY_KEPLERIAN_DISK_SCENARIO_HPP
-#define NBODY_KEPLERIAN_DISK_SCENARIO_HPP
+/**
+ * @file keplerian_disk.hpp
+ * @brief Declaration of the KeplerianDiskScenario class
+ */
 
-#include "nbody/core/i_scenario.hpp"
+#pragma once
+
 #include <entt/entt.hpp>
+#include "nbody/scenarios/i_scenario.hpp"
 
 /**
  * @class KeplerianDiskScenario
@@ -21,5 +25,3 @@ private:
     static void createCentralBody(entt::registry &registry) ;
     static void createKeplerianDisk(entt::registry &registry) ;
 };
-
-#endif // NBODY_KEPLERIAN_DISK_SCENARIO_HPP

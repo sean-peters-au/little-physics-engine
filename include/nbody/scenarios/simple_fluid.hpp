@@ -3,10 +3,9 @@
  * @brief Declaration of a simple fluid scenario with boundary walls
  */
 
-#ifndef SIMPLE_FLUID_SCENARIO_HPP
-#define SIMPLE_FLUID_SCENARIO_HPP
+#pragma once
 
-#include "nbody/core/i_scenario.hpp"
+#include "nbody/scenarios/i_scenario.hpp"
 
 /**
  * @class SimpleFluidScenario
@@ -22,5 +21,3 @@ public:
     ScenarioConfig getConfig() const override;
     void createEntities(entt::registry &registry) const override;
 };
-
-#endif // SIMPLE_FLUID_SCENARIO_HPP

@@ -1,8 +1,12 @@
-#ifndef NBODY_RANDOM_POLYGONS_SCENARIO_HPP
-#define NBODY_RANDOM_POLYGONS_SCENARIO_HPP
+/**
+ * @file random_polygons.hpp
+ * @brief Declaration of the RandomPolygonsScenario class
+ */
 
-#include "nbody/core/i_scenario.hpp"
+#pragma once
+
 #include <entt/entt.hpp>
+#include "nbody/scenarios/i_scenario.hpp"
 
 /**
  * @class RandomPolygonsScenario
@@ -17,5 +21,3 @@ public:
     ScenarioConfig getConfig() const override;
     void createEntities(entt::registry &registry) const override;
 };
-
-#endif // NBODY_RANDOM_POLYGONS_SCENARIO_HPP

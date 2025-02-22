@@ -3,15 +3,16 @@
  * @brief A scenario placing a "tank" of fluid particles with four boundary walls.
  */
 
+#include <random>
+#include <cmath>
+#include <ctime>
+#include <iostream>
+
 #include "nbody/scenarios/simple_fluid.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sph.hpp"
 #include "nbody/math/polygon.hpp"
-#include <random>
-#include <cmath>
-#include <ctime>
-#include <iostream>
 
 static constexpr int    KFluidParticleCount = 1000;    // number of fluid particles
 static constexpr double KFluidRestDensity   = 1000.0; // typical for water (kg/m^3 in a scaled sense)

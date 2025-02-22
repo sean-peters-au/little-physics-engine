@@ -8,14 +8,15 @@
  *        - Emphasized that walls remain "asleep" with infinite mass.
  */
 
-#include "nbody/scenarios/random_polygons.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/components/basic.hpp"
-#include "nbody/math/polygon.hpp"
 #include <random>
 #include <cmath>
 #include <ctime>
 #include <iostream>
+
+#include "nbody/scenarios/random_polygons.hpp"
+#include "nbody/core/constants.hpp"
+#include "nbody/components/basic.hpp"
+#include "nbody/math/polygon.hpp"
 
 static constexpr double KCirclesFraction     = 0.0;
 static constexpr double KRegularFraction     = 1.0;

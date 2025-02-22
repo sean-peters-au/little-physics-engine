@@ -1,11 +1,12 @@
-#include "nbody/scenarios/keplerian_disk.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/core/scenario_config.hpp"
-#include "nbody/components/basic.hpp"
 #include <random>
 #include <cmath>
 #include <ctime>
 #include <iostream>
+
+#include "nbody/core/constants.hpp"
+#include "nbody/components/basic.hpp"
+#include "nbody/scenarios/keplerian_disk.hpp"
+#include "nbody/scenarios/scenario_config.hpp"
 
 ScenarioConfig KeplerianDiskScenario::getConfig() const {
     ScenarioConfig cfg;
