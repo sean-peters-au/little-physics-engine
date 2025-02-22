@@ -1,9 +1,14 @@
+/**
+ * @file simulator.hpp
+ * @brief Main simulator class that manages an ECS registry and scenario lifecycle.
+ */
+
 #pragma once
 
 #include <memory>
 #include <entt/entt.hpp>
 #include "nbody/core/constants.hpp"
-#include "nbody/core/i_scenario.hpp"
+#include "nbody/scenarios/i_scenario.hpp"
 #include "nbody/systems/fluid/fluid.hpp"
 
 /**

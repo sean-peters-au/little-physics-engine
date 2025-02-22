@@ -1,7 +1,5 @@
 #include "nbody/core/simulator.hpp"
 #include "nbody/core/constants.hpp"
-#include "nbody/core/scenario_config.hpp"
-#include "nbody/core/i_scenario.hpp"
 #include "nbody/core/profile.hpp"
 
 #include "nbody/systems/sleep.hpp"
@@ -12,8 +10,8 @@
 #include "nbody/systems/barnes_hut.hpp"
 #include "nbody/systems/thermodynamics.hpp"
 #include "nbody/systems/gravity.hpp"
-#include "nbody/systems/rigid_body_collision/rigid_body_collision.hpp"
-#include "nbody/systems/rigid_body_collision/collision_data.hpp"
+#include "nbody/systems/rigid/rigid_body_collision.hpp"
+#include "nbody/systems/rigid/collision_data.hpp"
 
 #include "nbody/components/basic.hpp"
 #include <nbody/math/polygon.hpp>
@@ -22,11 +20,12 @@
 #include <iostream>
 #include <memory>
 
-// Our scenario classes
+#include "nbody/scenarios/scenario_config.hpp"
+#include "nbody/scenarios/i_scenario.hpp"
 #include "nbody/scenarios/keplerian_disk.hpp"
 #include "nbody/scenarios/random_polygons.hpp"
-#include <nbody/scenarios/simple_fluid.hpp>
-#include <nbody/systems/fluid/fluid.hpp>
+#include "nbody/scenarios/simple_fluid.hpp"
+#include "nbody/systems/fluid/fluid.hpp"
 
 ECSSimulator::ECSSimulator() {
     // e.g. set a default scenarioPtr if you like,
