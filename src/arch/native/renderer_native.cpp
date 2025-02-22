@@ -16,6 +16,7 @@
 #include "nbody/core/constants.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sim.hpp"
+#include "nbody/math/constants.hpp"
 #include "nbody/math/polygon.hpp"
 #include "nbody/systems/rigid/contact_manager.hpp"
 
@@ -152,7 +153,7 @@ void Renderer::renderSolidParticles(const entt::registry &registry) {
         double angleDeg = 0.0;
         if (registry.any_of<Components::AngularPosition>(entity)) {
             const auto &angPos = registry.get<Components::AngularPosition>(entity);
-            angleDeg = (angPos.angle * 180.0 / SimulatorConstants::Pi);
+            angleDeg = (angPos.angle * 180.0 / MathConstants::PI);
         }
 
         // If we have a PolygonShape, we handle it with sf::ConvexShape
@@ -161,7 +162,7 @@ void Renderer::renderSolidParticles(const entt::registry &registry) {
             convex.setPointCount(poly->vertices.size());
 
             // Convert angle to radians for rotation
-            double const rad = angleDeg * (SimulatorConstants::Pi / 180.0);
+            double const rad = angleDeg * (MathConstants::PI / 180.0);
             double const ca = std::cos(rad);
             double const sa = std::sin(rad);
 
@@ -557,7 +558,7 @@ void Renderer::renderContactDebug(const entt::registry &registry) {
         sf::RectangleShape normal(sf::Vector2f(normalLength, lineThickness));
         normal.setFillColor(darkColorA);
         normal.setPosition(px, py);
-        float const angle = std::atan2(contact.normal.y, contact.normal.x) * 180.0F / static_cast<float>(M_PI);
+        float const angle = std::atan2(contact.normal.y, contact.normal.x) * 180.0F / static_cast<float>(MathConstants::PI);
         normal.setRotation(angle);
         window.draw(normal);
 
@@ -600,7 +601,7 @@ void Renderer::renderVelocityDebug(const entt::registry &registry) {
             sf::RectangleShape velLine(sf::Vector2f(velLength, lineThickness));
             velLine.setFillColor(sf::Color::Cyan);
             velLine.setPosition(px, py);
-            float const angle = std::atan2(vel.y, vel.x) * 180.0F / static_cast<float>(M_PI);
+            float const angle = std::atan2(vel.y, vel.x) * 180.0F / static_cast<float>(MathConstants::PI);
             velLine.setRotation(angle);
             window.draw(velLine);
         }
@@ -621,7 +622,7 @@ void Renderer::renderAngularDebug(const entt::registry &registry) {
             
             float const radius = 20.0F;  // Fixed radius for the arc
             int const segments = 16;  // Number of segments in the arc
-            float const arcLength = std::min(static_cast<float>(std::abs(angVel.omega) * 0.5), static_cast<float>(M_PI));
+            float const arcLength = std::min(static_cast<float>(std::abs(angVel.omega) * 0.5), static_cast<float>(MathConstants::PI));
             
             std::vector<sf::Vertex> arc;
             for (int i = 0; i <= segments; ++i) {
