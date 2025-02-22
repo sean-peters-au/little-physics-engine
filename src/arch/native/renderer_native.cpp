@@ -1,16 +1,23 @@
-#define USE_MATH_DEFINES
-#include "nbody/arch/native/renderer_native.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/components/basic.hpp"
-#include "nbody/components/sim.hpp"
-#include "nbody/math/polygon.hpp"
-#include "nbody/systems/rigid/contact_manager.hpp"
+/**
+ * @file renderer_native.cpp
+ * @brief Renderer implementation for native platforms
+ *
+ * This file contains the implementation of the Renderer class for native platforms.
+ * It provides functionality for rendering particles, handling UI events, and displaying debug information.
+ */
 
 #include <iostream>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <cmath>
+
+#include "nbody/arch/native/renderer_native.hpp"
+#include "nbody/core/constants.hpp"
+#include "nbody/components/basic.hpp"
+#include "nbody/components/sim.hpp"
+#include "nbody/math/polygon.hpp"
+#include "nbody/systems/rigid/contact_manager.hpp"
 
 static sf::Color densityGrayscale(const Renderer::PixelProperties &props) {
     // Example color mapper if you want a density-based grayscale

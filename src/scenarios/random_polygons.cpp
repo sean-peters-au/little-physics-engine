@@ -1,11 +1,6 @@
 /**
  * @file random_polygons_scenario.cpp
  * @brief Implementation of a scenario with static boundary walls and random polygons/circles.
- *
- *        Changes:
- *        - Thinner walls (0.1 m).
- *        - Added a distinct color for walls.
- *        - Emphasized that walls remain "asleep" with infinite mass.
  */
 
 #include <random>

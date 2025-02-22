@@ -13,11 +13,14 @@ endif
 # Determine the Homebrew prefix for libomp
 LIBOMP_PREFIX := $(shell brew --prefix libomp)
 
+# Include entt
+ENTT_INCLUDE := -I./vendor/entt/include
+
 # Base flags for all builds
 CXXFLAGS := -Wall -Wextra -std=c++17 \
             -I./include \
-            -isystem ./include/nbody/vendor/entt/include \
-            -isystem /opt/homebrew/include
+            -isystem /opt/homebrew/include \
+			$(ENTT_INCLUDE)
 
 # Define path for Metal framework headers on macOS.
 METAL_INCLUDE := -I$(shell xcrun --sdk macosx --show-sdk-path)/System/Library/Frameworks/Metal.framework/Headers

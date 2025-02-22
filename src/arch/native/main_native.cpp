@@ -1,3 +1,12 @@
+/**
+ * @file main_native.cpp
+ * @brief Main entry point for the native platform
+ *
+ * This file contains the main entry point for the native platform.
+ * It initializes the simulator, builds the scenario list, and starts the main loop.
+ */
+
+// Required for metal
 #define NS_PRIVATE_IMPLEMENTATION
 #define CA_PRIVATE_IMPLEMENTATION
 #define MTL_PRIVATE_IMPLEMENTATION
