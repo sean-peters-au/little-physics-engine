@@ -198,7 +198,23 @@ public:
     static sf::Color sleepColorMapper(const PixelProperties& props);
     static sf::Color temperatureColorMapper(const PixelProperties& props);
 
-    void handleUIClick(int x, int y);
+    /**
+     * @brief Draws a rectangular button using SFML shapes. 
+     * @param button The button rect/label info.
+     * @param fillColor The fill color for the rectangle.
+     * @param textColor The text color. Defaults to white.
+     */
+    void drawButton(const UIButton& button, sf::Color fillColor, sf::Color textColor = sf::Color::White);
+
+    /**
+     * @brief Toggles the debug visualization on/off.
+     */
+    void toggleDebugVisualization();
+
+    /**
+     * @brief Returns whether debug visualization is currently enabled.
+     */
+    bool isDebugVisualization() const;
 
 private:
     /** The SFML render window */

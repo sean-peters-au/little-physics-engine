@@ -746,12 +746,33 @@ void Renderer::renderFluidParticles(const entt::registry &registry) {
     }
 }
 
-void Renderer::handleUIClick(int x, int y) {
-    // ... existing UI handling code ...
+void Renderer::drawButton(const UIButton& button, sf::Color fillColor, sf::Color textColor)
+{
+    sf::RectangleShape shape(sf::Vector2f(static_cast<float>(button.rect.width),
+                                          static_cast<float>(button.rect.height)));
+    shape.setPosition(static_cast<float>(button.rect.left),
+                      static_cast<float>(button.rect.top));
+    shape.setFillColor(fillColor);
+    shape.setOutlineColor(sf::Color::White);
+    shape.setOutlineThickness(1.f);
+    window.draw(shape);
 
-    // Check if debug button was clicked
-    if (debugButton.rect.contains(x, y)) {
-        debugVisualization = !debugVisualization;
-        return;
+    // If you want the button text drawn here (optional):
+    if (!button.label.empty())
+    {
+        renderText(button.label,
+                   button.rect.left + 5,
+                   button.rect.top + 5,
+                   textColor);
     }
+}
+
+void Renderer::toggleDebugVisualization()
+{
+    debugVisualization = !debugVisualization;
+}
+
+bool Renderer::isDebugVisualization() const
+{
+    return debugVisualization;
 }

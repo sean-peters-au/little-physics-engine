@@ -64,5 +64,5 @@ Every file should start with (before even imports) a `@fileoverview` comment tha
 - Skip obvious comments like `// increment counter`
 - Don't duplicate type information that cpp already provides
 - Don't use comment headers or pseudo underlines e.g. don't do this // ========
-- Don't use numbered lists e.g. don't do // 1.) First do our comments wrong
+- NEVER number your comments `// 1) do this` then `// 2) do that`. Please never
 - Do not include 'thinking' comments
