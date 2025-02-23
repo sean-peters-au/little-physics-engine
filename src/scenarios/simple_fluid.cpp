@@ -88,9 +88,9 @@ ScenarioConfig SimpleFluidScenario::getConfig() const
     cfg.activeSystems = {
         Systems::SystemType::FLUID,
         Systems::SystemType::BASIC_GRAVITY,
-        // Systems::SystemType::DAMPENING,
-        // Systems::SystemType::SLEEP,
-        // Systems::SystemType::MOVEMENT,
+        Systems::SystemType::DAMPENING,
+        Systems::SystemType::SLEEP,
+        Systems::SystemType::MOVEMENT,
         Systems::SystemType::BOUNDARY,
     };
 

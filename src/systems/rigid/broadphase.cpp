@@ -216,6 +216,10 @@ static std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry) {
 
     auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
     for (auto e : view) {
+        // Only use rigid/solid bodies
+        if (view.get<Components::ParticlePhase>(e).phase != Components::Phase::Solid) {
+            continue;
+        }
         double minx;
         double miny;
         double maxx;
@@ -230,7 +234,7 @@ static std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry) {
 std::vector<CandidatePair> broadPhase(entt::registry &registry)
 {
     PROFILE_SCOPE("Broadphase");
-    // Build the quadtree spatial partitioning structure
+    // Build the quadtree spatial partitioning structure using only rigid/solid bodies
     auto root = buildQuadtree(registry);
     
     std::vector<CandidatePair> pairs;
@@ -238,10 +242,13 @@ std::vector<CandidatePair> broadPhase(entt::registry &registry)
     pairs.reserve(128);
     found.reserve(64);
 
-    // For each entity, find potential collision partners by querying
-    // the quadtree with its AABB
+    // For each entity, find potential collision partners by querying the quadtree with its AABB
     auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
     for (auto e : view) {
+        // Only process rigid/solid bodies
+        if (view.get<Components::ParticlePhase>(e).phase != Components::Phase::Solid) {
+            continue;
+        }
         double minx;
         double miny;
         double maxx;
@@ -253,19 +260,24 @@ std::vector<CandidatePair> broadPhase(entt::registry &registry)
         root->query(minx, miny, maxx, maxy, found);
 
         for (auto &f : found) {
-            // Only process if:
-            // 1. Not the same entity
-            // 2. Higher entity ID (to avoid duplicates)
-            // 3. Not both boundaries
-            if (f.entity != e && f.entity > e) {
-                bool const aBoundary = registry.any_of<Components::Boundary>(e);
-                bool const bBoundary = registry.any_of<Components::Boundary>(f.entity);
-                
-                // Skip if both are boundaries
-                if (!(aBoundary && bBoundary)) {
-                    if (boxesOverlap(queryBB, f)) {
-                        pairs.push_back({ e, f.entity });
-                    }
+            // Process only if:
+            //  1. Not the same entity
+            //  2. The second entity has a higher id (to avoid duplicate pairs)
+            if (f.entity == e || f.entity < e)
+                continue;
+            
+            // Make sure the candidate is also a rigid/solid body
+            if (registry.get<Components::ParticlePhase>(f.entity).phase != Components::Phase::Solid) {
+                continue;
+            }
+
+            bool const aBoundary = registry.any_of<Components::Boundary>(e);
+            bool const bBoundary = registry.any_of<Components::Boundary>(f.entity);
+            
+            // Skip if both are boundaries
+            if (!(aBoundary && bBoundary)) {
+                if (boxesOverlap(queryBB, f)) {
+                    pairs.push_back({ e, f.entity });
                 }
             }
         }

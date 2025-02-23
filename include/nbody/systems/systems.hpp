@@ -1,5 +1,4 @@
-#ifndef NBODY_SYSTEMS_HPP
-#define NBODY_SYSTEMS_HPP
+#pragma once
 
 #include <vector>
 #include <string>
@@ -23,7 +22,7 @@ enum class SystemType {
     SLEEP,
     DAMPENING,
     BOUNDARY,
-    FLUID
+    FLUID,
 };
 
 // (Optional) If you had logic to map a scenario to these systems, you'd do it here.
@@ -31,5 +30,3 @@ enum class SystemType {
 // but here we rely on ScenarioConfig for that.
 
 } // namespace Systems
-
-#endif // NBODY_SYSTEMS_HPP

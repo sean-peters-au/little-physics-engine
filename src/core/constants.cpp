@@ -81,7 +81,8 @@ namespace SimulatorConstants {
             SimulationType::KEPLERIAN_DISK,
             SimulationType::ISOTHERMAL_BOX,
             SimulationType::RANDOM_POLYGONS,
-            SimulationType::SIMPLE_FLUID
+            SimulationType::SIMPLE_FLUID,
+            SimulationType::FLUID_AND_POLYGONS
         };
     }
 
@@ -91,6 +92,7 @@ namespace SimulatorConstants {
             case SimulationType::ISOTHERMAL_BOX:   return "ISOTHERMAL_BOX";
             case SimulationType::RANDOM_POLYGONS:  return "RANDOM_POLYGONS";
             case SimulationType::SIMPLE_FLUID:     return "SIMPLE_FLUID";
+            case SimulationType::FLUID_AND_POLYGONS: return "FLUID_AND_POLYGONS";
             default:                               return "UNKNOWN";
         }
     }

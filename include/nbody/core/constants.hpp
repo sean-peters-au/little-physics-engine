@@ -15,7 +15,8 @@ namespace SimulatorConstants {
         KEPLERIAN_DISK,
         ISOTHERMAL_BOX,
         RANDOM_POLYGONS,
-        SIMPLE_FLUID
+        SIMPLE_FLUID,
+        FLUID_AND_POLYGONS
     };
 
     // Truly global constants

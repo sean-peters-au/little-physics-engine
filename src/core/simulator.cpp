@@ -25,6 +25,7 @@
 #include "nbody/scenarios/keplerian_disk.hpp"
 #include "nbody/scenarios/random_polygons.hpp"
 #include "nbody/scenarios/simple_fluid.hpp"
+#include "nbody/scenarios/fluid_and_polygons.hpp"
 #include "nbody/systems/fluid/fluid.hpp"
 
 ECSSimulator::ECSSimulator() {
@@ -65,6 +66,9 @@ void ECSSimulator::reset() {
             break;
         case SimulatorConstants::SimulationType::SIMPLE_FLUID:
             scenarioPtr = std::make_unique<SimpleFluidScenario>();
+            break;
+        case SimulatorConstants::SimulationType::FLUID_AND_POLYGONS:
+            scenarioPtr = std::make_unique<FluidAndPolygonsScenario>();
             break;
         case SimulatorConstants::SimulationType::RANDOM_POLYGONS:
         default:

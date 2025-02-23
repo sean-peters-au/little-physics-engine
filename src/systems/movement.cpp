@@ -20,8 +20,15 @@ void MovementSystem::update(entt::registry &registry) {
         if (registry.any_of<Components::Boundary>(entity)) {
             continue; // Don't move boundaries
         }
+        
+        // Hack: Only move solids; skip if ParticlePhase exists and is not Solid
+        if (registry.any_of<Components::ParticlePhase>(entity)) {
+            if (registry.get<Components::ParticlePhase>(entity).phase != Components::Phase::Solid) {
+                continue; // Skip fluids (or any non-solid phase)
+            }
+        }
 
-        // Update position
+        // Update position for solids
         pos.x += vel.x * dt;
         pos.y += vel.y * dt;
 
