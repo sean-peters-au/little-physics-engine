@@ -1,5 +1,5 @@
 #include "nbody/math/vector_math.hpp"
-#include "nbody/algo/epa.hpp"
+#include "nbody/systems/rigid/epa.hpp"
 
 #include <cmath>
 #include <limits>

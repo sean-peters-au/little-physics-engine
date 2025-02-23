@@ -13,8 +13,8 @@
 
 #include "nbody/systems/rigid/narrowphase.hpp"
 #include "nbody/systems/rigid/collision_data.hpp"
-#include "nbody/algo/gjk.hpp"
-#include "nbody/algo/epa.hpp"
+#include "nbody/systems/rigid/gjk.hpp"
+#include "nbody/systems/rigid/epa.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/math/vector_math.hpp"
@@ -296,11 +296,6 @@ static std::vector<Vector> clipIncidentPolygon(const ReferenceChoice &rc)
     poly = clipFace(poly,  planeBotNormal, planeBotOffset);
 
     return poly;
-}
-
-// Helper function to check if entity is a boundary
-static bool isBoundary(const entt::registry &registry, entt::entity e) {
-    return registry.valid(e) && registry.any_of<Components::Boundary>(e);
 }
 
 /**

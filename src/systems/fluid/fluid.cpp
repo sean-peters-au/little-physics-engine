@@ -333,7 +333,7 @@ void FluidSystem::dispatchComputeBoundingBox(
     MTL::Buffer* boundingBoxParamsBuf,
     MTL::Buffer* boundingBoxBuf,
     int realCount,
-    int numThreadgroups) const
+    int numThreadgroups /* unused */) const
 {
     // We'll produce one partial bounding box per threadgroup in boundingBoxBuf.
     // The kernel defines:
@@ -345,9 +345,6 @@ void FluidSystem::dispatchComputeBoundingBox(
     // We'll set them as argument indexes 0..N after the buffers are set.
 
     size_t blockSize = 256;
-    size_t localSharedBytes = sizeof(float)*4 * blockSize;  // BBox has 4 floats
-    // But safer to do: sizeof(BBox)*256
-    // We'll do that for clarity:
     size_t localSharedBBox = sizeof(float)*4 * blockSize; // or sizeof(BBox)*256
     size_t localValidCount = sizeof(int);                 // for atomic_int
 

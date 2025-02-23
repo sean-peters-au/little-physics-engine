@@ -1,4 +1,4 @@
-#include "nbody/algo/gjk.hpp"
+#include "nbody/systems/rigid/gjk.hpp"
 #include "nbody/math/polygon.hpp"
 
 #include <cmath>
