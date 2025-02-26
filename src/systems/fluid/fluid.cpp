@@ -528,7 +528,7 @@ void FluidSystem::multiStepVelocityVerlet(
         {
             GPUFluidParams params{};
             params.restDensity = float(SimulatorConstants::ParticleDensity);
-            params.stiffness   = 100.f;
+            params.stiffness   = 10.f;
             params.viscosity   = 0.03f;
             params.dt          = subDt;
             params.halfDt      = 0.5f * subDt;
@@ -596,7 +596,7 @@ void FluidSystem::multiStepVelocityVerlet(
             params.gridDimX    = gridDimX;
             params.gridDimY    = gridDimY;
             params.restDensity = float(SimulatorConstants::ParticleDensity);
-            params.stiffness   = 100.f;
+            params.stiffness   = 10.f;
             params.viscosity   = 0.03f;
             params.dt          = subDt;
             params.halfDt      = 0.5f * subDt;

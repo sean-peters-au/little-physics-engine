@@ -14,7 +14,7 @@
 #include "nbody/math/polygon.hpp"
 
 static constexpr double KCirclesFraction     = 0.0;
-static constexpr double KRegularFraction     = 1.0;
+static constexpr double KRegularFraction     = 0.0;
 static constexpr double KRandomPolyFraction  = 1.0 - KCirclesFraction - KRegularFraction;
 
 static constexpr double KSmallShapeRatio = 0.90;
@@ -32,61 +32,6 @@ static constexpr double KWallDynamicFriction = 0.1;
 static constexpr double KParticleStaticFriction = 0.3;
 static constexpr double KParticleDynamicFriction = 0.1;
 
-// Helper: build a regular polygon
-PolygonShape buildRegularPolygon(int sides, double sz)
-{
-    PolygonShape poly;
-    poly.type = Components::ShapeType::Polygon;
-    double const angleStep = 2.0 * M_PI / static_cast<double>(sides);
-    for(int i = 0; i < sides; i++) {
-        double const angle = i * angleStep;
-        double const x = sz * std::cos(angle);
-        double const y = -sz * std::sin(angle);
-        poly.vertices.emplace_back(x, y);
-    }
-    return poly;
-}
-
-// Helper: build a random polygon
-PolygonShape buildRandomPolygon(std::default_random_engine &gen, double sz)
-{
-    PolygonShape poly;
-    poly.type = Components::ShapeType::Polygon;
-
-    std::uniform_int_distribution<int> sideDist(3, 7);
-    std::uniform_real_distribution<double> radiusDist(0.5 * sz, sz);
-
-    int const sides = sideDist(gen);
-    double const angleStep = 2.0 * M_PI / static_cast<double>(sides);
-
-    double angle = 0.0;
-    for(int i = 0; i < sides; i++) {
-        double const r = radiusDist(gen);
-        double const x = r * std::cos(angle);
-        double const y = r * std::sin(angle);
-        poly.vertices.emplace_back(x, y);
-        angle += angleStep;
-    }
-    return poly;
-}
-
-double calculatePolygonInertia(const std::vector<Vector>& vertices, double mass) {
-    double numerator = 0.0;
-    double denominator = 0.0;
-    
-    int const n = vertices.size();
-    for (int i = 0; i < n; i++) {
-        int const j = (i + 1) % n;
-        double const cross = vertices[i].cross(vertices[j]);
-        numerator += cross * (vertices[i].dotProduct(vertices[i]) + 
-                            vertices[i].dotProduct(vertices[j]) + 
-                            vertices[j].dotProduct(vertices[j]));
-        denominator += cross;
-    }
-    
-    // For a polygon with uniform density
-    return (mass * numerator) / (6.0 * denominator);
-}
 
 ScenarioConfig RandomPolygonsScenario::getConfig() const
 {
@@ -108,6 +53,8 @@ ScenarioConfig RandomPolygonsScenario::getConfig() const
     cfg.InitialVelocityFactor = 1.0;
 
     cfg.activeSystems = {
+        Systems::SystemType::RIGID_FLUID,
+        Systems::SystemType::FLUID,
         Systems::SystemType::BASIC_GRAVITY,
         Systems::SystemType::COLLISION,
         Systems::SystemType::DAMPENING,
@@ -259,7 +206,7 @@ void RandomPolygonsScenario::createEntities(entt::registry &registry) const
             }
             else {
                 // Random polygon
-                PolygonShape const poly = buildRandomPolygon(generator, sz);
+                PolygonShape const poly = buildRandomConvexPolygon(generator, sz);
                 registry.emplace<Components::Shape>(entity, Components::ShapeType::Polygon, sz);
                 registry.emplace<PolygonShape>(entity, poly);
 

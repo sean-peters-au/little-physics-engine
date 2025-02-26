@@ -1,17 +1,13 @@
 /**
  * @file fluid_and_polygons.cpp
- * @brief Test scenario combining a tank of fluid particles and polygon obstacles.
- *
- * This scenario creates the four static boundary walls, spawns a grid-based tank
- * of fluid particles (with SPH properties), and adds several randomly shaped polygon
- * obstacles into the interior. The obstacles are solid and interact with the fluid.
+ * @brief A scenario placing fluid particles near the top and random polygons below,
+ *        all falling under gravity in a bounded box.
  */
 
 #include <random>
 #include <cmath>
 #include <ctime>
 #include <iostream>
-#include <vector>
 
 #include "nbody/scenarios/fluid_and_polygons.hpp"
 #include "nbody/core/constants.hpp"
@@ -19,129 +15,91 @@
 #include "nbody/components/sph.hpp"
 #include "nbody/math/polygon.hpp"
 
-// --- Constants for the fluid portion ---
-static constexpr int    KFluidParticleCount   = 1000;
-static constexpr double KFluidParticleMass    = 20.0;
-static constexpr double KFluidRestDensity     = 1000.0;
-static constexpr double KFluidStaticFriction  = 0.0;
-static constexpr double KFluidDynamicFriction = 0.0;
-static constexpr double KFluidSmoothingLength = 0.06;
-static constexpr double KSpeedOfSound         = 1000.0;
+///////////////////////////////////////////////////////////////////////////////
+// Some constants for this combined scenario
+///////////////////////////////////////////////////////////////////////////////
+static constexpr int    KFluidParticleCount      = 500;   // number of fluid particles
+static constexpr double KFluidParticleMass       = 1.0;  // mass per fluid particle
+static constexpr double KFluidRestDensity        = 1000.0; // typical rest density for water
 
-// --- Constants for the polygon obstacles ---
-static constexpr int    KObstacleCount        = 5;
-static constexpr double KObstacleMinSize      = 0.2;
-static constexpr double KObstacleMaxSize      = 0.4;
-static constexpr double KObstacleMass         = 5.0;
-static constexpr double KObstacleStaticFriction  = 0.3;
-static constexpr double KObstacleDynamicFriction = 0.1;
+static constexpr int    KPolygonCount            = 5;     // how many random polygons to spawn
+static constexpr double KPolygonMassMean         = 1.0;   // typical mass for polygons
+static constexpr double KPolygonMassStdDev       = 0.2;   // variation in polygon mass
 
-// --- Constants for boundary walls ---
-static constexpr double KWallThickness        = 0.1;
-static constexpr double KWallMass             = 1e30;
+// Polygons: friction matches random_polygons.cpp
+static constexpr double KFloorStaticFriction     = 0.6;
+static constexpr double KFloorDynamicFriction    = 0.4;
+static constexpr double KWallStaticFriction      = 0.2;
+static constexpr double KWallDynamicFriction     = 0.1;
+static constexpr double KPolyStaticFriction      = 0.3;
+static constexpr double KPolyDynamicFriction     = 0.1;
 
+// Wall thickness
+static constexpr double KWallThickness           = 0.1;   // thickness of bounding walls
+static constexpr double KWallMass                = 1e30;  // effectively infinite mass
 
-//------------------------------------------------------------------------------
-// Helper: Build a random polygon
-PolygonShape buildRandomPolygon2(std::default_random_engine &gen, double sz)
-{
-    PolygonShape poly;
-    poly.type = Components::ShapeType::Polygon;
-    
-    std::uniform_int_distribution<int> sideDist(3, 7);
-    std::uniform_real_distribution<double> radiusDist(0.5 * sz, sz);
-    
-    int const sides = sideDist(gen);
-    double const angleStep = 2.0 * M_PI / static_cast<double>(sides);
-    
-    double angle = 0.0;
-    for (int i = 0; i < sides; i++) {
-        double const r = radiusDist(gen);
-        double const x = r * std::cos(angle);
-        double const y = r * std::sin(angle);
-        poly.vertices.emplace_back(x, y);
-        angle += angleStep;
-    }
-    return poly;
-}
+// Add near the top where other constants are defined
+static constexpr double KInitialVelocityScale = 0.5;
 
-//------------------------------------------------------------------------------
-// Helper: Calculate the moment of inertia for a polygon with uniform density.
-double calculatePolygonInertia2(const std::vector<Vector>& vertices, double mass)
-{
-    double numerator = 0.0;
-    double denominator = 0.0;
-    int const n = vertices.size();
-    for (int i = 0; i < n; i++) {
-        int const j = (i + 1) % n;
-        double const cross = vertices[i].cross(vertices[j]);
-        numerator += cross * (vertices[i].dotProduct(vertices[i]) +
-                              vertices[i].dotProduct(vertices[j]) +
-                              vertices[j].dotProduct(vertices[j]));
-        denominator += cross;
-    }
-    // For uniform density polygon
-    return (mass * numerator) / (6.0 * denominator);
-}
-
-//------------------------------------------------------------------------------
-// Helper: Create a static boundary wall with infinite mass.
-// Similar to the implementation in simple_fluid.cpp.
-static void makeBoundaryWall(entt::registry &registry,
-                             double cx, double cy,
-                             double halfW, double halfH)
+// Helper to create a static boundary wall with infinite mass
+static void makeWall(entt::registry &registry,
+                     double cx, double cy,
+                     double halfW, double halfH,
+                     double staticFriction, double dynamicFriction)
 {
     auto wallEnt = registry.create();
     registry.emplace<Components::Position>(wallEnt, cx, cy);
     registry.emplace<Components::Velocity>(wallEnt, 0.0, 0.0);
     registry.emplace<Components::Mass>(wallEnt, KWallMass);
+
+    // Mark as boundary + solid
     registry.emplace<Components::Boundary>(wallEnt);
     registry.emplace<Components::ParticlePhase>(wallEnt, Components::Phase::Solid);
-    
-    // Mark the wall as asleep to avoid unnecessary updates.
+
+    // Force asleep so it doesn't move
     auto &sleepC = registry.emplace<Components::Sleep>(wallEnt);
     sleepC.asleep = true;
     sleepC.sleepCounter = 9999999;
-    
-    // Set wall material (friction values can be tuned if needed)
-    registry.emplace<Components::Material>(wallEnt, KFluidStaticFriction, KFluidDynamicFriction);
-    
-    // Build a rectangle polygon shape with CCW vertices.
+
+    // Material friction
+    registry.emplace<Components::Material>(wallEnt, staticFriction, dynamicFriction);
+
+    // Build a rectangle polygon shape
     PolygonShape poly;
     poly.type = Components::ShapeType::Polygon;
     poly.vertices.emplace_back(-halfW, -halfH);
     poly.vertices.emplace_back(-halfW,  halfH);
     poly.vertices.emplace_back( halfW,  halfH);
     poly.vertices.emplace_back( halfW, -halfH);
-    
+
     registry.emplace<Components::Shape>(wallEnt, Components::ShapeType::Polygon, halfH);
     registry.emplace<PolygonShape>(wallEnt, poly);
     registry.emplace<Components::AngularPosition>(wallEnt, 0.0);
 }
 
-//------------------------------------------------------------------------------
-// FluidAndPolygonsScenario::getConfig
 ScenarioConfig FluidAndPolygonsScenario::getConfig() const
 {
     ScenarioConfig cfg;
-    cfg.MetersPerPixel = 1e-2;
-    cfg.UniverseSizeMeters = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
-    cfg.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
-    cfg.TimeAcceleration = 1.0;
-    cfg.GridSize = 50;
-    cfg.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
-    
-    // The fluid particle count is set here (obstacles are added in addition).
-    cfg.ParticleCount = KFluidParticleCount;
-    cfg.ParticleMassMean = KFluidParticleMass;
-    cfg.ParticleMassStdDev = 0.0;
-    cfg.GravitationalSoftener = 0.0;
-    cfg.CollisionCoeffRestitution = 0.0; // fluid is near inelastic
-    cfg.DragCoeff = 0.0;
-    cfg.ParticleDensity = KFluidRestDensity;
-    cfg.InitialVelocityFactor = 0.0; // no initial random velocity for fluid
-    
-    // Enable both fluid and rigid-body systems.
+    cfg.MetersPerPixel         = 1e-2;
+    cfg.UniverseSizeMeters     = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
+    cfg.SecondsPerTick         = 1.0 / SimulatorConstants::StepsPerSecond;
+    cfg.TimeAcceleration       = 1.0;
+    cfg.GridSize               = 50;
+    cfg.CellSizePixels         = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
+
+    // We'll store total count as fluid + some polygons. 
+    // The Polygons themselves might not be included in "cfg.ParticleCount" 
+    // if you prefer only the fluid in that count, but we set it to the fluid amount for clarity.
+    cfg.ParticleCount          = KFluidParticleCount;
+    cfg.ParticleMassMean       = KFluidParticleMass;
+    cfg.ParticleMassStdDev     = 0.1;    // fluid uniform mass
+    cfg.GravitationalSoftener  = 0.0;
+    cfg.CollisionCoeffRestitution = 0.2; // slight bounce for rigid shapes
+    cfg.DragCoeff              = 0.0;
+    cfg.ParticleDensity        = 0.5;
+    cfg.InitialVelocityFactor  = 1.0;  // Change from 0.0 to match random_polygons.cpp
+
+    // Use the same systems as random_polygons.cpp:
     cfg.activeSystems = {
         Systems::SystemType::FLUID,
         Systems::SystemType::BASIC_GRAVITY,
@@ -151,111 +109,157 @@ ScenarioConfig FluidAndPolygonsScenario::getConfig() const
         Systems::SystemType::ROTATION,
         Systems::SystemType::MOVEMENT,
         Systems::SystemType::BOUNDARY,
+        Systems::SystemType::RIGID_FLUID,
     };
-    
+
     return cfg;
 }
 
-//------------------------------------------------------------------------------
-// FluidAndPolygonsScenario::createEntities
 void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
 {
-    std::cout << "FluidAndPolygonScenario" << std::endl;
-    // Use the universe size from SimulatorConstants.
-    double const universeSizeM = SimulatorConstants::UniverseSizeMeters;
-    
-    // 1) Create boundary walls.
-    double const halfWall = KWallThickness * 0.5;
-    // Left wall
-    makeBoundaryWall(registry, 0.0, universeSizeM * 0.5, halfWall, universeSizeM * 0.5);
-    // Right wall
-    makeBoundaryWall(registry, universeSizeM, universeSizeM * 0.5, halfWall, universeSizeM * 0.5);
+    // 1) Create bounding walls
+    double sizeM = SimulatorConstants::UniverseSizeMeters;
+    double halfWall = KWallThickness * 0.5;
+
     // Bottom wall
-    makeBoundaryWall(registry, universeSizeM * 0.5, 0.0, universeSizeM * 0.5, halfWall);
+    makeWall(registry,
+        sizeM * 0.5,         // center x
+        sizeM,               // center y at top of the coordinate system (since y=0 is top in your setup)
+        sizeM * 0.5,         // half width
+        halfWall,            // half height
+        KFloorStaticFriction,
+        KFloorDynamicFriction);
+
     // Top wall
-    makeBoundaryWall(registry, universeSizeM * 0.5, universeSizeM, universeSizeM * 0.5, halfWall);
-    
-    // 2) Spawn fluid particles (as in simple_fluid.cpp) in a rectangular "tank"
-    double x_min = universeSizeM * 0.3;
-    double x_max = universeSizeM * 0.7;
-    double y_min = universeSizeM * 0.3;
-    double y_max = universeSizeM * 0.7;
-    double regionWidth  = x_max - x_min;
-    double regionHeight = y_max - y_min;
-    
-    int nCols = static_cast<int>(std::sqrt(KFluidParticleCount));
-    int nRows = (KFluidParticleCount + nCols - 1) / nCols; // ceiling division
-    double dx = regionWidth / (nCols + 1);
-    double dy = regionHeight / (nRows + 1);
-    
-    std::default_random_engine generator{static_cast<unsigned int>(time(nullptr))};
-    std::uniform_real_distribution<double> jitterDist(-0.1, 0.1); // ±10% jitter
-    
-    int count = 0;
-    for (int row = 0; row < nRows && count < KFluidParticleCount; row++) {
-        for (int col = 0; col < nCols && count < KFluidParticleCount; col++) {
-            double jitterX = jitterDist(generator) * dx;
-            double jitterY = jitterDist(generator) * dy;
-            double x = x_min + (col + 1) * dx + jitterX;
-            double y = y_min + (row + 1) * dy + jitterY;
-            
-            auto e = registry.create();
-            registry.emplace<Components::Position>(e, x, y);
-            registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-            registry.emplace<Components::Mass>(e, KFluidParticleMass);
-            registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
-            registry.emplace<Components::Material>(e, KFluidStaticFriction, KFluidDynamicFriction);
-            
-            // Use a circle shape for the fluid particle.
-            double const r = 0.02; 
-            registry.emplace<Components::Shape>(e, Components::ShapeType::Circle, r);
-            registry.emplace<CircleShape>(e, r);
-            
-            // Add SPH-related properties.
-            registry.emplace<Components::SmoothingLength>(e, KFluidSmoothingLength);
-            registry.emplace<Components::SpeedOfSound>(e, KSpeedOfSound);
-            registry.emplace<Components::SPHTemp>(e);
-            
-            // A bluish tint for the fluid particles.
-            registry.emplace<Components::Color>(e, 20, 20 + (count % 50), 200 + (count % 55));
-            count++;
+    makeWall(registry,
+        sizeM * 0.5,
+        0.0,
+        sizeM * 0.5,
+        halfWall,
+        KWallStaticFriction,
+        KWallDynamicFriction);
+
+    // Left wall
+    makeWall(registry,
+        0.0,
+        sizeM * 0.5,
+        halfWall,
+        sizeM * 0.5,
+        KWallStaticFriction,
+        KWallDynamicFriction);
+
+    // Right wall
+    makeWall(registry,
+        sizeM,
+        sizeM * 0.5,
+        halfWall,
+        sizeM * 0.5,
+        KWallStaticFriction,
+        KWallDynamicFriction);
+
+    // 2) Create random polygon entities below the mid-region
+    std::default_random_engine generator(static_cast<unsigned>(std::time(nullptr)));
+    std::uniform_real_distribution<double> xDist(sizeM * 0.2, sizeM * 0.8);
+    std::uniform_real_distribution<double> yDist(sizeM * 0.6, sizeM * 0.85);
+    std::normal_distribution<double> massDist(KPolygonMassMean, KPolygonMassStdDev);
+    std::uniform_int_distribution<int> colorDist(50, 200);
+    std::normal_distribution<> velocityDist(0.0, KInitialVelocityScale);
+
+    for (int i = 0; i < KPolygonCount; ++i) {
+        // Random position somewhere in the middle to upper region
+        double x = xDist(generator);
+        double y = yDist(generator);
+
+        auto ent = registry.create();
+
+        // Basic properties
+        double massVal = std::max(0.1, massDist(generator)); // ensure not zero or negative
+        registry.emplace<Components::Position>(ent, x, y);
+        registry.emplace<Components::Velocity>(ent, 
+            velocityDist(generator), 
+            velocityDist(generator));
+        registry.emplace<Components::Mass>(ent, massVal);
+        registry.emplace<Components::ParticlePhase>(ent, Components::Phase::Solid);
+        registry.emplace<Components::Material>(ent, KPolyStaticFriction, KPolyDynamicFriction);
+        registry.emplace<Components::Sleep>(ent);
+
+        // Build a random polygon
+        double sizePoly = 0.15 + 0.1 * (i % 3); // vary sizes a bit
+        // PolygonShape poly = buildRandomConvexPolygon(generator, sizePoly);
+        PolygonShape poly = buildRegularPolygon(5, sizePoly);
+        registry.emplace<Components::Shape>(ent, Components::ShapeType::Polygon, sizePoly);
+        registry.emplace<PolygonShape>(ent, poly);
+
+        // Calculate moment of inertia
+        double I = calculatePolygonInertia(poly.vertices, massVal);
+        registry.emplace<Components::Inertia>(ent, I);
+
+        // Angular components
+        registry.emplace<Components::AngularPosition>(ent, 0.0);
+        registry.emplace<Components::AngularVelocity>(ent, 0.0);
+
+        // Random color
+        int rr = colorDist(generator);
+        int gg = colorDist(generator);
+        int bb = colorDist(generator);
+        registry.emplace<Components::Color>(ent, rr, gg, bb);
+    }
+
+    // 3) Create fluid particles near the top, so they "fall" onto polygons
+    {
+        int numFluid = KFluidParticleCount;
+        double x_min = sizeM * 0.2;
+        double x_max = sizeM * 0.8;
+        double y_min = sizeM * 0.1; // near the top
+        double y_max = sizeM * 0.25;
+
+        double regionWidth  = x_max - x_min;
+        double regionHeight = y_max - y_min;
+
+        int nCols = static_cast<int>(std::sqrt(numFluid));
+        int nRows = (numFluid + nCols - 1) / nCols;  // ceiling division
+
+        double dx = regionWidth / (nCols + 1);
+        double dy = regionHeight / (nRows + 1);
+
+        std::uniform_real_distribution<double> jitterDist(-0.1, 0.1);
+
+        int count = 0;
+        for (int row = 0; row < nRows && count < numFluid; row++) {
+            for (int col = 0; col < nCols && count < numFluid; col++) {
+                double jitterX = jitterDist(generator) * dx;
+                double jitterY = jitterDist(generator) * dy;
+                double x = x_min + (col + 1) * dx + jitterX;
+                double y = y_min + (row + 1) * dy + jitterY;
+
+                auto e = registry.create();
+                registry.emplace<Components::Position>(e, x, y);
+                registry.emplace<Components::Velocity>(e, 0.0, 0.0);
+                registry.emplace<Components::Mass>(e, KFluidParticleMass);
+                registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
+
+                // No friction for fluid particles
+                registry.emplace<Components::Material>(e, 0.0, 0.0);
+
+                // Use a circle shape
+                double r = 0.02;
+                registry.emplace<Components::Shape>(e, Components::ShapeType::Circle, r);
+                registry.emplace<CircleShape>(e, r);
+
+                // SPH-related properties
+                registry.emplace<Components::SmoothingLength>(e, 0.06);
+                registry.emplace<Components::SpeedOfSound>(e, 1000.0);
+                registry.emplace<Components::SPHTemp>(e);
+
+                // Slightly varying blue color
+                registry.emplace<Components::Color>(e, 20, 20 + (count % 50), 200 + (count % 50));
+
+                count++;
+            }
         }
+        std::cerr << "Created " << numFluid << " fluid particles at the top.\n";
     }
-    std::cerr << "Created " << count << " fluid particles." << std::endl;
-    
-    // 3) Create polygon obstacles that will interact with the fluid.
-    // Place obstacles evenly along a horizontal line in the middle of the fluid tank.
-    double obs_y = y_min + regionHeight * 0.5;
-    double spacingObstacles = regionWidth / (KObstacleCount + 1);
-    
-    for (int i = 1; i <= KObstacleCount; i++) {
-        double obs_x = x_min + i * spacingObstacles;
-        
-        // Choose a random size for the obstacle.
-        std::uniform_real_distribution<double> sizeDist(KObstacleMinSize, KObstacleMaxSize);
-        double size = sizeDist(generator);
-        
-        // Create a random polygon shape for the obstacle.
-        PolygonShape poly = buildRandomPolygon2(generator, size);
-        double inertia = calculatePolygonInertia2(poly.vertices, KObstacleMass);
-        
-        auto entity = registry.create();
-        registry.emplace<Components::Position>(entity, obs_x, obs_y);
-        registry.emplace<Components::Velocity>(entity, 0.0, 0.0);
-        registry.emplace<Components::Mass>(entity, KObstacleMass);
-        registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
-        registry.emplace<Components::Material>(entity, KObstacleStaticFriction, KObstacleDynamicFriction);
-        
-        registry.emplace<Components::Shape>(entity, Components::ShapeType::Polygon, size);
-        registry.emplace<PolygonShape>(entity, poly);
-        
-        // Set the angular properties.
-        registry.emplace<Components::AngularPosition>(entity, 0.0);
-        registry.emplace<Components::AngularVelocity>(entity, 0.0);
-        registry.emplace<Components::Inertia>(entity, inertia);
-        
-        // Give the obstacle a distinctive color (e.g., reddish).
-        registry.emplace<Components::Color>(entity, 200, 50, 50);
-        
-    }
+
+    std::cerr << "Created " << KPolygonCount << " random polygons.\n";
+    std::cerr << "Fluid + Polygons scenario ready.\n";
 }

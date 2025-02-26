@@ -12,11 +12,12 @@
  * finding the furthest point of a shape in a given direction.
  */
 
-#ifndef POLYGON_SHAPE_HPP
-#define POLYGON_SHAPE_HPP
+#pragma once
 
-#include <vector>
 #include <cmath>
+#include <random>
+#include <vector>
+
 #include "nbody/components/basic.hpp"
 #include "nbody/math/vector_math.hpp"
 
@@ -139,4 +140,145 @@ inline Vector supportMinkowski(const ShapeData &A, const ShapeData &B, const Vec
     return Vector(pA.x - pB.x, pA.y - pB.y);
 }
 
-#endif
+/**
+ * @brief Builds a regular polygon shape
+ * 
+ * This function creates a regular polygon with a specified number of sides
+ * and a given size (radius). The polygon is oriented counter-clockwise and
+ * its vertices are stored in local space coordinates.
+ * 
+ * @param sides Number of sides in the polygon
+ * @param sz Size (radius) of the polygon
+ * @return PolygonShape The regular polygon shape
+ */
+inline PolygonShape buildRegularPolygon(int sides, double sz)
+{
+    PolygonShape poly;
+    poly.type = Components::ShapeType::Polygon;
+    double const angleStep = 2.0 * M_PI / static_cast<double>(sides);
+    for (int i = 0; i < sides; i++) {
+        double const angle = i * angleStep;
+        double const x = sz * std::cos(angle);
+        double const y = -sz * std::sin(angle);
+        poly.vertices.emplace_back(x, y);
+    }
+    return poly;
+}
+
+/*
+ * @brief Build a random convex polygon
+ * 
+ * This function creates a random convex polygon with 3-7 sides
+ * and a size (radius) that ranges from half to the specified size.
+ * The polygon is oriented counter-clockwise and its vertices are stored
+ * in local space coordinates.
+ * 
+ * @param gen Random number generator
+ * @param sz Maximum size (radius) of the polygon
+ * @return PolygonShape The random convex polygon shape
+*/
+inline PolygonShape buildRandomConvexPolygon(std::default_random_engine &gen, double sz)
+{
+    PolygonShape poly;
+    poly.type = Components::ShapeType::Polygon;
+
+    std::uniform_int_distribution<int> sideDist(3, 7);
+    std::uniform_real_distribution<double> radiusDist(0.5 * sz, sz);
+
+    int const sides = sideDist(gen);
+    double const angleStep = 2.0 * M_PI / static_cast<double>(sides);
+
+    double angle = 0.0;
+    for(int i = 0; i < sides; i++) {
+        double const r = radiusDist(gen);
+        double const x = r * std::cos(angle);
+        double const y = -r * std::sin(angle);
+        poly.vertices.emplace_back(x, y);
+        angle += angleStep;
+    }
+    return poly;
+}
+
+
+/**
+ * @brief Builds a random polygon shape
+ * 
+ * This function creates a random polygon with a variable number of sides
+ * and a size (radius) that ranges from half to the specified size.
+ * The polygon is oriented counter-clockwise and its vertices are stored
+ * in local space coordinates.
+ * 
+ * @param gen Random number generator
+ * @param sz Maximum size (radius) of the polygon
+ * @return PolygonShape The random polygon shape
+ */
+inline PolygonShape buildRandomPolygon(std::default_random_engine &gen, double sz)
+{
+    PolygonShape poly;
+    poly.type = Components::ShapeType::Polygon;
+
+    // Generate between 5-10 sides for more interesting shapes
+    std::uniform_int_distribution<int> sideDist(5, 10);
+    int vertices = sideDist(gen);
+    
+    // Generate random points in a box of size sz×sz
+    std::vector<Vector> points;
+    std::uniform_real_distribution<double> coordDist(-sz, sz);
+    
+    for (int i = 0; i < vertices; i++) {
+        double x = coordDist(gen);
+        double y = coordDist(gen);
+        points.push_back(Vector(x, y));
+    }
+    
+    // Find centroid
+    Vector centroid(0, 0);
+    for (const auto& p : points) {
+        centroid.x += p.x;
+        centroid.y += p.y;
+    }
+    centroid.x /= points.size();
+    centroid.y /= points.size();
+    
+    // Sort points by angle around the centroid (counter-clockwise in screen coords)
+    std::sort(points.begin(), points.end(), [centroid](const Vector& a, const Vector& b) {
+        return std::atan2(-(a.y - centroid.y), a.x - centroid.x) < 
+               std::atan2(-(b.y - centroid.y), b.x - centroid.x);
+    });
+    
+    // Add the sorted points to the polygon
+    for (const auto& p : points) {
+        poly.vertices.push_back(p);
+    }
+    
+    return poly;
+}
+
+/**
+ * @brief Calculates the moment of inertia for a polygon
+ * 
+ * This function computes the moment of inertia for a polygon based on its
+ * vertices and mass. It uses the parallel axis theorem to shift the
+ * vertices to the center of mass.
+ * 
+ * @param vertices Vector of vertices in local space coordinates
+ * @param mass Mass of the polygon
+ * @return double Moment of inertia
+ */
+inline double calculatePolygonInertia(const std::vector<Vector>& vertices, double mass) {
+    double numerator = 0.0;
+    double denominator = 0.0;
+    
+    int const n = vertices.size();
+    for (int i = 0; i < n; i++) {
+        int const j = (i + 1) % n;
+        double const cross = vertices[i].cross(vertices[j]);
+        numerator += cross * (vertices[i].dotProduct(vertices[i]) + 
+                              vertices[i].dotProduct(vertices[j]) + 
+                              vertices[j].dotProduct(vertices[j]));
+        denominator += cross;
+    }
+    
+    // For a polygon with uniform density
+    return (mass * numerator) / (6.0 * denominator);
+}

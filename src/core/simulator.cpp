@@ -12,6 +12,7 @@
 #include "nbody/systems/gravity.hpp"
 #include "nbody/systems/rigid/rigid_body_collision.hpp"
 #include "nbody/systems/rigid/collision_data.hpp"
+#include "nbody/systems/rigid_fluid/rigid_fluid.hpp"
 
 #include "nbody/components/basic.hpp"
 #include <nbody/math/polygon.hpp>
@@ -112,6 +113,10 @@ void ECSSimulator::tick() {
         }
         case Systems::SystemType::COLLISION: {
             Systems::RigidBodyCollisionSystem::update(registry);
+            break;
+        }
+        case Systems::SystemType::RIGID_FLUID: {
+            Systems::RigidFluidSystem::update(registry);
             break;
         }
         case Systems::SystemType::BASIC_GRAVITY: {
