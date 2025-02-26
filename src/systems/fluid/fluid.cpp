@@ -159,56 +159,56 @@ private:
         int paddedCount);
 
 private:
-    MTL::Device* device_ = nullptr;
-    MTL::CommandQueue* commandQueue_ = nullptr;
-    MTL::Library* metalLibrary_ = nullptr;
+    MTL::Device* device = nullptr;
+    MTL::CommandQueue* commandQueue = nullptr;
+    MTL::Library* metalLibrary = nullptr;
 
-    MTL::ComputePipelineState* clearGridPSO_          = nullptr;
-    MTL::ComputePipelineState* assignCellsPSO_        = nullptr;
-    MTL::ComputePipelineState* computeDensityPSO_     = nullptr;
-    MTL::ComputePipelineState* computeForcesPSO_      = nullptr;
-    MTL::ComputePipelineState* verletHalfPSO_         = nullptr;
-    MTL::ComputePipelineState* verletFinishPSO_       = nullptr;
-    MTL::ComputePipelineState* computeBoundingBoxPSO_ = nullptr;
+    MTL::ComputePipelineState* clearGridPSO          = nullptr;
+    MTL::ComputePipelineState* assignCellsPSO        = nullptr;
+    MTL::ComputePipelineState* computeDensityPSO     = nullptr;
+    MTL::ComputePipelineState* computeForcesPSO      = nullptr;
+    MTL::ComputePipelineState* verletHalfPSO         = nullptr;
+    MTL::ComputePipelineState* verletFinishPSO       = nullptr;
+    MTL::ComputePipelineState* computeBoundingBoxPSO = nullptr;
 
     static constexpr int N_SUB_STEPS = 10;
 };
 
 FluidSystem::FluidSystem() {
-    device_ = MTL::CreateSystemDefaultDevice();
-    if (!device_) {
+    device = MTL::CreateSystemDefaultDevice();
+    if (!device) {
         std::cerr << "No Metal device found." << std::endl;
         return;
     }
-    commandQueue_ = device_->newCommandQueue();
+    commandQueue = device->newCommandQueue();
 
     NS::Error* error = nullptr;
     NS::String* libPath = NS::String::string("build/fluid_kernels.metallib", NS::UTF8StringEncoding);
-    metalLibrary_ = device_->newLibrary(libPath, &error);
-    if (!metalLibrary_) {
+    metalLibrary = device->newLibrary(libPath, &error);
+    if (!metalLibrary) {
         std::cerr << "Failed to load metal library: "
                   << (error ? error->localizedDescription()->utf8String() : "Unknown") << std::endl;
         return;
     }
 
-    clearGridPSO_          = createComputePipeline("clearGrid",           metalLibrary_);
-    assignCellsPSO_        = createComputePipeline("assignCells",         metalLibrary_);
-    computeDensityPSO_     = createComputePipeline("computeDensity",      metalLibrary_);
-    computeForcesPSO_      = createComputePipeline("computeForces",       metalLibrary_);
-    verletHalfPSO_         = createComputePipeline("velocityVerletHalf",  metalLibrary_);
-    verletFinishPSO_       = createComputePipeline("velocityVerletFinish",metalLibrary_);
-    computeBoundingBoxPSO_ = createComputePipeline("computeBoundingBox",  metalLibrary_);
+    clearGridPSO          = createComputePipeline("clearGrid",           metalLibrary);
+    assignCellsPSO        = createComputePipeline("assignCells",         metalLibrary);
+    computeDensityPSO     = createComputePipeline("computeDensity",      metalLibrary);
+    computeForcesPSO      = createComputePipeline("computeForces",       metalLibrary);
+    verletHalfPSO         = createComputePipeline("velocityVerletHalf",  metalLibrary);
+    verletFinishPSO       = createComputePipeline("velocityVerletFinish",metalLibrary);
+    computeBoundingBoxPSO = createComputePipeline("computeBoundingBox",  metalLibrary);
 }
 
 FluidSystem::~FluidSystem() {
-    if (clearGridPSO_)          { clearGridPSO_->release(); }
-    if (assignCellsPSO_)        { assignCellsPSO_->release(); }
-    if (computeDensityPSO_)     { computeDensityPSO_->release(); }
-    if (computeForcesPSO_)      { computeForcesPSO_->release(); }
-    if (verletHalfPSO_)         { verletHalfPSO_->release(); }
-    if (verletFinishPSO_)       { verletFinishPSO_->release(); }
-    if (computeBoundingBoxPSO_) { computeBoundingBoxPSO_->release(); }
-    if (commandQueue_)          { commandQueue_->release(); }
+    if (clearGridPSO)          { clearGridPSO->release(); }
+    if (assignCellsPSO)        { assignCellsPSO->release(); }
+    if (computeDensityPSO)     { computeDensityPSO->release(); }
+    if (computeForcesPSO)      { computeForcesPSO->release(); }
+    if (verletHalfPSO)         { verletHalfPSO->release(); }
+    if (verletFinishPSO)       { verletFinishPSO->release(); }
+    if (computeBoundingBoxPSO) { computeBoundingBoxPSO->release(); }
+    if (commandQueue)          { commandQueue->release(); }
 }
 
 MTL::ComputePipelineState* FluidSystem::createComputePipeline(const char* name, MTL::Library* lib) {
@@ -219,7 +219,7 @@ MTL::ComputePipelineState* FluidSystem::createComputePipeline(const char* name, 
         return nullptr;
     }
     NS::Error* error = nullptr;
-    MTL::ComputePipelineState* pso = device_->newComputePipelineState(fn, &error);
+    MTL::ComputePipelineState* pso = device->newComputePipelineState(fn, &error);
     fn->release();
     if (!pso) {
         std::cerr << "Failed to create pipeline: " << name << " => "
@@ -234,7 +234,7 @@ void FluidSystem::dispatchComputePass(
     size_t threadsCount,
     size_t threadsPerGroup) const
 {
-    auto cmdBuf = commandQueue_->commandBuffer();
+    auto cmdBuf = commandQueue->commandBuffer();
     if (!cmdBuf) {
         return;
     }
@@ -318,7 +318,7 @@ void FluidSystem::dispatchVelocityVerletHalf(
     int realCount) const
 {
     dispatchComputePass(
-        verletHalfPSO_,
+        verletHalfPSO,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
             enc->setBuffer(paramsBuf,   0, 1);
@@ -349,7 +349,7 @@ void FluidSystem::dispatchComputeBoundingBox(
     size_t localValidCount = sizeof(int);                 // for atomic_int
 
     dispatchComputePass(
-        computeBoundingBoxPSO_,
+        computeBoundingBoxPSO,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf,           0, 0);
             enc->setBuffer(boundingBoxParamsBuf,  0, 1);
@@ -398,7 +398,7 @@ void FluidSystem::reduceBoundingBoxOnCPU(
 
 void FluidSystem::dispatchClearGrid(MTL::Buffer* gridBuf, int gridSize) const {
     dispatchComputePass(
-        clearGridPSO_,
+        clearGridPSO,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(gridBuf, 0, 0);
             enc->setBytes(&gridSize, sizeof(int), 1);
@@ -415,7 +415,7 @@ void FluidSystem::dispatchAssignCells(
     int realCount) const
 {
     dispatchComputePass(
-        assignCellsPSO_,
+        assignCellsPSO,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
             enc->setBytes(&realCount,  sizeof(int), 1);
@@ -434,7 +434,7 @@ void FluidSystem::dispatchComputeDensity(
     int realCount) const
 {
     dispatchComputePass(
-        computeDensityPSO_,
+        computeDensityPSO,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
             enc->setBytes(&realCount,   sizeof(int), 1);
@@ -453,7 +453,7 @@ void FluidSystem::dispatchComputeForces(
     int realCount) const
 {
     dispatchComputePass(
-        computeForcesPSO_,
+        computeForcesPSO,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
             enc->setBytes(&realCount,   sizeof(int), 1);
@@ -471,7 +471,7 @@ void FluidSystem::dispatchVelocityVerletFinish(
     int realCount) const
 {
     dispatchComputePass(
-        verletFinishPSO_,
+        verletFinishPSO,
         [&](MTL::ComputeCommandEncoder* enc) {
             enc->setBuffer(particleBuf, 0, 0);
             enc->setBuffer(paramsBuf,   0, 1);
@@ -605,7 +605,7 @@ void FluidSystem::multiStepVelocityVerlet(
             memcpy(paramsBuf->contents(), &params, sizeof(GPUFluidParams));
         }
 
-        auto gridBuf = device_->newBuffer(
+        auto gridBuf = device->newBuffer(
             sizeof(GPUGridCell) * gridSize,
             MTL::ResourceStorageModeShared
         );
@@ -627,7 +627,7 @@ void FluidSystem::multiStepVelocityVerlet(
 void FluidSystem::update(entt::registry& registry) {
     PROFILE_SCOPE("FluidSystem::update (GPU-based SPH)");
 
-    if (!device_ || !commandQueue_) {
+    if (!device || !commandQueue) {
         return;
     }
 
@@ -646,23 +646,23 @@ void FluidSystem::update(entt::registry& registry) {
     }
 
     // 3) create GPU buffers
-    auto particleBuf = device_->newBuffer(sizeof(GPUFluidParticle)*paddedCount,
+    auto particleBuf = device->newBuffer(sizeof(GPUFluidParticle)*paddedCount,
                                           MTL::ResourceStorageModeShared);
     memset(particleBuf->contents(), 0, sizeof(GPUFluidParticle)*paddedCount);
     memcpy(particleBuf->contents(), cpuParticles.data(), sizeof(GPUFluidParticle)*realCount);
 
-    auto paramsBuf = device_->newBuffer(sizeof(GPUFluidParams),
+    auto paramsBuf = device->newBuffer(sizeof(GPUFluidParams),
                                         MTL::ResourceStorageModeShared);
 
     // boundingBoxParams: has BBoxParams { particleCount, numThreadgroups }
-    auto boundingBoxParamsBuf = device_->newBuffer(sizeof(BBoxParams),
+    auto boundingBoxParamsBuf = device->newBuffer(sizeof(BBoxParams),
                                                    MTL::ResourceStorageModeShared);
     memset(boundingBoxParamsBuf->contents(), 0, sizeof(BBoxParams));
 
     // boundingBoxBuf: array of BBox partial results, length = #threadgroups
     const int BLOCK_SIZE = 256;
     int numThreadgroups = (realCount + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    auto boundingBoxBuf = device_->newBuffer(sizeof(float)*4*numThreadgroups,
+    auto boundingBoxBuf = device->newBuffer(sizeof(float)*4*numThreadgroups,
                                              MTL::ResourceStorageModeShared);
     memset(boundingBoxBuf->contents(), 0, sizeof(float)*4*numThreadgroups);
 
