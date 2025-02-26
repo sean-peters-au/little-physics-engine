@@ -18,12 +18,12 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Some constants for this combined scenario
 ///////////////////////////////////////////////////////////////////////////////
-static constexpr int    KFluidParticleCount      = 500;   // number of fluid particles
-static constexpr double KFluidParticleMass       = 1.0;  // mass per fluid particle
+static constexpr int    KFluidParticleCount      = 1000;   // number of fluid particles
+static constexpr double KFluidParticleMass       = 0.005;  // mass per fluid particle
 static constexpr double KFluidRestDensity        = 1000.0; // typical rest density for water
 
 static constexpr int    KPolygonCount            = 5;     // how many random polygons to spawn
-static constexpr double KPolygonMassMean         = 1.0;   // typical mass for polygons
+static constexpr double KPolygonMassMean         = 0.5;   // typical mass for polygons
 static constexpr double KPolygonMassStdDev       = 0.2;   // variation in polygon mass
 
 // Polygons: friction matches random_polygons.cpp
@@ -157,16 +157,16 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         KWallStaticFriction,
         KWallDynamicFriction);
 
-    // 2) Create random polygon entities below the mid-region
+    // 2) Create random polygon entities on the RIGHT side of the screen
     std::default_random_engine generator(static_cast<unsigned>(std::time(nullptr)));
-    std::uniform_real_distribution<double> xDist(sizeM * 0.2, sizeM * 0.8);
-    std::uniform_real_distribution<double> yDist(sizeM * 0.6, sizeM * 0.85);
+    std::uniform_real_distribution<double> xDist(sizeM * 0.6, sizeM * 0.8); // RIGHT side
+    std::uniform_real_distribution<double> yDist(sizeM * 0.3, sizeM * 0.6); // Middle-upper area
     std::normal_distribution<double> massDist(KPolygonMassMean, KPolygonMassStdDev);
     std::uniform_int_distribution<int> colorDist(50, 200);
     std::normal_distribution<> velocityDist(0.0, KInitialVelocityScale);
 
     for (int i = 0; i < KPolygonCount; ++i) {
-        // Random position somewhere in the middle to upper region
+        // Random position on the RIGHT side
         double x = xDist(generator);
         double y = yDist(generator);
 
@@ -205,13 +205,13 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         registry.emplace<Components::Color>(ent, rr, gg, bb);
     }
 
-    // 3) Create fluid particles near the top, so they "fall" onto polygons
+    // 3) Create fluid particles on the LEFT side of the screen
     {
         int numFluid = KFluidParticleCount;
         double x_min = sizeM * 0.2;
-        double x_max = sizeM * 0.8;
-        double y_min = sizeM * 0.1; // near the top
-        double y_max = sizeM * 0.25;
+        double x_max = sizeM * 0.4; // LEFT side of screen
+        double y_min = sizeM * 0.2; // Higher up
+        double y_max = sizeM * 0.5; // More vertical space
 
         double regionWidth  = x_max - x_min;
         double regionHeight = y_max - y_min;

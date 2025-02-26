@@ -35,8 +35,15 @@ Renderer::Renderer(int screenWidth, int screenHeight)
      initialized(false)
     , screenWidth(screenWidth)
     , screenHeight(screenHeight)
+    , fluidShader(new sf::Shader())
 {
-   fluidShader->loadFromFile("shaders/FluidMetaballs.frag", sf::Shader::Fragment);
+    if (sf::Shader::isAvailable()) {
+        if (!fluidShader->loadFromFile("shaders/fluid.frag", sf::Shader::Fragment)) {
+            std::cerr << "Warning: Failed to load fluid shader. Using fallback rendering.\n";
+        }
+    } else {
+        std::cerr << "Warning: Shaders not supported on this system.\n";
+    }
 }
 
 Renderer::~Renderer() = default;
@@ -94,8 +101,8 @@ Renderer::aggregateParticlesByPixel(const entt::registry &registry)
 }
 
 void Renderer::renderParticles(const entt::registry &registry) {
-    renderSolidParticles(registry);
     renderFluidParticles(registry);
+    renderSolidParticles(registry);
 }
 
 void Renderer::renderSolidParticles(const entt::registry &registry) {
@@ -712,11 +719,11 @@ void Renderer::renderFluidParticles(const entt::registry &registry) {
         
         // Create a larger circle to represent the particle's influence.
         float pixelRadius = static_cast<float>(SimulatorConstants::metersToPixels(circle.radius));
-        float influenceRadius = pixelRadius * 4.f;
+        float influenceRadius = pixelRadius * 2.f;  // Increase from 4.f to 6.f
         
         sf::CircleShape metaball(influenceRadius);
-        // Use low alpha so overlapping contributions add up.
-        metaball.setFillColor(sf::Color(color.r, color.g, color.b, 70));
+        // Increase alpha from 70 to 120 for more visibility
+        metaball.setFillColor(sf::Color(color.r, color.g, color.b, 120));
         metaball.setOrigin(influenceRadius, influenceRadius);
         
         float pixelX = static_cast<float>(SimulatorConstants::metersToPixels(position.x));
@@ -732,16 +739,16 @@ void Renderer::renderFluidParticles(const entt::registry &registry) {
     
     // If the shader is available, set uniforms and draw with it.
     if (fluidShader && fluidShader->isAvailable()) {
-        fluidShader->setUniform("texture", fluidSprite.getTexture());
-        fluidShader->setUniform("threshold", 0.5f);
-        fluidShader->setUniform("smoothness", 0.1f);
+        const sf::Texture &texRef = fluidTexture.getTexture();
+        fluidShader->setUniform("texture", texRef);
+        fluidShader->setUniform("threshold", 0.05f);  // Much lower threshold
+        fluidShader->setUniform("smoothness", 0.2f);  // Wider transition
         
-        // Use RenderStates to pass the shader.
+        // Use RenderStates to pass the shader
         sf::RenderStates states;
         states.shader = fluidShader.get();
         window.draw(fluidSprite, states);
     } else {
-        // Fallback: draw the sprite directly.
         window.draw(fluidSprite);
     }
 }
