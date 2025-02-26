@@ -284,7 +284,10 @@ void RigidFluidPositionSolver::update(entt::registry& registry) {
                     double pushDistance = minDistance - distance + FluidRigidConfig::SafetyMargin;
                     pushDistance = std::max(pushDistance, FluidRigidConfig::MinPushDistance);
                     
-                    totalCorrection += pushDir * pushDistance;
+                    double relaxationFactor = 0.3; // Only correct 30% of penetration per frame
+                    Vector correction = pushDir * pushDistance * relaxationFactor;
+                    
+                    totalCorrection += correction;
                     needsCorrection = true;
                 }
             }
@@ -306,7 +309,10 @@ void RigidFluidPositionSolver::update(entt::registry& registry) {
                     // Ensure minimum push
                     pushDistance = std::max(pushDistance, FluidRigidConfig::MinPushDistance);
                     
-                    totalCorrection += pushDir * pushDistance;
+                    double relaxationFactor = 0.3; // Only correct 30% of penetration per frame
+                    Vector correction = pushDir * pushDistance * relaxationFactor;
+                    
+                    totalCorrection += correction;
                     needsCorrection = true;
                 }
             }
