@@ -17,7 +17,6 @@ enum class SystemType {
     BARNES_HUT,
     COLLISION,
     ROTATION,
-    GRID_THERMODYNAMICS,
     MOVEMENT,
     SLEEP,
     DAMPENING,

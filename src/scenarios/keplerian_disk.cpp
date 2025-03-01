@@ -129,7 +129,6 @@ void KeplerianDiskScenario::createKeplerianDisk(entt::registry &registry) {
         vy += rv * std::sin(angle);
 
         auto e = registry.create();
-        std::cerr << "Creating particle at " << x << ", " << y << std::endl;
         registry.emplace<Components::Position>(e, x, y);
         registry.emplace<Components::Velocity>(e, vx, vy);
         registry.emplace<Components::ParticlePhase>(e, Components::Phase::Solid);

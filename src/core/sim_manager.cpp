@@ -85,10 +85,13 @@ bool SimManager::handleEvents()
                     selectScenario(SimulatorConstants::SimulationType::KEPLERIAN_DISK);
                     break;
                 case sf::Keyboard::Num2:
-                    selectScenario(SimulatorConstants::SimulationType::ISOTHERMAL_BOX);
+                    selectScenario(SimulatorConstants::SimulationType::RANDOM_POLYGONS);
                     break;
                 case sf::Keyboard::Num3:
-                    selectScenario(SimulatorConstants::SimulationType::RANDOM_POLYGONS);
+                    selectScenario(SimulatorConstants::SimulationType::SIMPLE_FLUID);
+                    break;
+                case sf::Keyboard::Num4:
+                    selectScenario(SimulatorConstants::SimulationType::FLUID_AND_POLYGONS);
                     break;
                 default:
                     break;

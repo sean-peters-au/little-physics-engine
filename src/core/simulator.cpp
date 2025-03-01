@@ -1,6 +1,13 @@
+#include <random>
+#include <cmath>
+#include <iostream>
+#include <memory>
+
 #include "nbody/core/simulator.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/core/profile.hpp"
+#include "nbody/components/basic.hpp"
+#include <nbody/math/polygon.hpp>
 
 #include "nbody/systems/sleep.hpp"
 #include "nbody/systems/rotation.hpp"
@@ -8,17 +15,10 @@
 #include "nbody/systems/boundary.hpp"
 #include "nbody/systems/dampening.hpp"
 #include "nbody/systems/barnes_hut.hpp"
-#include "nbody/systems/thermodynamics.hpp"
 #include "nbody/systems/gravity.hpp"
 #include "nbody/systems/rigid/rigid_body_collision.hpp"
 #include "nbody/systems/rigid/collision_data.hpp"
-
-#include "nbody/components/basic.hpp"
-#include <nbody/math/polygon.hpp>
-#include <random>
-#include <cmath>
-#include <iostream>
-#include <memory>
+#include "nbody/systems/fluid/fluid.hpp"
 
 #include "nbody/scenarios/scenario_config.hpp"
 #include "nbody/scenarios/i_scenario.hpp"
@@ -26,7 +26,6 @@
 #include "nbody/scenarios/random_polygons.hpp"
 #include "nbody/scenarios/simple_fluid.hpp"
 #include "nbody/scenarios/fluid_and_polygons.hpp"
-#include "nbody/systems/fluid/fluid.hpp"
 
 ECSSimulator::ECSSimulator() {
     // e.g. set a default scenarioPtr if you like,
@@ -124,10 +123,6 @@ void ECSSimulator::tick() {
         }
         case Systems::SystemType::BARNES_HUT: {
             Systems::BarnesHutSystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::GRID_THERMODYNAMICS: {
-            Systems::GridThermodynamicsSystem::update(registry);
             break;
         }
         case Systems::SystemType::MOVEMENT: {

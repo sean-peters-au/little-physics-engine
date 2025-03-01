@@ -13,7 +13,6 @@ namespace SimulatorConstants {
      */
     enum class SimulationType {
         KEPLERIAN_DISK,
-        ISOTHERMAL_BOX,
         RANDOM_POLYGONS,
         SIMPLE_FLUID,
         FLUID_AND_POLYGONS
