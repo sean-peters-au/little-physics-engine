@@ -109,7 +109,6 @@ ScenarioConfig FluidAndPolygonsScenario::getConfig() const
         Systems::SystemType::ROTATION,
         Systems::SystemType::MOVEMENT,
         Systems::SystemType::BOUNDARY,
-        Systems::SystemType::RIGID_FLUID,
     };
 
     return cfg;

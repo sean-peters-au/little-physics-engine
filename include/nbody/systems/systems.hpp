@@ -23,7 +23,6 @@ enum class SystemType {
     DAMPENING,
     BOUNDARY,
     FLUID,
-    RIGID_FLUID,
 };
 
 // (Optional) If you had logic to map a scenario to these systems, you'd do it here.

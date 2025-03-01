@@ -53,7 +53,6 @@ ScenarioConfig RandomPolygonsScenario::getConfig() const
     cfg.InitialVelocityFactor = 1.0;
 
     cfg.activeSystems = {
-        Systems::SystemType::RIGID_FLUID,
         Systems::SystemType::FLUID,
         Systems::SystemType::BASIC_GRAVITY,
         Systems::SystemType::COLLISION,

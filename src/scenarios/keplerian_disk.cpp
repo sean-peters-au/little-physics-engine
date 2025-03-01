@@ -3,6 +3,7 @@
 #include <ctime>
 #include <iostream>
 
+#include "entt/entt.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/scenarios/keplerian_disk.hpp"
@@ -59,7 +60,7 @@ void KeplerianDiskScenario::createCentralBody(entt::registry &registry) {
     registry.emplace<Components::Velocity>(center, 0.0, 0.0);
     registry.emplace<Components::Mass>(center, SimulatorConstants::ParticleMassMean * 100.0);
     registry.emplace<Components::ParticlePhase>(center, Components::Phase::Solid);
-    registry.emplace<Components::Shape>(center, Components::ShapeType::Circle, 1e7);
+    registry.emplace<Components::Shape>(center, Components::ShapeType::Circle, 2e7);
     registry.emplace<Components::Color>(center, 255, 255, 0);
 }
 
@@ -129,9 +130,10 @@ void KeplerianDiskScenario::createKeplerianDisk(entt::registry &registry) {
         vy += rv * std::sin(angle);
 
         auto e = registry.create();
+        std::cerr << "Creating particle at " << x << ", " << y << std::endl;
         registry.emplace<Components::Position>(e, x, y);
         registry.emplace<Components::Velocity>(e, vx, vy);
-        registry.emplace<Components::ParticlePhase>(e, Components::Phase::Gas);
+        registry.emplace<Components::ParticlePhase>(e, Components::Phase::Solid);
 
         double const baseMass = SimulatorConstants::ParticleMassMean;
         double const massFactor = std::pow(minRm / rm, 0.5);
@@ -140,7 +142,7 @@ void KeplerianDiskScenario::createKeplerianDisk(entt::registry &registry) {
 
         registry.emplace<Components::Shape>(e, Components::ShapeType::Circle,
                                             SimulatorConstants::MetersPerPixel * 0.5);
-        registry.emplace<Components::Color>(e, 150, 150, 255);
+        registry.emplace<Components::Color>(e, 255, 255, 255);
 
         created++;
     }
