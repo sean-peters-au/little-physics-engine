@@ -23,7 +23,7 @@ static constexpr double KFluidParticleMass       = 0.005;  // mass per fluid par
 static constexpr double KFluidRestDensity        = 1000.0; // typical rest density for water
 
 static constexpr int    KPolygonCount            = 5;     // how many random polygons to spawn
-static constexpr double KPolygonMassMean         = 0.5;   // typical mass for polygons
+static constexpr double KPolygonMassMean         = 0.1;   // typical mass for polygons
 static constexpr double KPolygonMassStdDev       = 0.2;   // variation in polygon mass
 
 // Polygons: friction matches random_polygons.cpp

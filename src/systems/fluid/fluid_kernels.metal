@@ -1,7 +1,7 @@
 /**
  * @fileoverview fluid_kernels.metal
- * @brief 2D SPH solver kernels with GPU-based bounding box (no grid-stride loop),
- *        plus neutral bounding box for empty groups, requiring threadgroup memory allocation.
+ * @brief 2D SPH solver kernels with GPU-based bounding box,
+ *        plus a GPU-based rigid-fluid position solver.
  */
 
 #include <metal_stdlib>
@@ -9,6 +9,9 @@
 
 using namespace metal;
 
+/**
+ * Constants / math utilities
+ */
 #define M_PI 3.14159265358979323846
 
 inline float poly6Coeff2D(float h) {
@@ -32,6 +35,10 @@ inline float viscLaplacianCoeff2D(float h) {
     return 40.0f / (M_PI * h5);
 }
 
+/**
+ * GPU data structures
+ */
+
 struct GPUFluidParticle {
     float x;
     float y;
@@ -49,6 +56,7 @@ struct GPUFluidParticle {
 };
 
 constant int GPU_MAX_PER_CELL = 64;
+
 struct GPUGridCell {
     atomic_int count;
     int indices[GPU_MAX_PER_CELL];
@@ -81,7 +89,124 @@ struct BBox {
 };
 
 /**
- * Clear grid counts
+ * GPU Rigid Body data for position solver
+ */
+enum GPURigidShapeType : int {
+    Circle = 0,
+    Polygon = 1
+};
+
+#define GPU_POLYGON_MAX_VERTS 16
+
+struct GPURigidBody {
+    GPURigidShapeType shapeType;
+    float posX;
+    float posY;
+    float angle;   // Not used here, but available
+    float radius;
+    int vertCount;
+    float vertsX[GPU_POLYGON_MAX_VERTS];
+    float vertsY[GPU_POLYGON_MAX_VERTS];
+};
+
+/**
+ * Inline helpers for rigid-fluid solver
+ */
+
+/**
+ * @brief Returns the squared length of (x, y).
+ */
+inline float lengthSq(float x, float y) {
+    return x*x + y*y;
+}
+
+/**
+ * @brief If inside polygon, returns true. A simple "winding number" or "ray cast" approach.
+ *        Use 'thread const GPURigidBody &body' to match a local copy of GPURigidBody in the kernel.
+ */
+inline bool pointInPolygon(float px, float py,
+                           thread const GPURigidBody &body)
+{
+    int vCount = body.vertCount;
+    if (vCount < 3) {
+        return false;
+    }
+
+    bool inside = false;
+    for (int i = 0, j = vCount - 1; i < vCount; j = i++) {
+        float xi = body.vertsX[i];
+        float yi = body.vertsY[i];
+        float xj = body.vertsX[j];
+        float yj = body.vertsY[j];
+
+        bool intersect = ((yi > py) != (yj > py)) &&
+                         (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+        if (intersect) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+/**
+ * @brief Finds the closest point on polygon edges to (px, py),
+ *        returning that point in (outClosestX, outClosestY).
+ *        Use 'thread const GPURigidBody &body' for local copy.
+ */
+inline void closestPointOnPolygon(float px, float py,
+                                  thread const GPURigidBody &body,
+                                  thread float &outClosestX,
+                                  thread float &outClosestY)
+{
+    int vCount = body.vertCount;
+    // Initialize outClosest to the particle's location
+    outClosestX = px;
+    outClosestY = py;
+
+    if (vCount < 2) {
+        return;
+    }
+
+    float minDistSq = 1e12f; // large sentinel
+
+    for (int i = 0; i < vCount; i++) {
+        int j = (i + 1) % vCount;
+        float x1 = body.vertsX[i];
+        float y1 = body.vertsY[i];
+        float x2 = body.vertsX[j];
+        float y2 = body.vertsY[j];
+
+        // Edge vector
+        float ex = x2 - x1;
+        float ey = y2 - y1;
+        float eLenSq = ex*ex + ey*ey;
+        if (eLenSq < 1e-16f) {
+            // Degenerate edge, skip
+            continue;
+        }
+        // Project point onto edge
+        float dx = px - x1;
+        float dy = py - y1;
+        float t = (dx*ex + dy*ey) / eLenSq;
+        if (t < 0.f) t = 0.f;
+        if (t > 1.f) t = 1.f;
+        float closestX = x1 + t*ex;
+        float closestY = y1 + t*ey;
+
+        // Check distance squared
+        float cdx = px - closestX;
+        float cdy = py - closestY;
+        float distSq = cdx*cdx + cdy*cdy;
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            outClosestX = closestX;
+            outClosestY = closestY;
+        }
+    }
+}
+
+/**
+ * @brief Kernel: Clear grid counts
  */
 kernel void clearGrid(
     device GPUGridCell* grid [[buffer(0)]],
@@ -94,7 +219,7 @@ kernel void clearGrid(
 }
 
 /**
- * Assign cells
+ * @brief Kernel: Assign cells
  */
 kernel void assignCells(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -128,7 +253,7 @@ kernel void assignCells(
 }
 
 /**
- * Compute densities (poly6)
+ * @brief Kernel: Compute densities (poly6)
  */
 kernel void computeDensity(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -194,7 +319,7 @@ kernel void computeDensity(
 }
 
 /**
- * Compute symmetrical pressure + viscosity forces
+ * @brief Kernel: Compute symmetrical pressure + viscosity forces
  */
 kernel void computeForces(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -289,7 +414,7 @@ kernel void computeForces(
 }
 
 /**
- * velocityVerletHalf
+ * @brief Kernel: velocityVerletHalf
  */
 kernel void velocityVerletHalf(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -309,7 +434,7 @@ kernel void velocityVerletHalf(
 }
 
 /**
- * velocityVerletFinish
+ * @brief Kernel: velocityVerletFinish
  */
 kernel void velocityVerletFinish(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -327,8 +452,9 @@ kernel void velocityVerletFinish(
 }
 
 /**
- * @brief 1D bounding box kernel that writes one BBox partial per threadgroup.
- * Must have setThreadgroupMemoryLength for localShared and localValidCount.
+ * @brief Kernel: computeBoundingBox
+ *        Writes one partial BBox per threadgroup.
+ *        Must have setThreadgroupMemoryLength for localShared and localValidCount.
  */
 kernel void computeBoundingBox(
     device const GPUFluidParticle* particles [[buffer(0)]],
@@ -372,7 +498,7 @@ kernel void computeBoundingBox(
     localShared[localID].maxY = maxY;
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
-    // local reduce
+    // Local reduce
     const uint blockSize = 256;
     for (uint offset = blockSize / 2; offset > 0; offset >>= 1) {
         if (localID < offset) {
@@ -390,7 +516,7 @@ kernel void computeBoundingBox(
     if (localID == 0) {
         int countInGroup = atomic_load_explicit(localValidCount, memory_order_relaxed);
         if (countInGroup == 0) {
-            // no valid threads => store neutral bounding box
+            // No valid threads => store neutral bounding box
             partialBoxes[groupID].minX =  1e30f;
             partialBoxes[groupID].maxX = -1e30f;
             partialBoxes[groupID].minY =  1e30f;
@@ -399,4 +525,95 @@ kernel void computeBoundingBox(
             partialBoxes[groupID] = localShared[0];
         }
     }
+}
+
+/**
+ * @brief Kernel: rigidFluidPositionSolver
+ *        Applies naive GPU-based collision correction for each fluid particle vs. each rigid body.
+ */
+kernel void rigidFluidPositionSolver(
+    device GPUFluidParticle* particles [[buffer(0)]],
+    constant int& fluidCount           [[buffer(1)]],
+    device GPURigidBody* rigids        [[buffer(2)]],
+    constant int& rigidCount           [[buffer(3)]],
+    uint globalID                      [[thread_position_in_grid]])
+{
+    if (globalID >= (uint)fluidCount) {
+        return;
+    }
+
+    // We'll gather corrections from all rigid shapes and apply at the end.
+    float2 accumCorr = float2(0.0f, 0.0f);
+
+    GPUFluidParticle p = particles[globalID];
+    float px = p.x;
+    float py = p.y;
+
+    // A small margin for collision
+    const float safetyMargin = 0.001f;
+    // A simple relaxation factor so corrections don't explode
+    const float relaxFactor = 0.3f;
+
+    for (int r = 0; r < rigidCount; r++) {
+        GPURigidBody body = rigids[r];
+
+        if (body.shapeType == Circle) {
+            float dx = px - body.posX;
+            float dy = py - body.posY;
+            float dist2 = dx*dx + dy*dy;
+            float radius = body.radius;
+            // If fluid is inside (distance < radius), push out
+            if (dist2 < radius*radius) {
+                float dist = sqrt(dist2);
+                if (dist < 1e-10f) {
+                    // Degenerate case: pick an arbitrary direction
+                    dist = 1e-10f;
+                    dx = 1.0f;
+                    dy = 0.0f;
+                }
+                float pen = (radius - dist) + safetyMargin; // how far inside
+                float2 dir = float2(dx, dy) / dist;         // direction center->particle
+                float2 corr = dir * pen * relaxFactor;
+                accumCorr += corr;
+            }
+        }
+        else if (body.shapeType == Polygon) {
+            // Quick check if inside polygon
+            if (body.vertCount < 3) {
+                // not a valid polygon, skip
+                continue;
+            }
+            bool inside = pointInPolygon(px, py, body);
+            if (inside) {
+                // find closest boundary point
+                float closestX, closestY;
+                closestPointOnPolygon(px, py, body, closestX, closestY);
+                float cdx = px - closestX;
+                float cdy = py - closestY;
+                float dist2 = cdx*cdx + cdy*cdy;
+                float dist = sqrt(dist2);
+                if (dist < 1e-10f) {
+                    // fallback direction
+                    dist = 1e-10f;
+                    cdx = 1.0f;
+                    cdy = 0.0f;
+                }
+                float pen = dist + safetyMargin; // how far inside
+                float2 dir = float2(cdx, cdy) / dist;
+                float2 corr = dir * pen * relaxFactor;
+                accumCorr += corr;
+            }
+        }
+    }
+
+    // apply the accumulated correction
+    p.x -= accumCorr.x;
+    p.y -= accumCorr.y;
+
+    // clamp to the grid
+    p.x = max(p.x, 0.0f);
+    p.y = max(p.y, 0.0f);
+
+    // store
+    particles[globalID] = p;
 }

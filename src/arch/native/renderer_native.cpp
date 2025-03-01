@@ -101,8 +101,8 @@ Renderer::aggregateParticlesByPixel(const entt::registry &registry)
 }
 
 void Renderer::renderParticles(const entt::registry &registry) {
-    renderFluidParticles(registry);
     renderSolidParticles(registry);
+    renderFluidParticles(registry);
 }
 
 void Renderer::renderSolidParticles(const entt::registry &registry) {

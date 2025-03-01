@@ -25,12 +25,11 @@ void RigidFluidSystem::update(entt::registry &registry) {
     
     // Step 1: Run position constraint solver
     // This ensures no fluid particles penetrate rigid bodies
-    RigidFluidPositionSolver::update(registry);
+    // RigidFluidPositionSolver::update(registry);
     
     // Step 2: Run impulse/force solver
     // This computes physical interactions between fluids and rigid bodies
-    // (currently stubbed out for future implementation)
-    RigidFluidImpulseSolver::update(registry);
+    // RigidFluidImpulseSolver::update(registry);
 }
 
 } // namespace Systems 
