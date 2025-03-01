@@ -23,7 +23,7 @@ static constexpr double KFluidParticleMass       = 0.005;  // mass per fluid par
 static constexpr double KFluidRestDensity        = 1000.0; // typical rest density for water
 
 static constexpr int    KPolygonCount            = 5;     // how many random polygons to spawn
-static constexpr double KPolygonMassMean         = 0.1;   // typical mass for polygons
+static constexpr double KPolygonMassMean         = 1;   // typical mass for polygons
 static constexpr double KPolygonMassStdDev       = 0.2;   // variation in polygon mass
 
 // Polygons: friction matches random_polygons.cpp
@@ -208,10 +208,10 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
     // 3) Create fluid particles on the LEFT side of the screen
     {
         int numFluid = KFluidParticleCount;
-        double x_min = sizeM * 0.2;
+        double x_min = sizeM * 0.1;
         double x_max = sizeM * 0.4; // LEFT side of screen
         double y_min = sizeM * 0.2; // Higher up
-        double y_max = sizeM * 0.5; // More vertical space
+        double y_max = sizeM * 0.6; // More vertical space
 
         double regionWidth  = x_max - x_min;
         double regionHeight = y_max - y_min;

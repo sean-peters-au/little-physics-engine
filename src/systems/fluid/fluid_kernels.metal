@@ -1,7 +1,8 @@
 /**
  * @fileoverview fluid_kernels.metal
  * @brief 2D SPH solver kernels with GPU-based bounding box,
- *        plus a GPU-based rigid-fluid position solver.
+ *        GPU-based rigid-fluid position solver, and
+ *        a new GPU-based rigid-fluid impulse solver for drag/buoyancy.
  */
 
 #include <metal_stdlib>
@@ -62,6 +63,10 @@ struct GPUGridCell {
     int indices[GPU_MAX_PER_CELL];
 };
 
+/**
+ * @brief Params for fluid sub-steps (already used by other kernels).
+ * Also holds dt = sub-step delta-time.
+ */
 struct GPUFluidParams {
     float cellSize;
     int   gridMinX;
@@ -71,11 +76,14 @@ struct GPUFluidParams {
     float restDensity;
     float stiffness;
     float viscosity;
-    float dt;
+    float dt;       // sub-step time
     float halfDt;
     uint  particleCount;
 };
 
+/**
+ * @brief For bounding box reductions
+ */
 struct BBoxParams {
     int particleCount;
     int numThreadgroups;
@@ -89,7 +97,10 @@ struct BBox {
 };
 
 /**
- * GPU Rigid Body data for position solver
+ * Rigid body data
+ *
+ * We assume these fields match your CPU's GPURigidBody. Notice accumFx/Fy/Torque
+ * are stored as normal floats; we’ll do atomic ops on them via reinterpret_cast.
  */
 enum GPURigidShapeType : int {
     Circle = 0,
@@ -102,27 +113,31 @@ struct GPURigidBody {
     GPURigidShapeType shapeType;
     float posX;
     float posY;
-    float angle;   // Not used here, but available
+    float angle;
     float radius;
     int vertCount;
     float vertsX[GPU_POLYGON_MAX_VERTS];
     float vertsY[GPU_POLYGON_MAX_VERTS];
+
+    // Extended fields used for impulse accumulation:
+    float vx;
+    float vy;
+    float omega;
+    float mass;
+    float inertia;
+
+    float minX;
+    float maxX;
+    float minY;
+    float maxY;
+
+    float accumFx;
+    float accumFy;
+    float accumTorque;
 };
 
 /**
  * Inline helpers for rigid-fluid solver
- */
-
-/**
- * @brief Returns the squared length of (x, y).
- */
-inline float lengthSq(float x, float y) {
-    return x*x + y*y;
-}
-
-/**
- * @brief If inside polygon, returns true. A simple "winding number" or "ray cast" approach.
- *        Use 'thread const GPURigidBody &body' to match a local copy of GPURigidBody in the kernel.
  */
 inline bool pointInPolygon(float px, float py,
                            thread const GPURigidBody &body)
@@ -140,7 +155,7 @@ inline bool pointInPolygon(float px, float py,
         float yj = body.vertsY[j];
 
         bool intersect = ((yi > py) != (yj > py)) &&
-                         (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+                         (px < (xj - xi)*(py - yi)/(yj - yi) + xi);
         if (intersect) {
             inside = !inside;
         }
@@ -148,18 +163,12 @@ inline bool pointInPolygon(float px, float py,
     return inside;
 }
 
-/**
- * @brief Finds the closest point on polygon edges to (px, py),
- *        returning that point in (outClosestX, outClosestY).
- *        Use 'thread const GPURigidBody &body' for local copy.
- */
 inline void closestPointOnPolygon(float px, float py,
                                   thread const GPURigidBody &body,
                                   thread float &outClosestX,
                                   thread float &outClosestY)
 {
     int vCount = body.vertCount;
-    // Initialize outClosest to the particle's location
     outClosestX = px;
     outClosestY = py;
 
@@ -167,7 +176,7 @@ inline void closestPointOnPolygon(float px, float py,
         return;
     }
 
-    float minDistSq = 1e12f; // large sentinel
+    float minDistSq = 1e12f;
 
     for (int i = 0; i < vCount; i++) {
         int j = (i + 1) % vCount;
@@ -176,15 +185,12 @@ inline void closestPointOnPolygon(float px, float py,
         float x2 = body.vertsX[j];
         float y2 = body.vertsY[j];
 
-        // Edge vector
         float ex = x2 - x1;
         float ey = y2 - y1;
         float eLenSq = ex*ex + ey*ey;
         if (eLenSq < 1e-16f) {
-            // Degenerate edge, skip
             continue;
         }
-        // Project point onto edge
         float dx = px - x1;
         float dy = py - y1;
         float t = (dx*ex + dy*ey) / eLenSq;
@@ -193,7 +199,6 @@ inline void closestPointOnPolygon(float px, float py,
         float closestX = x1 + t*ex;
         float closestY = y1 + t*ey;
 
-        // Check distance squared
         float cdx = px - closestX;
         float cdy = py - closestY;
         float distSq = cdx*cdx + cdy*cdy;
@@ -206,7 +211,7 @@ inline void closestPointOnPolygon(float px, float py,
 }
 
 /**
- * @brief Kernel: Clear grid counts
+ * Kernel: clearGrid (unchanged)
  */
 kernel void clearGrid(
     device GPUGridCell* grid [[buffer(0)]],
@@ -219,7 +224,7 @@ kernel void clearGrid(
 }
 
 /**
- * @brief Kernel: Assign cells
+ * Kernel: assignCells (unchanged)
  */
 kernel void assignCells(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -253,7 +258,7 @@ kernel void assignCells(
 }
 
 /**
- * @brief Kernel: Compute densities (poly6)
+ * Kernel: computeDensity (unchanged)
  */
 kernel void computeDensity(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -319,7 +324,7 @@ kernel void computeDensity(
 }
 
 /**
- * @brief Kernel: Compute symmetrical pressure + viscosity forces
+ * Kernel: computeForces (unchanged)
  */
 kernel void computeForces(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -414,7 +419,7 @@ kernel void computeForces(
 }
 
 /**
- * @brief Kernel: velocityVerletHalf
+ * Kernel: velocityVerletHalf (unchanged)
  */
 kernel void velocityVerletHalf(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -434,7 +439,7 @@ kernel void velocityVerletHalf(
 }
 
 /**
- * @brief Kernel: velocityVerletFinish
+ * Kernel: velocityVerletFinish (unchanged)
  */
 kernel void velocityVerletFinish(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -452,9 +457,7 @@ kernel void velocityVerletFinish(
 }
 
 /**
- * @brief Kernel: computeBoundingBox
- *        Writes one partial BBox per threadgroup.
- *        Must have setThreadgroupMemoryLength for localShared and localValidCount.
+ * Kernel: computeBoundingBox (unchanged)
  */
 kernel void computeBoundingBox(
     device const GPUFluidParticle* particles [[buffer(0)]],
@@ -516,7 +519,6 @@ kernel void computeBoundingBox(
     if (localID == 0) {
         int countInGroup = atomic_load_explicit(localValidCount, memory_order_relaxed);
         if (countInGroup == 0) {
-            // No valid threads => store neutral bounding box
             partialBoxes[groupID].minX =  1e30f;
             partialBoxes[groupID].maxX = -1e30f;
             partialBoxes[groupID].minY =  1e30f;
@@ -528,8 +530,7 @@ kernel void computeBoundingBox(
 }
 
 /**
- * @brief Kernel: rigidFluidPositionSolver
- *        Applies naive GPU-based collision correction for each fluid particle vs. each rigid body.
+ * Kernel: rigidFluidPositionSolver (unchanged but with your sign flip)
  */
 kernel void rigidFluidPositionSolver(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -542,78 +543,199 @@ kernel void rigidFluidPositionSolver(
         return;
     }
 
-    // We'll gather corrections from all rigid shapes and apply at the end.
     float2 accumCorr = float2(0.0f, 0.0f);
-
     GPUFluidParticle p = particles[globalID];
     float px = p.x;
     float py = p.y;
 
-    // A small margin for collision
     const float safetyMargin = 0.001f;
-    // A simple relaxation factor so corrections don't explode
-    const float relaxFactor = 0.3f;
+    const float relaxFactor  = 0.3f;
 
     for (int r = 0; r < rigidCount; r++) {
         GPURigidBody body = rigids[r];
+
+        // bounding box check
+        if (px < body.minX || px > body.maxX ||
+            py < body.minY || py > body.maxY) {
+            continue;
+        }
 
         if (body.shapeType == Circle) {
             float dx = px - body.posX;
             float dy = py - body.posY;
             float dist2 = dx*dx + dy*dy;
             float radius = body.radius;
-            // If fluid is inside (distance < radius), push out
             if (dist2 < radius*radius) {
                 float dist = sqrt(dist2);
                 if (dist < 1e-10f) {
-                    // Degenerate case: pick an arbitrary direction
                     dist = 1e-10f;
-                    dx = 1.0f;
-                    dy = 0.0f;
+                    dx = 1.0f; dy = 0.0f;
                 }
-                float pen = (radius - dist) + safetyMargin; // how far inside
-                float2 dir = float2(dx, dy) / dist;         // direction center->particle
+                float pen = (radius - dist) + safetyMargin;
+                float2 dir = float2(dx, dy) / dist;
                 float2 corr = dir * pen * relaxFactor;
                 accumCorr += corr;
             }
         }
         else if (body.shapeType == Polygon) {
-            // Quick check if inside polygon
             if (body.vertCount < 3) {
-                // not a valid polygon, skip
                 continue;
             }
             bool inside = pointInPolygon(px, py, body);
             if (inside) {
-                // find closest boundary point
-                float closestX, closestY;
-                closestPointOnPolygon(px, py, body, closestX, closestY);
-                float cdx = px - closestX;
-                float cdy = py - closestY;
-                float dist2 = cdx*cdx + cdy*cdy;
-                float dist = sqrt(dist2);
-                if (dist < 1e-10f) {
-                    // fallback direction
-                    dist = 1e-10f;
-                    cdx = 1.0f;
-                    cdy = 0.0f;
+                float cx, cy;
+                closestPointOnPolygon(px, py, body, cx, cy);
+                float cdx = px - cx;
+                float cdy = py - cy;
+                float d2 = cdx*cdx + cdy*cdy;
+                float d = sqrt(d2);
+                if (d < 1e-10f) {
+                    d = 1e-10f;
+                    cdx = 1.0f; cdy = 0.0f;
                 }
-                float pen = dist + safetyMargin; // how far inside
-                float2 dir = float2(cdx, cdy) / dist;
+                float pen = d + safetyMargin;
+                float2 dir = float2(cdx, cdy) / d;
                 float2 corr = dir * pen * relaxFactor;
                 accumCorr += corr;
             }
         }
     }
 
-    // apply the accumulated correction
+    // Flip sign to push fluid outwards
     p.x -= accumCorr.x;
     p.y -= accumCorr.y;
 
-    // clamp to the grid
-    p.x = max(p.x, 0.0f);
-    p.y = max(p.y, 0.0f);
+    // Some minimal clamping
+    if (p.x < 0.f) p.x = 0.f;
+    if (p.y < 0.f) p.y = 0.f;
 
-    // store
     particles[globalID] = p;
+}
+
+/**
+ * Kernel: rigidFluidImpulseSolver
+ * @brief For each fluid thread, we loop over all rigids. If the fluid is near/inside the rigid,
+ *        we compute drag & buoyancy, then atomically add to rigids[r].accumFx, accumFy, accumTorque.
+ *
+ * This is a naive O(N_fluid * N_rigid) approach. For large simulations, use better broad-phase or reduce logic.
+ *
+ * We incorporate param.dt each sub-step so the total effect accumulates across multiple sub-steps.
+ */
+kernel void rigidFluidImpulseSolver(
+    device GPUFluidParticle* fluidParticles [[buffer(0)]],
+    constant int& fluidCount                [[buffer(1)]],
+    device GPURigidBody* rigids            [[buffer(2)]],
+    constant int& rigidCount                [[buffer(3)]],
+    device const GPUFluidParams& param      [[buffer(4)]],
+    uint globalID                           [[thread_position_in_grid]])
+{
+    if (globalID >= (uint)fluidCount || rigidCount <= 0) {
+        return;
+    }
+
+    // Basic constants
+    const float dt = param.dt;      // sub-step time
+    const float dragCoefficient = 0.5f;
+    const float maxForce = 5.0f;    // limit per fluid
+    const float maxTorque= 1.0f;    // limit per fluid
+
+    GPUFluidParticle fp = fluidParticles[globalID];
+
+    float px = fp.x;
+    float py = fp.y;
+    float vxF = fp.vx;
+    float vyF = fp.vy;
+    float densityF = fp.density;  // fluid density near this particle
+    if (densityF < 1e-6f) {
+        densityF = 1000.f;        // fallback if uninitialized
+    }
+
+    // For each rigid
+    for (int r = 0; r < rigidCount; r++) {
+        // Access rigid
+        GPURigidBody rb = rigids[r];
+
+        // Broad-phase check
+        if (px < rb.minX || px > rb.maxX ||
+            py < rb.minY || py > rb.maxY) {
+            continue;
+        }
+
+        // Check circle or polygon
+        bool inside = false;
+        float rx = px - rb.posX;
+        float ry = py - rb.posY;
+        if (rb.shapeType == Circle) {
+            float dist2 = rx*rx + ry*ry;
+            if (dist2 < (rb.radius * rb.radius)) {
+                inside = true;
+            }
+        }
+        else if (rb.shapeType == Polygon && rb.vertCount >= 3) {
+            // naive polygon test
+            inside = pointInPolygon(px, py, rb);
+        }
+        if (!inside) {
+            continue;
+        }
+
+        //--------------------------------------------------
+        // If the particle is inside or near the rigid,
+        // compute e.g. drag, buoyancy, etc.
+        //--------------------------------------------------
+        float2 relativePos = float2(rx, ry);
+
+        // Rigid's velocity at that point (including rotation)
+        // cross(omega, relativePos) = [-omega*ry, +omega*rx]
+        float2 rotVel = float2(-rb.omega * ry, rb.omega * rx);
+        float2 rigidVel = float2(rb.vx, rb.vy) + rotVel;
+        float2 relVel = float2(vxF, vyF) - rigidVel;
+
+        // Simple drag: 0.5 * C_d * fluidDensity * v^2 * dt
+        float vMag = length(relVel);
+        if (vMag > 1e-6f) {
+            float dragMag = 0.5f * dragCoefficient * densityF * (vMag*vMag) * dt;
+            if (dragMag > maxForce) {
+                dragMag = maxForce;
+            }
+            float2 dragForce = (relVel / vMag) * dragMag;
+
+            // Optional buoyancy: approximate each particle as a small volume
+            // volume = mass/density => fluid mass / fluid density => same for this
+            // We'll do a small upward force
+            float vol = fp.mass / densityF;  // mass / fluidDensity
+            float buoyFactor = 0.02f;        // tune as needed
+            float buoy = densityF * vol * 9.81f * buoyFactor * dt;
+            float2 buoyForce = float2(0.0f, -buoy);
+
+            // sum
+            float2 totalForce = dragForce + buoyForce;
+
+            // clamp magnitude
+            float fmag = length(totalForce);
+            if (fmag > maxForce) {
+                totalForce = totalForce * (maxForce / fmag);
+            }
+
+            // torque = cross(relativePos, totalForce) in 2D = rx*Fy - ry*Fx
+            float torque = rx*totalForce.y - ry*totalForce.x;
+            if (torque > maxTorque) {
+                torque = maxTorque;
+            }
+            else if (torque < -maxTorque) {
+                torque = -maxTorque;
+            }
+
+            // Atomically add to accumFx, accumFy, accumTorque
+            // We reinterpret them as atomic_float*
+            device atomic_float* aFx = reinterpret_cast<device atomic_float*>(&rigids[r].accumFx);
+            device atomic_float* aFy = reinterpret_cast<device atomic_float*>(&rigids[r].accumFy);
+            device atomic_float* aTq = reinterpret_cast<device atomic_float*>(&rigids[r].accumTorque);
+
+            atomic_fetch_add_explicit(aFx, totalForce.x, memory_order_relaxed);
+            atomic_fetch_add_explicit(aFy, totalForce.y, memory_order_relaxed);
+            atomic_fetch_add_explicit(aTq, torque,       memory_order_relaxed);
+        }
+    }
+    // end for r in rigidCount
 }

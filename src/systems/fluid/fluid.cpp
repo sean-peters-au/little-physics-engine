@@ -1,7 +1,6 @@
 /**
  * @fileoverview fluid.cpp
- * @brief Implements the GPU-based 2D SPH fluid system using Metal for neighbor search, density, force computation,
- *        and a stubbed GPU-based rigid-fluid position solver.
+ * @brief Implements the GPU-based 2D SPH fluid system with integrated rigid-fluid impulse solver.
  */
 
 #include <cmath>
@@ -51,8 +50,11 @@ FluidSystem::FluidSystem() {
     verletFinishPSO       = createPSO("velocityVerletFinish",metalLibrary);
     computeBoundingBoxPSO = createPSO("computeBoundingBox",  metalLibrary);
 
-    // New pipeline for rigid-fluid solver (stubbed)
+    // Existing GPU-based position solver
     rigidFluidPositionPSO = createPSO("rigidFluidPositionSolver", metalLibrary);
+
+    // **New** impulse solver pipeline
+    rigidFluidImpulsePSO  = createPSO("rigidFluidImpulseSolver", metalLibrary);
 }
 
 FluidSystem::~FluidSystem() {
@@ -64,6 +66,7 @@ FluidSystem::~FluidSystem() {
     if (verletFinishPSO)       { verletFinishPSO->release(); }
     if (computeBoundingBoxPSO) { computeBoundingBoxPSO->release(); }
     if (rigidFluidPositionPSO) { rigidFluidPositionPSO->release(); }
+    if (rigidFluidImpulsePSO)  { rigidFluidImpulsePSO->release(); }
     if (commandQueue)          { commandQueue->release(); }
     if (metalLibrary)          { metalLibrary->release(); }
 }
@@ -158,7 +161,7 @@ std::vector<GPUFluidParticle> FluidSystem::gatherFluidParticles(
         p.y = pos.y;
         p.vx = vel.x;
         p.vy = vel.y;
-        p.vxHalf = p.vx;  // Start half-step velocity as current velocity
+        p.vxHalf = p.vx;
         p.vyHalf = p.vy;
         p.ax = 0.f;
         p.ay = 0.f;
@@ -186,7 +189,7 @@ std::vector<GPURigidBody> FluidSystem::gatherRigidBodies(
     auto view = registry.view<Components::Position, Components::Shape>();
 
     for (auto e : view) {
-        // Skip if it's actually a fluid entity
+        // Skip if it's a fluid entity
         if (registry.all_of<Components::ParticlePhase>(e)) {
             const auto &phase = registry.get<Components::ParticlePhase>(e);
             if (phase.phase == Components::Phase::Liquid) {
@@ -201,58 +204,99 @@ std::vector<GPURigidBody> FluidSystem::gatherRigidBodies(
         rb.posX  = static_cast<float>(pos.x);
         rb.posY  = static_cast<float>(pos.y);
         rb.angle = 0.0f;  // default if no AngularPosition
+        rb.accumFx = 0.f;
+        rb.accumFy = 0.f;
+        rb.accumTorque = 0.f;
 
-        // If the entity has an AngularPosition component, read it
+        // If the entity has AngularPosition, read it
         if (auto *angPos = registry.try_get<Components::AngularPosition>(e)) {
             rb.angle = static_cast<float>(angPos->angle);
         }
 
+        // If the entity has a Velocity or AngularVelocity, read them
+        if (auto *vel = registry.try_get<Components::Velocity>(e)) {
+            rb.vx = static_cast<float>(vel->x);
+            rb.vy = static_cast<float>(vel->y);
+        }
+        if (auto *angVel = registry.try_get<Components::AngularVelocity>(e)) {
+            rb.omega = static_cast<float>(angVel->omega);
+        }
+
+        // Read mass & inertia if present
+        float mVal = 1.f;
+        float iVal = 1.f;
+        if (auto *massC = registry.try_get<Components::Mass>(e)) {
+            mVal = static_cast<float>(massC->value);
+        }
+        if (auto *inertiaC = registry.try_get<Components::Inertia>(e)) {
+            iVal = static_cast<float>(inertiaC->I);
+        }
+        rb.mass = mVal;
+        rb.inertia = iVal;
+
+        // Attempt bounding box from shape size, or from the polygon
+        rb.minX = rb.posX - 0.5f;
+        rb.maxX = rb.posX + 0.5f;
+        rb.minY = rb.posY - 0.5f;
+        rb.maxY = rb.posY + 0.5f;
+
         if (shape.type == Components::ShapeType::Circle) {
-            // Circle
             rb.shapeType = GPURigidShapeType::Circle;
-            rb.radius = static_cast<float>(shape.size);
-            rb.vertCount = 0; // not used for circles
+            rb.radius    = static_cast<float>(shape.size);
+            rb.vertCount = 0;
+            // bounding box for broad phase
+            rb.minX = rb.posX - rb.radius;
+            rb.maxX = rb.posX + rb.radius;
+            rb.minY = rb.posY - rb.radius;
+            rb.maxY = rb.posY + rb.radius;
         }
         else if (shape.type == Components::ShapeType::Polygon) {
-            // Polygon
             rb.shapeType = GPURigidShapeType::Polygon;
-            rb.radius    = 0.0f;
+            rb.radius    = 0.f;
 
-            // This entity should also have a PolygonShape with local vertices
+            // Must have PolygonShape
             if (!registry.all_of<PolygonShape>(e)) {
-                // If there's no PolygonShape to read, skip
                 continue;
             }
             const auto &poly = registry.get<PolygonShape>(e);
 
-            // Convert local-space polygon vertices to world-space,
-            // limited to GPU_POLYGON_MAX_VERTS
             int actualCount = static_cast<int>(poly.vertices.size());
             if (actualCount > GPU_POLYGON_MAX_VERTS) {
                 actualCount = GPU_POLYGON_MAX_VERTS;
             }
             rb.vertCount = actualCount;
 
-            // Precompute rotation
             double c = std::cos(rb.angle);
             double s = std::sin(rb.angle);
 
-            // Transform each local vertex
+            // Build bounding box as we go
+            float minx = 1e9f;
+            float maxx = -1e9f;
+            float miny = 1e9f;
+            float maxy = -1e9f;
+
             for (int i = 0; i < actualCount; i++) {
-                double lx = poly.vertices[i].x;  // local x
-                double ly = poly.vertices[i].y;  // local y
-                // Rotate + translate into world coords
-                double wx = pos.x + (lx * c - ly * s);
-                double wy = pos.y + (lx * s + ly * c);
+                double lx = poly.vertices[i].x;
+                double ly = poly.vertices[i].y;
+                // transform to world
+                double wx = pos.x + (lx*c - ly*s);
+                double wy = pos.y + (lx*s + ly*c);
 
                 rb.vertsX[i] = static_cast<float>(wx);
                 rb.vertsY[i] = static_cast<float>(wy);
+
+                if (wx < minx) minx = (float)wx;
+                if (wx > maxx) maxx = (float)wx;
+                if (wy < miny) miny = (float)wy;
+                if (wy > maxy) maxy = (float)wy;
             }
+            rb.minX = minx;
+            rb.maxX = maxx;
+            rb.minY = miny;
+            rb.maxY = maxy;
         }
         else {
-            // If there's another shape type (e.g. Square),
-            // either skip or treat as Circle/Polygon. For example:
-            //  - shape.type == ShapeType::Square => store as a 4-vertex Polygon
+            // skip or convert squares to polygons
             continue;
         }
 
@@ -286,9 +330,9 @@ void FluidSystem::dispatchComputeBoundingBox(
     int realCount,
     int numThreadgroups) const
 {
-    const size_t blockSize = 256;
-    const size_t localSharedBBox = sizeof(float) * 4 * blockSize;
-    const size_t localValidCount = sizeof(int);
+    size_t blockSize = 256;
+    size_t localSharedBBox = sizeof(float) * 4 * blockSize;
+    size_t localValidCount = sizeof(int);
 
     dispatchComputePass(
         computeBoundingBoxPSO,
@@ -427,20 +471,41 @@ void FluidSystem::dispatchRigidFluidPosition(
     MTL::Buffer* rigidBuf,
     int rigidCount) const
 {
-    // Stubbed GPU position solver
-    // We'll do a no-op kernel call so it compiles.
     dispatchComputePass(
         rigidFluidPositionPSO,
         [&](MTL::ComputeCommandEncoder* enc) {
-            // In a future phase, we'd pass these buffers to the kernel
             enc->setBuffer(particleBuf, 0, 0);
             enc->setBytes(&fluidCount, sizeof(int), 1);
 
             enc->setBuffer(rigidBuf, 0, 2);
             enc->setBytes(&rigidCount, sizeof(int), 3);
+        },
+        static_cast<size_t>(fluidCount),
+        256
+    );
+}
 
-            // The kernel can read fluid particles and rigid shapes,
-            // applying position constraints in the GPU.
+void FluidSystem::dispatchRigidFluidImpulse(
+    MTL::Buffer* particleBuf,
+    int fluidCount,
+    MTL::Buffer* rigidBuf,
+    MTL::Buffer* paramsBuf,
+    int rigidCount) const
+{
+    // We'll do 1 thread per fluid particle, each loops over all rigid bodies (O(N*M)).
+    dispatchComputePass(
+        rigidFluidImpulsePSO,
+        [&](MTL::ComputeCommandEncoder* enc) {
+            // arg 0: fluid particles
+            enc->setBuffer(particleBuf, 0, 0);
+            // arg 1: fluidCount
+            enc->setBytes(&fluidCount, sizeof(int), 1);
+            // arg 2: rigidBuf
+            enc->setBuffer(rigidBuf, 0, 2);
+            // arg 3: rigidCount
+            enc->setBytes(&rigidCount, sizeof(int), 3);
+            // arg 4: params
+            enc->setBuffer(paramsBuf, 0, 4);
         },
         static_cast<size_t>(fluidCount),
         256
@@ -478,13 +543,51 @@ void FluidSystem::writeBackRigidBodies(
     MTL::Buffer* rigidBuf,
     int rigidCount) const
 {
-    // This is stubbed. If your GPU position solver modifies rigid bodies,
-    // you would read them back here and update ECS position components, etc.
-    (void)registry;
-    (void)rigidEntityList;
-    (void)rigidBuf;
-    (void)rigidCount;
-    // No-op for now.
+    // We'll do a final pass on CPU to apply the accumulated forces/torques to velocities
+    // with damping or any other logic (similar to the old CPU impulse solver).
+    if (rigidCount < 1 || !rigidBuf) return;
+
+    auto* rbData = static_cast<GPURigidBody*>(rigidBuf->contents());
+
+    // We'll assume the GPU stored final accumFx, accumFy, accumTorque in the same struct
+    // but hasn't yet applied them to vx, vy, omega. You can do it in the kernel or do it here.
+    for (int i = 0; i < rigidCount; i++) {
+        GPURigidBody &rb = rbData[i];
+
+        // If mass or inertia is huge, effectively immovable
+        float invMass    = (rb.mass > 1e-12f)    ? (1.f / rb.mass)    : 0.f;
+        float invInertia = (rb.inertia > 1e-12f) ? (1.f / rb.inertia) : 0.f;
+
+        // Apply force scaling or damping
+        constexpr float dampingFactor = 0.98f;
+        rb.vx += rb.accumFx * invMass;
+        rb.vy += rb.accumFy * invMass;
+        rb.vx *= dampingFactor;
+        rb.vy *= dampingFactor;
+
+        rb.omega += rb.accumTorque * invInertia;
+        rb.omega *= dampingFactor;
+
+        // store back accum=0 for next frame
+        rb.accumFx = 0.f;
+        rb.accumFy = 0.f;
+        rb.accumTorque = 0.f;
+    }
+
+    // Now copy them back to ECS
+    for (int i = 0; i < rigidCount; i++) {
+        entt::entity ent = rigidEntityList[static_cast<size_t>(i)];
+        GPURigidBody &rb = rbData[i];
+
+        // set velocity, angular velocity
+        if (auto *vel = registry.try_get<Components::Velocity>(ent)) {
+            vel->x = rb.vx;
+            vel->y = rb.vy;
+        }
+        if (auto *angVel = registry.try_get<Components::AngularVelocity>(ent)) {
+            angVel->omega = rb.omega;
+        }
+    }
 }
 
 void FluidSystem::multiStepVelocityVerlet(
@@ -502,7 +605,6 @@ void FluidSystem::multiStepVelocityVerlet(
 {
     PROFILE_SCOPE("FluidSystem::multiStepVelocityVerlet");
 
-    // Retrieve global timing from our constants
     float dt = float(SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration);
     float subDt = dt / float(N_SUB_STEPS);
 
@@ -545,7 +647,7 @@ void FluidSystem::multiStepVelocityVerlet(
         float maxY = -std::numeric_limits<float>::max();
         reduceBoundingBoxOnCPU(boundingBoxBuf, numThreadgroups, minX, maxX, minY, maxY);
 
-        // C) find maximum smoothing length (h) among particles (CPU readback)
+        // C) find maximum smoothing length (h) among particles
         float maxH = 0.05f;
         {
             const auto* pData = static_cast<const GPUFluidParticle*>(particleBuf->contents());
@@ -558,7 +660,7 @@ void FluidSystem::multiStepVelocityVerlet(
         }
         float cellSize = 2.f * maxH;
 
-        // Slight offset for safety
+        // offset
         minX -= 1e-6f;
         minY -= 1e-6f;
 
@@ -573,7 +675,7 @@ void FluidSystem::multiStepVelocityVerlet(
         if (gridDimY < 1) { gridDimY = 1; }
         int gridSize = gridDimX * gridDimY;
 
-        // D) Update fluid params for neighbor steps
+        // D) fluid params for neighbor steps
         {
             GPUFluidParams params{};
             params.cellSize    = cellSize;
@@ -607,15 +709,18 @@ void FluidSystem::multiStepVelocityVerlet(
         // F) velocityVerletFinish
         dispatchVelocityVerletFinish(particleBuf, paramsBuf, realCount);
 
-        // G) (Optional) GPU-based rigid-fluid position solver at sub-step
-        //    For now, we do it once per sub-step. This is where the "jiggle" fix
-        //    will eventually be integrated. It is currently a stub.
+        // G) GPU-based rigid-fluid position solver
         dispatchRigidFluidPosition(particleBuf, realCount, rigidBuf, rigidCount);
+
+        // H) GPU-based rigid-fluid impulse solver
+        if (rigidCount > 0) {
+            // For each fluid, we compute drag/buoyancy etc. on each rigid,
+            // using bounding boxes and atomic adds to accumFx/Fy/Torque.
+            dispatchRigidFluidImpulse(particleBuf, realCount, rigidBuf, paramsBuf, rigidCount);
+        }
     }
 
-    // If you plan to do a final pass after all sub-steps, you could do it here too.
-
-    // Potential writeback for rigid bodies if they are dynamic
+    // After sub-steps, we finalize rigid velocities on CPU
     writeBackRigidBodies(registry, rigidEntities, rigidBuf, rigidCount);
 }
 
@@ -623,10 +728,10 @@ void FluidSystem::update(entt::registry& registry) {
     PROFILE_SCOPE("FluidSystem::update (GPU-based SPH)");
 
     if (!device || !commandQueue) {
-        return; // No Metal device or queue
+        return;
     }
 
-    // 1) Gather fluid from ECS
+    // 1) Gather fluid
     std::vector<entt::entity> fluidEntityList;
     auto cpuParticles = gatherFluidParticles(registry, fluidEntityList);
     if (cpuParticles.empty()) {
@@ -634,18 +739,18 @@ void FluidSystem::update(entt::registry& registry) {
     }
     int fluidCount = static_cast<int>(cpuParticles.size());
 
-    // 2) Gather rigid bodies from ECS
+    // 2) Gather rigid
     std::vector<entt::entity> rigidEntityList;
     auto cpuRigids = gatherRigidBodies(registry, rigidEntityList);
     int rigidCount = static_cast<int>(cpuRigids.size());
 
-    // 3) Pad fluid count to next power-of-two
+    // 3) Pad fluid
     int paddedCount = 1;
     while (paddedCount < fluidCount) {
         paddedCount <<= 1;
     }
 
-    // 4) Create GPU buffers for fluid
+    // 4) GPU buffers for fluid
     auto particleBuf = device->newBuffer(
         sizeof(GPUFluidParticle) * paddedCount,
         MTL::ResourceStorageModeShared
@@ -655,7 +760,7 @@ void FluidSystem::update(entt::registry& registry) {
 
     auto paramsBuf = device->newBuffer(sizeof(GPUFluidParams), MTL::ResourceStorageModeShared);
 
-    // Create GPU buffers for bounding box
+    // bounding box
     auto boundingBoxParamsBuf = device->newBuffer(sizeof(BBoxParams), MTL::ResourceStorageModeShared);
     memset(boundingBoxParamsBuf->contents(), 0, sizeof(BBoxParams));
 
@@ -667,7 +772,7 @@ void FluidSystem::update(entt::registry& registry) {
     );
     memset(boundingBoxBuf->contents(), 0, sizeof(float)*4*numThreadgroups);
 
-    // 5) Create GPU buffers for rigid bodies (if any)
+    // 5) GPU buffers for rigid
     MTL::Buffer* rigidBuf = nullptr;
     if (rigidCount > 0) {
         rigidBuf = device->newBuffer(sizeof(GPURigidBody) * rigidCount,
@@ -676,7 +781,7 @@ void FluidSystem::update(entt::registry& registry) {
         memcpy(rigidBuf->contents(), cpuRigids.data(), sizeof(GPURigidBody)*rigidCount);
     }
 
-    // 6) Multi-step integration and stubbed rigid solver
+    // 6) Multi-step velocity-verlet
     multiStepVelocityVerlet(
         registry,
         fluidEntityList,
@@ -691,13 +796,10 @@ void FluidSystem::update(entt::registry& registry) {
         rigidCount
     );
 
-    // 7) Write final states back to ECS
+    // 7) Write fluid back
     writeBackToECS(registry, fluidEntityList, particleBuf, fluidCount);
 
-    // If we had dynamic rigid bodies and they were updated, we'd do writeBackRigidBodies here
-    // but we already do it inside multiStepVelocityVerlet.
-
-    // Release GPU resources
+    // Cleanup
     if (rigidBuf) {
         rigidBuf->release();
     }

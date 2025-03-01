@@ -1,10 +1,14 @@
 /**
  * @fileoverview fluid.hpp
- * @brief SPH-based fluid solver system, using Metal for GPU acceleration.
+ * @brief SPH-based fluid solver system, now with integrated rigid-fluid impulse solver on the GPU.
  *
- * Provides data structures for particles, grid cells, parameters, and a new
- * stub for rigid body data, plus the FluidSystem class definition. The system
- * now also contains a stubbed GPU-based rigid-fluid position solver pipeline.
+ * Provides data structures for particles, grid cells, parameters, and a GPU-friendly
+ * rigid body struct with velocity, mass, inertia, bounding boxes, plus code for:
+ *  - neighbor search
+ *  - fluid density/pressure/forces
+ *  - rigid-fluid impulse exchange
+ *  - integrated position solvers
+ * All in a single FluidSystem.
  */
 
 #pragma once
@@ -75,9 +79,6 @@ struct GPUFluidParams {
 /**
  * @struct BBoxParams
  * @brief Input parameters for the GPU bounding box kernel.
- *
- * The GPU kernel writes out partial bounding boxes per threadgroup,
- * which are then reduced on the CPU.
  */
 struct BBoxParams {
     int particleCount;
@@ -95,38 +96,45 @@ enum class GPURigidShapeType : int {
 
 /**
  * @struct GPURigidBody
- * @brief GPU-friendly representation of a rigid body for the position solver.
- *
- * This is a stub for now: we only store minimal data needed to compile.
- * We'll expand it later to actually perform collision resolution.
+ * @brief GPU-friendly representation of a rigid body, extended to store
+ * bounding box, velocity, mass, and partial force/torque for the impulse solver.
  */
-static constexpr int GPU_POLYGON_MAX_VERTS = 16;  ///< Example limit for polygon vertices on the GPU
+static constexpr int GPU_POLYGON_MAX_VERTS = 16;
 struct GPURigidBody {
+    // Basic shape data
     GPURigidShapeType shapeType;
     float posX;
     float posY;
-    float angle;
-    float radius; ///< Used if shapeType == Circle
+    float angle;      ///< current orientation
+    float radius;     ///< if Circle
 
-    // Polygon data (stub)
+    // Polygon data
     int vertCount;
     float vertsX[GPU_POLYGON_MAX_VERTS];
     float vertsY[GPU_POLYGON_MAX_VERTS];
 
-    // Future expansions could include velocity, mass, etc.
+    // Extended rigid-body properties
+    float vx;         ///< linear velocity x
+    float vy;         ///< linear velocity y
+    float omega;      ///< angular velocity
+    float mass;       ///< rigid mass
+    float inertia;    ///< moment of inertia
+
+    // Simple bounding box for broad-phase fluid check
+    float minX;
+    float maxX;
+    float minY;
+    float maxY;
+
+    // Accumulated force/torque from fluid collisions
+    float accumFx;
+    float accumFy;
+    float accumTorque;
 };
 
 /**
  * @class FluidSystem
- * @brief SPH-based fluid solver system, using single-precision arrays and a uniform grid for neighbor search.
- *
- * - Gathers all Liquid-phase particles.
- * - Builds a grid to find neighbors.
- * - Computes densities and pressures on the GPU.
- * - Computes forces (pressure, gravity, viscosity) on the GPU.
- * - Integrates velocities and positions over multiple sub-steps.
- * - Gathers rigid bodies (Circle/Polygon) and runs a stub GPU-based solver to correct fluid positions.
- * - Writes the final particle states (and eventually rigid states) back to the ECS registry.
+ * @brief SPH-based fluid solver with GPU-accelerated neighbor search & rigid-fluid interactions.
  */
 class FluidSystem {
 public:
@@ -135,25 +143,18 @@ public:
 
     /**
      * @brief Main update function called each frame/tick.
-     * @param registry The ECS registry containing fluid entities.
+     * @param registry The ECS registry containing fluid entities & rigid bodies.
      */
     void update(entt::registry &registry);
 
 private:
     /**
      * @brief Creates a Metal compute pipeline state for a given function name.
-     * @param fnName Name of the Metal shader function
-     * @param lib    The Metal library object
-     * @return Valid pipeline state pointer on success, nullptr on failure
      */
     MTL::ComputePipelineState* createPSO(const char* fnName, MTL::Library* lib);
 
     /**
-     * @brief Dispatches a Metal compute pass to the GPU, with a typical command encoder setup.
-     * @param pipelineState  The compiled compute pipeline
-     * @param encodeFunc     A lambda to bind buffers and set arguments
-     * @param threadsCount   Total threads to launch
-     * @param threadsPerGroup Threads in each threadgroup
+     * @brief Dispatches a Metal compute pass with a typical command encoder setup.
      */
     void dispatchComputePass(
         MTL::ComputePipelineState* pipelineState,
@@ -162,27 +163,21 @@ private:
         size_t threadsPerGroup = 256) const;
 
     /**
-     * @brief Gathers fluid particles (Phase::Liquid) from the ECS into GPU-friendly structures.
-     * @param registry   ECS registry
-     * @param entityList Output list of entities in the same order as gathered particles
-     * @return A vector of GPUFluidParticle
+     * @brief Gathers fluid particles from the ECS into GPU-friendly structures.
      */
     std::vector<GPUFluidParticle> gatherFluidParticles(
         entt::registry& registry,
         std::vector<entt::entity>& entityList) const;
 
     /**
-     * @brief Gathers rigid bodies from the ECS for the GPU position solver.
-     * @param registry    ECS registry
-     * @param rigidEntityList Output list of rigid entities for possible future write-back
-     * @return A vector of GPURigidBody
+     * @brief Gathers rigid bodies from the ECS (including velocity, mass, bounding box) into GPU-friendly structures.
      */
     std::vector<GPURigidBody> gatherRigidBodies(
         entt::registry& registry,
         std::vector<entt::entity>& rigidEntityList) const;
 
     /**
-     * @brief Executes half of the Velocity Verlet integration (updates velocity by half dt).
+     * @brief Part of Velocity Verlet: half-step velocity update.
      */
     void dispatchVelocityVerletHalf(
         MTL::Buffer* particleBuf,
@@ -190,7 +185,7 @@ private:
         int realCount) const;
 
     /**
-     * @brief Executes a bounding box kernel to compute partial bounding boxes for each threadgroup.
+     * @brief GPU bounding box kernel to compute partial bounding boxes for each threadgroup.
      */
     void dispatchComputeBoundingBox(
         MTL::Buffer* particleBuf,
@@ -200,7 +195,7 @@ private:
         int numThreadgroups) const;
 
     /**
-     * @brief Combines (reduces) partial bounding boxes produced by the GPU into a final bounding box on the CPU.
+     * @brief CPU-side reduction of partial bounding boxes.
      */
     void reduceBoundingBoxOnCPU(
         MTL::Buffer* boundingBoxBuf,
@@ -225,7 +220,7 @@ private:
         int realCount) const;
 
     /**
-     * @brief Computes density for each particle, using neighbor lookups in the grid.
+     * @brief Computes density for each particle using neighbor lookups in the grid.
      */
     void dispatchComputeDensity(
         MTL::Buffer* particleBuf,
@@ -234,7 +229,7 @@ private:
         int realCount) const;
 
     /**
-     * @brief Computes forces on each particle (pressure, viscosity), stored in the particle array.
+     * @brief Computes forces (pressure, viscosity) for each particle.
      */
     void dispatchComputeForces(
         MTL::Buffer* particleBuf,
@@ -243,7 +238,7 @@ private:
         int realCount) const;
 
     /**
-     * @brief Completes the Velocity Verlet step (updates velocity by half dt, then position).
+     * @brief Finishes Velocity Verlet step (velocity by half dt again, final position).
      */
     void dispatchVelocityVerletFinish(
         MTL::Buffer* particleBuf,
@@ -251,7 +246,7 @@ private:
         int realCount) const;
 
     /**
-     * @brief Dispatches a GPU kernel to perform rigid-fluid position corrections (stubbed out).
+     * @brief GPU-based position solver for fluid -> rigid boundary collisions (already stubbed).
      */
     void dispatchRigidFluidPosition(
         MTL::Buffer* particleBuf,
@@ -260,7 +255,17 @@ private:
         int rigidCount) const;
 
     /**
-     * @brief Writes updated particle positions and velocities back to the ECS.
+     * @brief **New**: GPU-based impulse solver for fluid->rigid forces (like drag, buoyancy).
+     */
+    void dispatchRigidFluidImpulse(
+        MTL::Buffer* particleBuf,
+        int fluidCount,
+        MTL::Buffer* rigidBuf,
+        MTL::Buffer* paramsBuf,
+        int rigidCount) const;
+
+    /**
+     * @brief Writes updated fluid positions & velocities back to ECS.
      */
     void writeBackToECS(
         entt::registry& registry,
@@ -269,7 +274,7 @@ private:
         int realCount) const;
 
     /**
-     * @brief Potentially writes updated rigid body transforms back to the ECS (stubbed out).
+     * @brief Writes updated rigid velocities/omegas back to ECS after GPU impulses.
      */
     void writeBackRigidBodies(
         entt::registry& registry,
@@ -278,9 +283,7 @@ private:
         int rigidCount) const;
 
     /**
-     * @brief Performs multiple sub-steps of the integration and neighbor computations,
-     *        ensuring better stability for the fluid sim. Also includes rigid-fluid
-     *        position solver calls in between or after sub-steps.
+     * @brief Multi-step integration that calls the sub-kernels, including the new rigid-fluid impulse solver.
      */
     void multiStepVelocityVerlet(
         entt::registry& registry,
@@ -300,17 +303,20 @@ private:
     MTL::CommandQueue* commandQueue = nullptr;
     MTL::Library* metalLibrary = nullptr;  ///< Keep the library alive while pipeline states are in use
 
-    // Pipeline states for various GPU kernels
-    MTL::ComputePipelineState* clearGridPSO = nullptr;
-    MTL::ComputePipelineState* assignCellsPSO = nullptr;
-    MTL::ComputePipelineState* computeDensityPSO = nullptr;
-    MTL::ComputePipelineState* computeForcesPSO = nullptr;
-    MTL::ComputePipelineState* verletHalfPSO = nullptr;
-    MTL::ComputePipelineState* verletFinishPSO = nullptr;
+    // Pipeline states
+    MTL::ComputePipelineState* clearGridPSO          = nullptr;
+    MTL::ComputePipelineState* assignCellsPSO        = nullptr;
+    MTL::ComputePipelineState* computeDensityPSO     = nullptr;
+    MTL::ComputePipelineState* computeForcesPSO      = nullptr;
+    MTL::ComputePipelineState* verletHalfPSO         = nullptr;
+    MTL::ComputePipelineState* verletFinishPSO       = nullptr;
     MTL::ComputePipelineState* computeBoundingBoxPSO = nullptr;
 
-    // New pipeline for rigid-fluid position solver (stub)
+    // Existing GPU-based position solver
     MTL::ComputePipelineState* rigidFluidPositionPSO = nullptr;
+
+    // **New**: Impulse solver pipeline
+    MTL::ComputePipelineState* rigidFluidImpulsePSO  = nullptr;
 
     static constexpr int N_SUB_STEPS = 10; ///< Number of sub-steps per tick
 };
