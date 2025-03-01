@@ -38,7 +38,6 @@ ScenarioConfig KeplerianDiskScenario::getConfig() const {
     // ECS systems
     cfg.activeSystems = {
         Systems::SystemType::BARNES_HUT,
-        Systems::SystemType::GRID_THERMODYNAMICS,
         Systems::SystemType::MOVEMENT
     };
 
