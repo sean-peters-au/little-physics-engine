@@ -15,21 +15,21 @@
 #include "nbody/math/polygon.hpp"
 
 static constexpr double KFluidParticleMass  = 20.0;    // keeping original mass
-static constexpr double KWallMass           = 1e30;    // effectively infinite
-static constexpr double KFluidStaticFriction   = 0.0; 
-static constexpr double KFluidDynamicFriction  = 0.0;
 
 /**
  * @brief Helper: create a static boundary wall with infinite mass
  */
 static void makeBoundaryWall(entt::registry &registry,
                              double cx, double cy,
-                             double halfW, double halfH)
+                             double halfW, double halfH,
+                             double wallMass,
+                             double staticFriction,
+                             double dynamicFriction)
 {
     auto wallEnt = registry.create();
     registry.emplace<Components::Position>(wallEnt, cx, cy);
     registry.emplace<Components::Velocity>(wallEnt, 0.0, 0.0);
-    registry.emplace<Components::Mass>(wallEnt, KWallMass);
+    registry.emplace<Components::Mass>(wallEnt, wallMass);
     registry.emplace<Components::Boundary>(wallEnt);
 
     // Mark it as a "solid" boundary so it doesn't move
@@ -40,8 +40,8 @@ static void makeBoundaryWall(entt::registry &registry,
     sleepC.asleep = true;
     sleepC.sleepCounter = 9999999;
 
-    // Material friction (though for fluid, friction may be minimal)
-    registry.emplace<Components::Material>(wallEnt, KFluidStaticFriction, KFluidDynamicFriction);
+    // Material friction
+    registry.emplace<Components::Material>(wallEnt, staticFriction, dynamicFriction);
 
     // Build a rectangle polygon shape for collision walls
     PolygonShape poly;
@@ -95,21 +95,32 @@ void SimpleFluidScenario::createEntities(entt::registry &registry) const
     double const sizeM = cfg.UniverseSizeMeters;
 
     // 1) Create bounding walls
-    double halfWall = scenarioConfig.wallThickness * 0.5;  // Using config for wall thickness
+    double halfWall = scenarioConfig.wallThickness * 0.5;
     // Left wall
-    makeBoundaryWall(registry, 0.0, sizeM*0.5, halfWall, sizeM*0.5);
+    makeBoundaryWall(registry, 0.0, sizeM*0.5, halfWall, sizeM*0.5,
+                     scenarioConfig.wallMass, 
+                     scenarioConfig.fluidStaticFriction,
+                     scenarioConfig.fluidDynamicFriction);
     // Right wall
-    makeBoundaryWall(registry, sizeM, sizeM*0.5, halfWall, sizeM*0.5);
+    makeBoundaryWall(registry, sizeM, sizeM*0.5, halfWall, sizeM*0.5,
+                     scenarioConfig.wallMass,
+                     scenarioConfig.fluidStaticFriction,
+                     scenarioConfig.fluidDynamicFriction);
     // Bottom wall
-    makeBoundaryWall(registry, sizeM*0.5, 0.0, sizeM*0.5, halfWall);
+    makeBoundaryWall(registry, sizeM*0.5, 0.0, sizeM*0.5, halfWall,
+                     scenarioConfig.wallMass,
+                     scenarioConfig.fluidStaticFriction,
+                     scenarioConfig.fluidDynamicFriction);
     // Top wall
-    makeBoundaryWall(registry, sizeM*0.5, sizeM, sizeM*0.5, halfWall);
+    makeBoundaryWall(registry, sizeM*0.5, sizeM, sizeM*0.5, halfWall,
+                     scenarioConfig.wallMass,
+                     scenarioConfig.fluidStaticFriction,
+                     scenarioConfig.fluidDynamicFriction);
 
     // 2) Spawn fluid particles using a grid-based layout with a small jitter 
     // to prevent particles from aligning perfectly.
-    int numParticles = scenarioConfig.fluidParticleCount;  // Using config for particle count
+    int numParticles = scenarioConfig.fluidParticleCount;
     
-    // Using config for region bounds
     double x_min = sizeM * scenarioConfig.fluidRegionMinX;
     double x_max = sizeM * scenarioConfig.fluidRegionMaxX;
     double y_min = sizeM * scenarioConfig.fluidRegionMinY;
@@ -118,8 +129,6 @@ void SimpleFluidScenario::createEntities(entt::registry &registry) const
     double regionHeight = y_max - y_min;
 
     // Choose grid resolution based on the particle count.
-    // Here we choose the number of columns as the integer square root
-    // and compute rows accordingly.
     int nCols = static_cast<int>(std::sqrt(numParticles));
     int nRows = (numParticles + nCols - 1) / nCols; // ceiling division
 
@@ -142,9 +151,11 @@ void SimpleFluidScenario::createEntities(entt::registry &registry) const
             auto e = registry.create();
             registry.emplace<Components::Position>(e, x, y);
             registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-            registry.emplace<Components::Mass>(e, KFluidParticleMass);  // Keeping original mass
+            registry.emplace<Components::Mass>(e, KFluidParticleMass);  // Still keeping original mass
             registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
-            registry.emplace<Components::Material>(e, KFluidStaticFriction, KFluidDynamicFriction);
+            registry.emplace<Components::Material>(e, 
+                                                  scenarioConfig.fluidStaticFriction, 
+                                                  scenarioConfig.fluidDynamicFriction);
 
             // Use a circle shape for fluid particles
             double const r = 0.02; 
