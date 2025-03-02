@@ -30,12 +30,12 @@ static sf::Color densityGrayscale(const Renderer::PixelProperties &props) {
     return {intensity, intensity, intensity};
 }
 
-Renderer::Renderer(int screenWidth, int screenHeight)
-    : 
-     initialized(false)
+Renderer::Renderer(int screenWidth, int screenHeight, const SystemConfig& config)
+    : initialized(false)
     , screenWidth(screenWidth)
     , screenHeight(screenHeight)
     , fluidShader(new sf::Shader())
+    , coordinates(config, SimulatorConstants::ScreenLength)
 {
     if (sf::Shader::isAvailable()) {
         if (!fluidShader->loadFromFile("shaders/fluid.frag", sf::Shader::Fragment)) {
@@ -69,6 +69,10 @@ void Renderer::present() {
     window.display();
 }
 
+void Renderer::updateCoordinates(const SystemConfig& config) {
+    coordinates.updateConfig(config);
+}
+
 std::unordered_map<std::pair<int,int>, Renderer::PixelProperties, PixelCoordHash>
 Renderer::aggregateParticlesByPixel(const entt::registry &registry)
 {
@@ -80,8 +84,8 @@ Renderer::aggregateParticlesByPixel(const entt::registry &registry)
     for (auto entity : view) {
         const auto &pos = view.get<Components::Position>(entity);
 
-        int const px = static_cast<int>(SimulatorConstants::metersToPixels(pos.x));
-        int const py = static_cast<int>(SimulatorConstants::metersToPixels(pos.y));
+        int const px = static_cast<int>(coordinates.metersToPixels(pos.x));
+        int const py = static_cast<int>(coordinates.metersToPixels(pos.y));
 
         // Only accumulate if within the simulation screen
         if (px >= 0 && px < static_cast<int>(SimulatorConstants::ScreenLength) &&
@@ -136,8 +140,8 @@ void Renderer::renderSolidParticles(const entt::registry &registry) {
         const auto &pos = view.get<Components::Position>(entity);
         const auto &shape = view.get<Components::Shape>(entity);
 
-        auto const px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
-        auto const py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
+        auto const px = static_cast<float>(coordinates.metersToPixels(pos.x));
+        auto const py = static_cast<float>(coordinates.metersToPixels(pos.y));
 
         // Determine fill color
         sf::Color fillColor;
@@ -180,8 +184,8 @@ void Renderer::renderSolidParticles(const entt::registry &registry) {
                 double const rx = v.x * ca - v.y * sa;
                 double const ry = v.x * sa + v.y * ca;
 
-                auto const vxPx = static_cast<float>(SimulatorConstants::metersToPixels(pos.x + rx));
-                auto const vyPx = static_cast<float>(SimulatorConstants::metersToPixels(pos.y + ry));
+                auto const vxPx = static_cast<float>(coordinates.metersToPixels(pos.x + rx));
+                auto const vyPx = static_cast<float>(coordinates.metersToPixels(pos.y + ry));
                 convex.setPoint(i, sf::Vector2f(vxPx, vyPx));
             }
 
@@ -191,7 +195,7 @@ void Renderer::renderSolidParticles(const entt::registry &registry) {
         else {
             // Possibly circle or "square" (legacy usage for shape.type)
             if (shape.type == Components::ShapeType::Circle) {
-                float const radiusPixels = static_cast<float>(std::max(1.0, SimulatorConstants::metersToPixels(shape.size)));
+                float const radiusPixels = static_cast<float>(std::max(1.0, coordinates.metersToPixels(shape.size)));
                 sf::CircleShape circle(radiusPixels);
                 circle.setOrigin(radiusPixels, radiusPixels);
                 circle.setPosition(px, py);
@@ -219,7 +223,7 @@ void Renderer::renderSolidParticles(const entt::registry &registry) {
                 window.draw(indicator);
             } else {
                 // Let's assume shape.type == Square or something similar
-                auto const halfSide = static_cast<float>(SimulatorConstants::metersToPixels(shape.size));
+                auto const halfSide = static_cast<float>(coordinates.metersToPixels(shape.size));
                 float const side = halfSide * 2.0F;
                 sf::RectangleShape rect(sf::Vector2f(side, side));
                 rect.setOrigin(halfSide, halfSide);
@@ -528,8 +532,8 @@ void Renderer::renderContactDebug(const entt::registry &registry) {
     for (auto entity : view) {
         const auto& contact = view.get<RigidBodyCollision::ContactRef>(entity);
         
-        auto const px = static_cast<float>(SimulatorConstants::metersToPixels(contact.contactPoint.x));
-        auto const py = static_cast<float>(SimulatorConstants::metersToPixels(contact.contactPoint.y));
+        auto const px = static_cast<float>(coordinates.metersToPixels(contact.contactPoint.x));
+        auto const py = static_cast<float>(coordinates.metersToPixels(contact.contactPoint.y));
         
         // Draw contact point
         sf::CircleShape contactPoint(contactPointSize);
@@ -599,8 +603,8 @@ void Renderer::renderVelocityDebug(const entt::registry &registry) {
         const auto& pos = view.get<Components::Position>(entity);
         const auto& vel = view.get<Components::Velocity>(entity);
 
-        auto const px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
-        auto const py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
+        auto const px = static_cast<float>(coordinates.metersToPixels(pos.x));
+        auto const py = static_cast<float>(coordinates.metersToPixels(pos.y));
         
         // Scale velocity for visualization
         float const velLength = std::sqrt(vel.x * vel.x + vel.y * vel.y) * 20.0F;  // Scale factor of 20
@@ -624,8 +628,8 @@ void Renderer::renderAngularDebug(const entt::registry &registry) {
         const auto& angVel = view.get<Components::AngularVelocity>(entity);
 
         if (std::abs(angVel.omega) > 0.1F) {  // Only draw if angular velocity is significant
-            auto const px = static_cast<float>(SimulatorConstants::metersToPixels(pos.x));
-            auto const py = static_cast<float>(SimulatorConstants::metersToPixels(pos.y));
+            auto const px = static_cast<float>(coordinates.metersToPixels(pos.x));
+            auto const py = static_cast<float>(coordinates.metersToPixels(pos.y));
             
             float const radius = 20.0F;  // Fixed radius for the arc
             int const segments = 16;  // Number of segments in the arc
@@ -673,8 +677,8 @@ void Renderer::renderPolygonDebug(const entt::registry &registry) {
             double const rx = v.x * ca - v.y * sa;
             double const ry = v.x * sa + v.y * ca;
             
-            auto const vxPx = static_cast<float>(SimulatorConstants::metersToPixels(pos.x + rx));
-            auto const vyPx = static_cast<float>(SimulatorConstants::metersToPixels(pos.y + ry));
+            auto const vxPx = static_cast<float>(coordinates.metersToPixels(pos.x + rx));
+            auto const vyPx = static_cast<float>(coordinates.metersToPixels(pos.y + ry));
             
             // Draw vertex index
             std::string const idx = std::to_string(i);
@@ -718,7 +722,7 @@ void Renderer::renderFluidParticles(const entt::registry &registry) {
             continue;
         
         // Create a larger circle to represent the particle's influence.
-        float pixelRadius = static_cast<float>(SimulatorConstants::metersToPixels(circle.radius));
+        float pixelRadius = static_cast<float>(coordinates.metersToPixels(circle.radius));
         float influenceRadius = pixelRadius * 2.f;  // Increase from 4.f to 6.f
         
         sf::CircleShape metaball(influenceRadius);
@@ -726,8 +730,8 @@ void Renderer::renderFluidParticles(const entt::registry &registry) {
         metaball.setFillColor(sf::Color(color.r, color.g, color.b, 120));
         metaball.setOrigin(influenceRadius, influenceRadius);
         
-        float pixelX = static_cast<float>(SimulatorConstants::metersToPixels(position.x));
-        float pixelY = static_cast<float>(SimulatorConstants::metersToPixels(position.y));
+        float pixelX = static_cast<float>(coordinates.metersToPixels(position.x));
+        float pixelY = static_cast<float>(coordinates.metersToPixels(position.y));
         metaball.setPosition(pixelX, pixelY);
         
         fluidTexture.draw(metaball, additive);

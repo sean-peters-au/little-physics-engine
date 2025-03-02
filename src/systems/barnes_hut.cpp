@@ -13,6 +13,18 @@ namespace Systems {
 using Clock = std::chrono::high_resolution_clock;
 using TimePoint = std::chrono::time_point<Clock>;
 
+BarnesHutSystem::BarnesHutSystem() {
+    // Initialize with default configurations
+}
+
+void BarnesHutSystem::setSystemConfig(const SystemConfig& config) {
+    sysConfig = config;
+}
+
+void BarnesHutSystem::setBarnesHutConfig(const BarnesHutConfig& config) {
+    bhConfig = config;
+}
+
 void BarnesHutSystem::update(entt::registry& registry) {
     PROFILE_SCOPE("BarnesHutSystem");
 
@@ -42,16 +54,16 @@ std::unique_ptr<BarnesHutSystem::QuadTreeNode> BarnesHutSystem::buildTree(const 
     root->registry = &registry; 
     root->boundary_x = 0.0;
     root->boundary_y = 0.0;
-    root->boundary_size = SimulatorConstants::UniverseSizeMeters;
+    root->boundary_size = sysConfig.UniverseSizeMeters;
 
     // Insert all particles except boundaries
     auto view = registry.view<Components::Position, Components::Mass>();
     int count=0;
     for (auto [entity, pos, mass] : view.each()) {
-        if (registry.all_of<Components::Boundary>(entity)) { continue;
-}
-        if (pos.x >= 0 && pos.x < SimulatorConstants::UniverseSizeMeters &&
-            pos.y >= 0 && pos.y < SimulatorConstants::UniverseSizeMeters)
+        if (registry.all_of<Components::Boundary>(entity)) { continue; }
+        
+        if (pos.x >= 0 && pos.x < sysConfig.UniverseSizeMeters &&
+            pos.y >= 0 && pos.y < sysConfig.UniverseSizeMeters)
         {
             insertParticle(root.get(), entity, pos, mass);
             count++;
@@ -138,17 +150,15 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
                                    Components::Velocity& vel,
                                    const Components::Mass& mass,
                                    const Components::SimulatorState& state) {
-    if ((node == nullptr) || node->total_mass == 0.0) { return;
-}
+    if ((node == nullptr) || node->total_mass == 0.0) { return; }
     
     double const dx = pos.x - node->center_of_mass_x;
     double const dy = pos.y - node->center_of_mass_y;
-    double const distSq = dx*dx + dy*dy + SimulatorConstants::GravitationalSoftener * SimulatorConstants::GravitationalSoftener;
+    double const distSq = dx*dx + dy*dy + sysConfig.GravitationalSoftener * sysConfig.GravitationalSoftener;
     double const dist = std::sqrt(distSq);
 
-    if (node->is_leaf || (node->boundary_size * node->boundary_size / distSq < THETA * THETA)) {
-        if (node->is_leaf && node->particle == entity) { return;
-}
+    if (node->is_leaf || (node->boundary_size * node->boundary_size / distSq < bhConfig.theta * bhConfig.theta)) {
+        if (node->is_leaf && node->particle == entity) { return; }
 
         double const force = SimulatorConstants::RealG * node->total_mass * mass.value / distSq;
         DebugStats::updateForce(force);
@@ -156,7 +166,7 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
         double const accX = force * (dx / (mass.value * dist));
         double const accY = force * (dy / (mass.value * dist));
         
-        double const dt = SimulatorConstants::SecondsPerTick * state.baseTimeAcceleration * state.timeScale;
+        double const dt = sysConfig.SecondsPerTick * state.baseTimeAcceleration * state.timeScale;
         
         vel.x += accX * dt;
         vel.y += accY * dt;

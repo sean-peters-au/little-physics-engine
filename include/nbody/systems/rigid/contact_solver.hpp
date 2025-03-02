@@ -15,6 +15,18 @@
 namespace RigidBodyCollision {
 
 /**
+ * @struct ContactSolverConfig
+ * @brief Configuration parameters specific to the contact solver
+ */
+struct ContactSolverConfig {
+    // Number of velocity solver iterations
+    int iterations = 10;
+    
+    // Friction coefficient
+    float frictionCoeff = 0.5f;
+};
+
+/**
  * @brief Resolves collision constraints using velocity-based impulses
  *
  * Implements a velocity-only solver that:
@@ -30,10 +42,12 @@ public:
      *
      * @param registry   ECS registry containing physics components
      * @param manager    Contact manager providing collision data and warm-start info
+     * @param config     Contact solver configuration parameters
      */
     static void solveContactConstraints(
         entt::registry &registry,
-        ContactManager &manager
+        ContactManager &manager,
+        const ContactSolverConfig &config = ContactSolverConfig()
     );
 };
 

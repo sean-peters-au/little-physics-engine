@@ -6,6 +6,32 @@
 #pragma once
 
 #include "nbody/scenarios/i_scenario.hpp"
+#include "nbody/core/system_config.hpp"
+
+/**
+ * @struct SimpleFluidConfig
+ * @brief Configuration parameters specific to the simple fluid scenario
+ */
+struct SimpleFluidConfig {
+    // Fluid parameters
+    int fluidParticleCount = 1000;     // Number of fluid particles
+    double fluidParticleMass = 0.005;   // Mass per fluid particle
+    double fluidRestDensity = 1000.0;  // Typical rest density for water
+    
+    // Wall parameters
+    double wallThickness = 0.1;        // Thickness of bounding walls
+    double wallMass = 1e30;            // Effectively infinite mass
+    
+    // Friction parameters
+    double fluidStaticFriction = 0.0;
+    double fluidDynamicFriction = 0.0;
+    
+    // Fluid layout parameters
+    double fluidRegionMinX = 0.3;      // Region bounds as fraction of screen size
+    double fluidRegionMaxX = 0.7;
+    double fluidRegionMinY = 0.3;
+    double fluidRegionMaxY = 0.7;
+};
 
 /**
  * @class SimpleFluidScenario
@@ -18,6 +44,9 @@ public:
     SimpleFluidScenario() = default;
     ~SimpleFluidScenario() override = default;
 
-    ScenarioConfig getConfig() const override;
+    SystemConfig getConfig() const override;
     void createEntities(entt::registry &registry) const override;
+    
+private:
+    SimpleFluidConfig scenarioConfig;
 };

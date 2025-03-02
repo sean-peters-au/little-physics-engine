@@ -15,42 +15,17 @@
 #include "nbody/components/sph.hpp"
 #include "nbody/math/polygon.hpp"
 
-///////////////////////////////////////////////////////////////////////////////
-// Some constants for this combined scenario
-///////////////////////////////////////////////////////////////////////////////
-static constexpr int    KFluidParticleCount      = 1000;   // number of fluid particles
-static constexpr double KFluidParticleMass       = 0.005;  // mass per fluid particle
-static constexpr double KFluidRestDensity        = 1000.0; // typical rest density for water
-
-static constexpr int    KPolygonCount            = 5;     // how many random polygons to spawn
-static constexpr double KPolygonMassMean         = 1;   // typical mass for polygons
-static constexpr double KPolygonMassStdDev       = 0.2;   // variation in polygon mass
-
-// Polygons: friction matches random_polygons.cpp
-static constexpr double KFloorStaticFriction     = 0.6;
-static constexpr double KFloorDynamicFriction    = 0.4;
-static constexpr double KWallStaticFriction      = 0.2;
-static constexpr double KWallDynamicFriction     = 0.1;
-static constexpr double KPolyStaticFriction      = 0.3;
-static constexpr double KPolyDynamicFriction     = 0.1;
-
-// Wall thickness
-static constexpr double KWallThickness           = 0.1;   // thickness of bounding walls
-static constexpr double KWallMass                = 1e30;  // effectively infinite mass
-
-// Add near the top where other constants are defined
-static constexpr double KInitialVelocityScale = 0.5;
-
 // Helper to create a static boundary wall with infinite mass
 static void makeWall(entt::registry &registry,
                      double cx, double cy,
                      double halfW, double halfH,
-                     double staticFriction, double dynamicFriction)
+                     double staticFriction, double dynamicFriction,
+                     double wallMass)
 {
     auto wallEnt = registry.create();
     registry.emplace<Components::Position>(wallEnt, cx, cy);
     registry.emplace<Components::Velocity>(wallEnt, 0.0, 0.0);
-    registry.emplace<Components::Mass>(wallEnt, KWallMass);
+    registry.emplace<Components::Mass>(wallEnt, wallMass);
 
     // Mark as boundary + solid
     registry.emplace<Components::Boundary>(wallEnt);
@@ -77,9 +52,9 @@ static void makeWall(entt::registry &registry,
     registry.emplace<Components::AngularPosition>(wallEnt, 0.0);
 }
 
-ScenarioConfig FluidAndPolygonsScenario::getConfig() const
+SystemConfig FluidAndPolygonsScenario::getConfig() const
 {
-    ScenarioConfig cfg;
+    SystemConfig cfg;
     cfg.MetersPerPixel         = 1e-2;
     cfg.UniverseSizeMeters     = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
     cfg.SecondsPerTick         = 1.0 / SimulatorConstants::StepsPerSecond;
@@ -87,17 +62,10 @@ ScenarioConfig FluidAndPolygonsScenario::getConfig() const
     cfg.GridSize               = 50;
     cfg.CellSizePixels         = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
 
-    // We'll store total count as fluid + some polygons. 
-    // The Polygons themselves might not be included in "cfg.ParticleCount" 
-    // if you prefer only the fluid in that count, but we set it to the fluid amount for clarity.
-    cfg.ParticleCount          = KFluidParticleCount;
-    cfg.ParticleMassMean       = KFluidParticleMass;
-    cfg.ParticleMassStdDev     = 0.1;    // fluid uniform mass
     cfg.GravitationalSoftener  = 0.0;
     cfg.CollisionCoeffRestitution = 0.2; // slight bounce for rigid shapes
     cfg.DragCoeff              = 0.0;
     cfg.ParticleDensity        = 0.5;
-    cfg.InitialVelocityFactor  = 1.0;  // Change from 0.0 to match random_polygons.cpp
 
     // Use the same systems as random_polygons.cpp:
     cfg.activeSystems = {
@@ -116,9 +84,11 @@ ScenarioConfig FluidAndPolygonsScenario::getConfig() const
 
 void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
 {
+    SystemConfig systemConfig = getConfig();
+
     // 1) Create bounding walls
-    double sizeM = SimulatorConstants::UniverseSizeMeters;
-    double halfWall = KWallThickness * 0.5;
+    double sizeM = systemConfig.UniverseSizeMeters;
+    double halfWall = scenarioConfig.wallThickness * 0.5;
 
     // Bottom wall
     makeWall(registry,
@@ -126,8 +96,9 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         sizeM,               // center y at top of the coordinate system (since y=0 is top in your setup)
         sizeM * 0.5,         // half width
         halfWall,            // half height
-        KFloorStaticFriction,
-        KFloorDynamicFriction);
+        scenarioConfig.floorStaticFriction,
+        scenarioConfig.floorDynamicFriction,
+        scenarioConfig.wallMass);
 
     // Top wall
     makeWall(registry,
@@ -135,8 +106,9 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         0.0,
         sizeM * 0.5,
         halfWall,
-        KWallStaticFriction,
-        KWallDynamicFriction);
+        scenarioConfig.wallStaticFriction,
+        scenarioConfig.wallDynamicFriction,
+        scenarioConfig.wallMass);
 
     // Left wall
     makeWall(registry,
@@ -144,8 +116,9 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         sizeM * 0.5,
         halfWall,
         sizeM * 0.5,
-        KWallStaticFriction,
-        KWallDynamicFriction);
+        scenarioConfig.wallStaticFriction,
+        scenarioConfig.wallDynamicFriction,
+        scenarioConfig.wallMass);
 
     // Right wall
     makeWall(registry,
@@ -153,18 +126,19 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         sizeM * 0.5,
         halfWall,
         sizeM * 0.5,
-        KWallStaticFriction,
-        KWallDynamicFriction);
+        scenarioConfig.wallStaticFriction,
+        scenarioConfig.wallDynamicFriction,
+        scenarioConfig.wallMass);
 
     // 2) Create random polygon entities on the RIGHT side of the screen
     std::default_random_engine generator(static_cast<unsigned>(std::time(nullptr)));
     std::uniform_real_distribution<double> xDist(sizeM * 0.6, sizeM * 0.8); // RIGHT side
     std::uniform_real_distribution<double> yDist(sizeM * 0.3, sizeM * 0.6); // Middle-upper area
-    std::normal_distribution<double> massDist(KPolygonMassMean, KPolygonMassStdDev);
+    std::normal_distribution<double> massDist(scenarioConfig.polygonMassMean, scenarioConfig.polygonMassStdDev);
     std::uniform_int_distribution<int> colorDist(50, 200);
-    std::normal_distribution<> velocityDist(0.0, KInitialVelocityScale);
+    std::normal_distribution<> velocityDist(0.0, scenarioConfig.initialVelocityScale);
 
-    for (int i = 0; i < KPolygonCount; ++i) {
+    for (int i = 0; i < scenarioConfig.polygonCount; ++i) {
         // Random position on the RIGHT side
         double x = xDist(generator);
         double y = yDist(generator);
@@ -179,7 +153,7 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
             velocityDist(generator));
         registry.emplace<Components::Mass>(ent, massVal);
         registry.emplace<Components::ParticlePhase>(ent, Components::Phase::Solid);
-        registry.emplace<Components::Material>(ent, KPolyStaticFriction, KPolyDynamicFriction);
+        registry.emplace<Components::Material>(ent, scenarioConfig.polyStaticFriction, scenarioConfig.polyDynamicFriction);
         registry.emplace<Components::Sleep>(ent);
 
         // Build a random polygon
@@ -206,7 +180,7 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
 
     // 3) Create fluid particles on the LEFT side of the screen
     {
-        int numFluid = KFluidParticleCount;
+        int numFluid = scenarioConfig.fluidParticleCount;
         double x_min = sizeM * 0.1;
         double x_max = sizeM * 0.4; // LEFT side of screen
         double y_min = sizeM * 0.2; // Higher up
@@ -234,7 +208,7 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
                 auto e = registry.create();
                 registry.emplace<Components::Position>(e, x, y);
                 registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-                registry.emplace<Components::Mass>(e, KFluidParticleMass);
+                registry.emplace<Components::Mass>(e, scenarioConfig.fluidParticleMass);
                 registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
 
                 // No friction for fluid particles
@@ -259,6 +233,6 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         std::cerr << "Created " << numFluid << " fluid particles at the top.\n";
     }
 
-    std::cerr << "Created " << KPolygonCount << " random polygons.\n";
+    std::cerr << "Created " << scenarioConfig.polygonCount << " random polygons.\n";
     std::cerr << "Fluid + Polygons scenario ready.\n";
 }

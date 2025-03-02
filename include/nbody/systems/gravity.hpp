@@ -17,21 +17,58 @@
 #define BASIC_GRAVITY_SYSTEM_H
 
 #include <entt/entt.hpp>
+#include "nbody/systems/i_system.hpp"
 
 namespace Systems {
 
 /**
+ * @struct GravityConfig
+ * @brief Configuration parameters specific to the gravity system
+ */
+struct GravityConfig {
+    // Gravitational acceleration in m/s²
+    double gravitationalAcceleration = 9.8;
+};
+
+/**
+ * @class BasicGravitySystem
  * @brief System that applies uniform gravitational acceleration
  * 
- * Applies constant downward acceleration (9.8 m/s²), scaled by simulation time parameters.
+ * Applies constant downward acceleration, scaled by simulation time parameters.
  */
-class BasicGravitySystem {
+class BasicGravitySystem : public ISystem {
 public:
+    /**
+     * @brief Constructor with default configuration
+     */
+    BasicGravitySystem();
+    
+    /**
+     * @brief Virtual destructor
+     */
+    ~BasicGravitySystem() override = default;
+    
     /**
      * @brief Updates velocities of all entities affected by gravity
      * @param registry EnTT registry containing entities and components
      */
-    static void update(entt::registry& registry);
+    void update(entt::registry& registry) override;
+    
+    /**
+     * @brief Sets the system configuration
+     * @param config System configuration parameters
+     */
+    void setSystemConfig(const SystemConfig& config) override;
+    
+    /**
+     * @brief Sets gravity-specific configuration
+     * @param config Gravity specific configuration
+     */
+    void setGravityConfig(const GravityConfig& config);
+
+private:
+    SystemConfig sysConfig;
+    GravityConfig gravityConfig;
 };
 
 } // namespace Systems

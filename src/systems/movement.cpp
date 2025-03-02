@@ -6,17 +6,29 @@
 
 namespace Systems {
 
+MovementSystem::MovementSystem() {
+    // Initialize with default configurations
+}
+
+void MovementSystem::setSystemConfig(const SystemConfig& config) {
+    sysConfig = config;
+}
+
+void MovementSystem::setMovementConfig(const MovementConfig& config) {
+    movementConfig = config;
+}
+
 void MovementSystem::update(entt::registry &registry) {
     PROFILE_SCOPE("MovementSystem");
 
     // Time step in real seconds (with all time scaling)
-    double const dt = SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration;
+    double const dt = sysConfig.SecondsPerTick * sysConfig.TimeAcceleration;
 
     // View of entities with Position and Velocity
     auto view = registry.view<Components::Position, Components::Velocity>();
 
     for (auto [entity, pos, vel] : view.each()) {
-        // Check whether entity is asleep
+        // Skip boundaries
         if (registry.any_of<Components::Boundary>(entity)) {
             continue; // Don't move boundaries
         }

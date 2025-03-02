@@ -1,146 +1,134 @@
-#include <random>
-#include <cmath>
+/**
+ * @fileoverview simulator.cpp
+ * @brief Implementation of ECSSimulator.
+ */
+
+#include "nbody/core/simulator.hpp"
+
 #include <iostream>
 #include <memory>
 
-#include "nbody/core/simulator.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/core/profile.hpp"
 #include "nbody/components/basic.hpp"
-#include <nbody/math/polygon.hpp>
-
-#include "nbody/systems/sleep.hpp"
-#include "nbody/systems/rotation.hpp"
-#include "nbody/systems/movement.hpp"
+#include "nbody/components/sim.hpp"
+#include "nbody/core/profile.hpp"
+#include "nbody/core/system_config.hpp"
+#include "nbody/systems/barnes_hut.hpp"
 #include "nbody/systems/boundary.hpp"
 #include "nbody/systems/dampening.hpp"
-#include "nbody/systems/barnes_hut.hpp"
-#include "nbody/systems/gravity.hpp"
-#include "nbody/systems/rigid/rigid_body_collision.hpp"
-#include "nbody/systems/rigid/collision_data.hpp"
 #include "nbody/systems/fluid/fluid.hpp"
+#include "nbody/systems/gravity.hpp"
+#include "nbody/systems/movement.hpp"
+#include "nbody/systems/rigid/collision_data.hpp"
+#include "nbody/systems/rigid/rigid_body_collision.hpp"
+#include "nbody/systems/rotation.hpp"
+#include "nbody/systems/sleep.hpp"
 
-#include "nbody/scenarios/scenario_config.hpp"
-#include "nbody/scenarios/i_scenario.hpp"
-#include "nbody/scenarios/keplerian_disk.hpp"
-#include "nbody/scenarios/random_polygons.hpp"
-#include "nbody/scenarios/simple_fluid.hpp"
-#include "nbody/scenarios/fluid_and_polygons.hpp"
+ECSSimulator::ECSSimulator() = default;
 
-ECSSimulator::ECSSimulator() {
-    // e.g. set a default scenarioPtr if you like,
-    // or just do nothing
+ECSSimulator::~ECSSimulator() = default;
+
+void ECSSimulator::loadScenario(std::unique_ptr<IScenario> scenario) {
+  scenarioPtr = std::move(scenario);
 }
 
-void ECSSimulator::setScenario(SimulatorConstants::SimulationType scenario) {
-    // Store the scenario type for use in reset()
-    currentScenario = scenario;
-    std::cerr << "Scenario set to: " << static_cast<int>(scenario) << std::endl;
+void ECSSimulator::applyConfig(const SystemConfig& cfg) {
+  currentConfig = cfg;
+  
+  // Update config for all existing systems
+  for (auto& system : systems) {
+    system->setSystemConfig(currentConfig);
+  }
 }
 
 void ECSSimulator::reset() {
-    // Save existing simulator state
-    Components::SimulatorState savedState;
-    savedState.timeScale = 1.0;
-    savedState.baseTimeAcceleration = SimulatorConstants::TimeAcceleration;
+  Components::SimulatorState savedState;
+  savedState.timeScale = 1.0;
+  savedState.baseTimeAcceleration = 1.0;
 
-    auto stateView = registry.view<Components::SimulatorState>();
-    if (!stateView.empty()) {
-        savedState = registry.get<Components::SimulatorState>(stateView.front());
-    }
+  auto stateView = registry.view<Components::SimulatorState>();
+  if (!stateView.empty()) {
+    savedState = registry.get<Components::SimulatorState>(stateView.front());
+  }
 
-    // Clear ECS
-    registry.clear();
+  registry.clear();
 
-    // Use the stored scenario instead of hardcoding RANDOM_POLYGONS
-    SimulatorConstants::SimulationType const chosen = currentScenario;
+  auto stateEntity = registry.create();
+  registry.emplace<Components::SimulatorState>(stateEntity, savedState);
 
-    // Reset global constants to default
-    SimulatorConstants::initializeConstants(chosen);
-
-    // Create scenario object
-    switch (chosen) {
-        case SimulatorConstants::SimulationType::KEPLERIAN_DISK:
-            scenarioPtr = std::make_unique<KeplerianDiskScenario>();
-            break;
-        case SimulatorConstants::SimulationType::SIMPLE_FLUID:
-            scenarioPtr = std::make_unique<SimpleFluidScenario>();
-            break;
-        case SimulatorConstants::SimulationType::FLUID_AND_POLYGONS:
-            scenarioPtr = std::make_unique<FluidAndPolygonsScenario>();
-            break;
-        case SimulatorConstants::SimulationType::RANDOM_POLYGONS:
-        default:
-            scenarioPtr = std::make_unique<RandomPolygonsScenario>();
-            break;
-    }
-
-    // Grab config from scenario
-    ScenarioConfig const cfg = scenarioPtr->getConfig();
-    // Apply config to SimulatorConstants
-    applyScenarioConfig(cfg);
-
-    // Recreate a fresh SimulatorState entity
-    auto stateEntity = registry.create();
-    registry.emplace<Components::SimulatorState>(stateEntity, savedState);
-
-    // Let the scenario create all ECS entities
+  if (scenarioPtr) {
     scenarioPtr->createEntities(registry);
+  }
 
-    // Now do any post-scenario init you want
-    init();
+  init();
+}
+
+void ECSSimulator::createSystems() {
+  // Clear previous systems
+  systems.clear();
+  
+  // Create new system instances based on active systems in the config
+  for (auto systemType : currentConfig.activeSystems) {
+    switch (systemType) {
+      case Systems::SystemType::FLUID:
+        systems.push_back(std::make_unique<Systems::FluidSystem>());
+        break;
+      case Systems::SystemType::COLLISION:
+        systems.push_back(std::make_unique<Systems::RigidBodyCollisionSystem>());
+        break;
+      case Systems::SystemType::BASIC_GRAVITY:
+        systems.push_back(std::make_unique<Systems::BasicGravitySystem>());
+        break;
+      case Systems::SystemType::ROTATION:
+        systems.push_back(std::make_unique<Systems::RotationSystem>());
+        break;
+      case Systems::SystemType::BARNES_HUT:
+        systems.push_back(std::make_unique<Systems::BarnesHutSystem>());
+        break;
+      case Systems::SystemType::MOVEMENT:
+        systems.push_back(std::make_unique<Systems::MovementSystem>());
+        break;
+      case Systems::SystemType::SLEEP:
+        systems.push_back(std::make_unique<Systems::SleepSystem>());
+        break;
+      case Systems::SystemType::DAMPENING:
+        systems.push_back(std::make_unique<Systems::DampeningSystem>());
+        break;
+      case Systems::SystemType::BOUNDARY:
+        systems.push_back(std::make_unique<Systems::BoundarySystem>());
+        break;
+    }
+  }
+  
+  // Configure all systems
+  for (auto& system : systems) {
+    system->setSystemConfig(currentConfig);
+  }
 }
 
 void ECSSimulator::init() {
-    std::cout << "ECSSimulator::init" << std::endl;
-    if (!fluidSystem) {  // Only construct if not already created.
-        fluidSystem = std::make_unique<Systems::FluidSystem>();
-    }
-    
-    // (Any other initialization code)
+  std::cout << "ECSSimulator::init()" << std::endl;
+  
+  // Create all systems according to the current configuration
+  createSystems();
 }
 
 void ECSSimulator::tick() {
-    PROFILE_SCOPE("Tick");
-    // Run the scenario's chosen ECS systems in order
-    for (auto system : SimulatorConstants::ActiveSystems) {
-        switch (system) {
-        case Systems::SystemType::FLUID: {
-            fluidSystem->update(registry);
-            break;
-        }
-        case Systems::SystemType::COLLISION: {
-            Systems::RigidBodyCollisionSystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::BASIC_GRAVITY: {
-            Systems::BasicGravitySystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::ROTATION: {
-            Systems::RotationSystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::BARNES_HUT: {
-            Systems::BarnesHutSystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::MOVEMENT: {
-            Systems::MovementSystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::SLEEP: {
-            Systems::SleepSystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::DAMPENING: {
-            Systems::DampeningSystem::update(registry);
-            break;
-        }
-        case Systems::SystemType::BOUNDARY: {
-            Systems::BoundarySystem::update(registry);
-            break;
-        }
-        } // switch
-    } // for
+  PROFILE_SCOPE("ECSSimulator::tick");
+
+  // Update all systems in order
+  for (auto& system : systems) {
+    system->update(registry);
+  }
+}
+
+entt::registry& ECSSimulator::getRegistry() {
+  return registry;
+}
+
+const entt::registry& ECSSimulator::getRegistry() const {
+  return registry;
+}
+
+IScenario& ECSSimulator::getCurrentScenario() const {
+  return *scenarioPtr;
 }

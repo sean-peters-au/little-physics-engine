@@ -1,9 +1,43 @@
 #pragma once
 
 #include "nbody/core/constants.hpp"
-#include "nbody/scenarios/scenario_config.hpp"
+#include "nbody/core/system_config.hpp"
 #include "nbody/scenarios/i_scenario.hpp"
 #include "entt/entt.hpp"
+
+/**
+ * @struct FluidAndPolygonsConfig
+ * @brief Configuration parameters specific to the fluid and polygons scenario
+ */
+struct FluidAndPolygonsConfig {
+    // Fluid parameters
+    int fluidParticleCount = 1000;     // Number of fluid particles
+    double fluidParticleMass = 0.005;  // Mass per fluid particle
+    double fluidRestDensity = 1000.0;  // Typical rest density for water
+    double InitialVelocityFactor = 1.0;
+    
+    // Polygon parameters
+    int polygonCount = 5;              // How many random polygons to spawn
+    double polygonMassMean = 1;        // Typical mass for polygons
+    double polygonMassStdDev = 0.2;    // Variation in polygon mass
+    
+    // Friction parameters
+    double floorStaticFriction = 0.6;  
+    double floorDynamicFriction = 0.4;
+    double wallStaticFriction = 0.2;
+    double wallDynamicFriction = 0.1;
+    double polyStaticFriction = 0.3;
+    double polyDynamicFriction = 0.1;
+    double fluidStaticFriction = 0.0;
+    double fluidDynamicFriction = 0.0;
+    
+    // Wall parameters
+    double wallThickness = 0.1;        // Thickness of bounding walls
+    double wallMass = 1e30;            // Effectively infinite mass
+    
+    // Velocity parameters
+    double initialVelocityScale = 0.5;
+};
 
 /**
  * @brief Test scenario that combines a tank of fluid particles with
@@ -14,9 +48,9 @@ public:
     /**
      * @brief Retrieves the configuration for the test fluid-polygons scenario.
      *
-     * @return ScenarioConfig with simulation parameters.
+     * @return SystemConfig with simulation parameters.
      */
-    ScenarioConfig getConfig() const;
+    SystemConfig getConfig() const;
 
     /**
      * @brief Creates all entities for the scenario, including boundary walls,
@@ -25,4 +59,7 @@ public:
      * @param registry The entt registry into which the entities will be inserted.
      */
     void createEntities(entt::registry &registry) const;
+    
+private:
+    FluidAndPolygonsConfig scenarioConfig;
 };

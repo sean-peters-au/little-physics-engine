@@ -17,13 +17,26 @@
 namespace Systems
 {
 
+RigidBodyCollisionSystem::RigidBodyCollisionSystem() {
+    // Initialize with default configurations
+}
+
+void RigidBodyCollisionSystem::setSystemConfig(const SystemConfig& config) {
+    sysConfig = config;
+}
+
+void RigidBodyCollisionSystem::setCollisionConfig(const RigidBodyCollisionConfig& config) {
+    collisionConfig = config;
+}
+
 void RigidBodyCollisionSystem::update(entt::registry &registry)
 {
     PROFILE_SCOPE("RigidBodyCollisionSystem");
     using namespace RigidBodyCollision;
 
     // 1) Broad-phase: Quick AABB-based filtering (once per frame)
-    auto candidatePairs = broadPhase(registry);
+    BroadphaseConfig bpConfig = BroadphaseConfig();
+    auto candidatePairs = Broadphase::detectCollisions(registry, sysConfig, bpConfig);
 
     // 2) Narrow-phase: Exact collision detection with GJK/EPA (once per frame)
     auto manifold = narrowPhase(registry, candidatePairs);
@@ -35,10 +48,13 @@ void RigidBodyCollisionSystem::update(entt::registry &registry)
     ContactManager manager;
     manager.updateContacts(manifold);
 
-    ContactSolver::solveContactConstraints(registry, manager);
+    // 4) Contact solver (iterative velocity constraints)
+    ContactSolverConfig solverConfig;
+    ContactSolver::solveContactConstraints(registry, manager, solverConfig);
 
-    // 5) (Optional) Position solver for any residual penetration
-    PositionSolver::positionalSolver(registry, manifold);
+    // 5) Position solver for any residual penetration
+    PositionSolverConfig positionConfig;
+    PositionSolver::positionalSolver(registry, manifold, positionConfig);
 }
 
 } // namespace Systems

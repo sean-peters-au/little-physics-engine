@@ -6,7 +6,7 @@
 #pragma once
 
 #include <entt/entt.hpp>
-#include "nbody/scenarios/scenario_config.hpp"
+#include "nbody/core/system_config.hpp"
 
 /**
  * @brief Abstract base class for any simulation scenario
@@ -22,7 +22,7 @@ public:
     /**
      * @brief Returns scenario configuration (universe scale, particle count, etc.)
      */
-    virtual ScenarioConfig getConfig() const = 0;
+    virtual SystemConfig getConfig() const = 0;
 
     /**
      * @brief Creates scenario-specific entities in the registry

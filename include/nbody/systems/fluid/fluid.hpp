@@ -19,6 +19,7 @@
 #include <functional>
 #include <cstddef>
 #include <limits>
+#include "nbody/systems/i_system.hpp"
 
 namespace Systems {
 
@@ -133,19 +134,54 @@ struct GPURigidBody {
 };
 
 /**
+ * @struct FluidConfig
+ * @brief Configuration parameters specific to the fluid simulation
+ */
+struct FluidConfig {
+    // Fluid properties
+    float restDensity = 1000.0f;  // Default density of fluid (kg/m³)
+    float stiffness = 50.0f;      // Pressure stiffness coefficient
+    float viscosity = 0.03f;      // Viscosity coefficient
+    float dampingFactor = 0.98f;  // Velocity damping for rigid bodies
+    
+    // Simulation parameters
+    int numSubSteps = 10;         // Number of substeps per frame
+    int threadsPerGroup = 256;    // Threads per threadgroup for GPU
+};
+
+/**
  * @class FluidSystem
  * @brief SPH-based fluid solver with GPU-accelerated neighbor search & rigid-fluid interactions.
  */
-class FluidSystem {
+class FluidSystem : public ISystem {
 public:
+    /**
+     * @brief Constructor
+     */
     FluidSystem();
-    ~FluidSystem();
+    
+    /**
+     * @brief Destructor
+     */
+    ~FluidSystem() override;
 
     /**
      * @brief Main update function called each frame/tick.
      * @param registry The ECS registry containing fluid entities & rigid bodies.
      */
-    void update(entt::registry &registry);
+    void update(entt::registry &registry) override;
+    
+    /**
+     * @brief Sets the system configuration
+     * @param config System configuration parameters
+     */
+    void setSystemConfig(const SystemConfig& config) override;
+    
+    /**
+     * @brief Sets fluid-specific configuration
+     * @param config Fluid specific configuration
+     */
+    void setFluidConfig(const FluidConfig& config);
 
 private:
     /**
@@ -317,8 +353,10 @@ private:
 
     // **New**: Impulse solver pipeline
     MTL::ComputePipelineState* rigidFluidImpulsePSO  = nullptr;
-
-    static constexpr int N_SUB_STEPS = 10; ///< Number of sub-steps per tick
+    
+    // Configuration
+    SystemConfig sysConfig;
+    FluidConfig fluidConfig;
 };
 
 } // namespace Systems

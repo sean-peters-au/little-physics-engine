@@ -1,59 +1,87 @@
 /**
- * @file simulator.hpp
- * @brief Main simulator class that manages an ECS registry and scenario lifecycle.
+ * @fileoverview simulator.hpp
+ * @brief Main simulator class managing an ECS registry and scenario lifecycle.
  */
 
-#pragma once
+#ifndef SIMULATOR_HPP
+#define SIMULATOR_HPP
 
-#include <memory>
 #include <entt/entt.hpp>
-#include "nbody/core/constants.hpp"
+#include <memory>
+#include <vector>
+
 #include "nbody/scenarios/i_scenario.hpp"
-#include "nbody/systems/fluid/fluid.hpp"
+#include "nbody/core/system_config.hpp"
+#include "nbody/systems/i_system.hpp"
 
 /**
  * @class ECSSimulator
- * @brief Main simulator that manages an ECS registry and scenario lifecycle.
+ * @brief Maintains ECS state, scenario data, and performs physics updates.
  */
 class ECSSimulator {
-private:
-    entt::registry registry;
-    // We hold a scenario pointer if you want to keep track of the current scenario object
-    std::unique_ptr<IScenario> scenarioPtr;
-    SimulatorConstants::SimulationType currentScenario = SimulatorConstants::SimulationType::KEPLERIAN_DISK;
-    std::unique_ptr<Systems::FluidSystem> fluidSystem;
+ public:
+  ECSSimulator();
+  ~ECSSimulator();
 
-public:
-    ECSSimulator();
+  /**
+   * @brief Loads a new scenario object that can create ECS entities.
+   * @param scenario A unique pointer to the scenario object.
+   */
+  void loadScenario(std::unique_ptr<IScenario> scenario);
 
-    /**
-     * @brief Additional initialization steps after scenario reset
-     */
-    void init();
+  /**
+   * @brief Applies a SystemConfig to the simulator's internal state.
+   * @param cfg The scenario configuration with relevant parameters.
+   */
+  void applyConfig(const SystemConfig& cfg);
 
-    /**
-     * @brief Steps the ECS systems for one tick
-     */
-    void tick();
+  /**
+   * @brief Clears and re-initializes the ECS registry using the loaded scenario.
+   *
+   * This removes existing entities, then calls createEntities(...) on the
+   * loaded scenario, and finally performs any post-initialization steps.
+   */
+  void reset();
 
-    /**
-     * @brief Sets the scenario type (Keplerian, Isothermal, etc.)
-     */
-    void setScenario(SimulatorConstants::SimulationType scenario);
+  /**
+   * @brief Perform additional initialization steps.
+   */
+  void init();
 
-    /**
-     * @brief Resets the ECS with the newly selected scenario
-     */
-    void reset();
+  /**
+   * @brief Advances the ECS systems by one tick.
+   */
+  void tick();
 
-    /**
-     * @brief Access to the ECS registry
-     */
-    entt::registry& getRegistry() { return registry; }
-    const entt::registry& getRegistry() const { return registry; }
+  /**
+   * @brief Provides mutable access to the ECS registry.
+   * @return Reference to the entt::registry.
+   */
+  entt::registry& getRegistry();
 
-    /**
-     * @brief (Optional) If we stored scenarioPtr, we can expose it
-     */
-    IScenario& getCurrentScenario() const { return *scenarioPtr; }
+  /**
+   * @brief Provides read-only access to the ECS registry.
+   * @return Const reference to the entt::registry.
+   */
+  const entt::registry& getRegistry() const;
+
+  /**
+   * @brief Returns a reference to the currently loaded scenario.
+   * @return IScenario reference if a scenario is loaded.
+   * @note This call requires that a scenario has been loaded.
+   */
+  IScenario& getCurrentScenario() const;
+
+ private:
+  entt::registry registry;
+  std::unique_ptr<IScenario> scenarioPtr;
+  std::vector<std::unique_ptr<Systems::ISystem>> systems;
+  SystemConfig currentConfig;
+
+  /**
+   * @brief Create all system instances according to current config
+   */
+  void createSystems();
 };
+
+#endif  // SIMULATOR_HPP

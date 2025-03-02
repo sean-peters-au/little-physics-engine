@@ -17,24 +17,64 @@
 #define ROTATION_SYSTEM_H
 
 #include <entt/entt.hpp>
+#include "nbody/systems/i_system.hpp"
 
 namespace Systems {
 
 /**
+ * @struct RotationConfig
+ * @brief Configuration parameters specific to the rotation system
+ */
+struct RotationConfig {
+    // Damping factor applied to angular velocity each frame (0-1)
+    double angularDamping = 0.98;
+    
+    // Maximum allowed angular velocity in radians per second
+    double maxAngularSpeed = 20.0;
+};
+
+/**
+ * @class RotationSystem
  * @brief System that manages rotational motion
  * 
- * Implements angular physics with:
- * - 2% damping per frame
- * - Speed limiting to ±20 rad/s
+ * Implements angular physics with configurable:
+ * - Angular damping per frame
+ * - Speed limiting to a maximum value
  * - Angle wrapping to [0, 2π)
  */
-class RotationSystem {
+class RotationSystem : public ISystem {
 public:
     /**
-     * @brief Updates angular motion as described above
+     * @brief Constructor with default configuration
+     */
+    RotationSystem();
+    
+    /**
+     * @brief Virtual destructor
+     */
+    ~RotationSystem() override = default;
+    
+    /**
+     * @brief Updates angular motion for all entities with rotation components
      * @param registry EnTT registry containing entities and components
      */
-    static void update(entt::registry &registry);
+    void update(entt::registry &registry) override;
+    
+    /**
+     * @brief Sets the system configuration
+     * @param config System configuration parameters
+     */
+    void setSystemConfig(const SystemConfig& config) override;
+    
+    /**
+     * @brief Sets rotation-specific configuration
+     * @param config Rotation specific configuration
+     */
+    void setRotationConfig(const RotationConfig& config);
+
+private:
+    SystemConfig sysConfig;
+    RotationConfig rotationConfig;
 };
 
 } // namespace Systems

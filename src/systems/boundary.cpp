@@ -6,13 +6,26 @@
 
 namespace Systems {
 
+BoundarySystem::BoundarySystem() {
+    // Initialize with default configurations
+}
+
+void BoundarySystem::setSystemConfig(const SystemConfig& config) {
+    sysConfig = config;
+}
+
+void BoundarySystem::setBoundaryConfig(const BoundaryConfig& config) {
+    boundaryConfig = config;
+}
+
 void BoundarySystem::update(entt::registry &registry) {
     PROFILE_SCOPE("BoundarySystem");
 
     // Convert margin to meters
-    const double marginM      = 15.0 * SimulatorConstants::MetersPerPixel;
-    const double universeSizeM = SimulatorConstants::UniverseSizeMeters;
-    const double bounceDamping = 0.7;
+    const double marginM = boundaryConfig.marginPixels * sysConfig.MetersPerPixel;
+    const double universeSizeM = sysConfig.UniverseSizeMeters;
+    const double bounceDamping = boundaryConfig.bounceDamping;
+    const double maxSpeed = boundaryConfig.maxSpeed;
 
     // Create a view with Position and Velocity components.
     auto view = registry.view<Components::Position, Components::Velocity>();
@@ -56,9 +69,9 @@ void BoundarySystem::update(entt::registry &registry) {
         if (bounced) {
             // Compute the squared speed first to avoid the costly sqrt call
             double speedSq = (vel.x * vel.x) + (vel.y * vel.y);
-            if (speedSq > 1.0) {
+            if (speedSq > maxSpeed * maxSpeed) {
                 double speed    = std::sqrt(speedSq);
-                double invSpeed = 1.0 / speed;
+                double invSpeed = maxSpeed / speed;
                 vel.x *= invSpeed;
                 vel.y *= invSpeed;
             }

@@ -13,19 +13,44 @@
 #include <vector>
 #include <memory>
 #include <entt/entt.hpp>
+#include "nbody/systems/i_system.hpp"
 #include "nbody/systems/rigid/collision_data.hpp"
 
 namespace RigidBodyCollision {
 
 /**
- * @brief Performs broad-phase collision detection on all rigid bodies
- * 
- * @param registry ECS registry containing position, mass, and particle phase components
- * @return Vector of entity pairs that potentially collide based on AABB overlap
- * 
- * @note The returned pairs are ordered such that the first entity ID is always
- *       less than the second to prevent duplicate checks
+ * @struct BroadphaseConfig
+ * @brief Configuration parameters specific to the broadphase collision detection
  */
-std::vector<CandidatePair> broadPhase(entt::registry &registry);
+struct BroadphaseConfig {
+    // Maximum objects per quadtree node before subdivision
+    int quadtreeCapacity = 8;
+    
+    // Extra buffer size around universe for boundary objects
+    double boundaryBuffer = 500.0;
+};
+
+/**
+ * @class Broadphase
+ * @brief Implements broad-phase collision detection using a quadtree
+ * 
+ * This utility class identifies potential collision pairs by partitioning space
+ * using a quadtree and checking for AABB overlaps.
+ */
+class Broadphase {
+public:
+    /**
+     * @brief Performs broad-phase collision detection and returns candidate pairs
+     * @param registry EnTT registry containing entities and components
+     * @param config System configuration parameters
+     * @param bpConfig Broadphase specific configuration
+     * @return Vector of entity pairs that potentially collide
+     */
+    static std::vector<CandidatePair> detectCollisions(
+        entt::registry& registry,
+        const SystemConfig& sysConfig,
+        const BroadphaseConfig& bpConfig = BroadphaseConfig()
+    );
+};
 
 } // namespace RigidBodyCollision

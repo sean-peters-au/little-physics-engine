@@ -1,231 +1,220 @@
 /**
- * @file random_polygons_scenario.cpp
+ * @file random_polygons.cpp
  * @brief Implementation of a scenario with static boundary walls and random polygons/circles.
+ *
+ * This scenario places four walls around the simulation area and populates it
+ * with circles or random polygons according to configurable probabilities. The
+ * walls are treated as infinite-mass bodies, and particles have random masses,
+ * sizes, and colors. Various friction parameters are specified for walls, floor,
+ * and particles.
  */
 
-#include <random>
 #include <cmath>
 #include <ctime>
 #include <iostream>
+#include <random>
 
-#include "nbody/scenarios/random_polygons.hpp"
-#include "nbody/core/constants.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/math/polygon.hpp"
+#include "nbody/core/constants.hpp"
+#include "nbody/core/system_config.hpp"
+#include "nbody/scenarios/random_polygons.hpp"
 
-static constexpr double KCirclesFraction     = 0.0;
-static constexpr double KRegularFraction     = 0.0;
-static constexpr double KRandomPolyFraction  = 1.0 - KCirclesFraction - KRegularFraction;
+/**
+ * @brief Creates a static "wall" entity with infinite mass, minimal thickness,
+ *        placed asleep, and assigned a specific friction material.
+ * @param registry The ECS registry where the entity is created.
+ * @param cx Center X coordinate of the wall.
+ * @param cy Center Y coordinate of the wall.
+ * @param halfW Half the wall's width.
+ * @param halfH Half the wall's height.
+ * @param staticFriction The wall's static friction coefficient.
+ * @param dynamicFriction The wall's dynamic friction coefficient.
+ */
+static void makeWall(entt::registry& registry,
+                     double cx,
+                     double cy,
+                     double halfW,
+                     double halfH,
+                     double staticFriction,
+                     double dynamicFriction) {
+  auto wallEnt = registry.create();
 
-static constexpr double KSmallShapeRatio = 0.90;
-static constexpr double KSmallShapeMin = 0.1;  // Smaller minimum
-static constexpr double KSmallShapeMax = 0.25;  // Smaller shapes range
-static constexpr double KLargeShapeMin = 0.3;   // Larger shapes range
-static constexpr double KLargeShapeMax = 0.5;  // Larger maximum
+  // Treat as infinite mass.
+  double const mass = 1e30;
 
-static constexpr int    KParticleCount = 100;
+  registry.emplace<Components::Position>(wallEnt, cx, cy);
+  registry.emplace<Components::Velocity>(wallEnt, 0.0, 0.0);
+  registry.emplace<Components::Mass>(wallEnt, mass);
+  registry.emplace<Components::ParticlePhase>(wallEnt, Components::Phase::Solid);
+  registry.emplace<Components::Boundary>(wallEnt);
 
-static constexpr double KFloorStaticFriction = 0.6;
-static constexpr double KFloorDynamicFriction = 0.4;
-static constexpr double KWallStaticFriction = 0.2;
-static constexpr double KWallDynamicFriction = 0.1;
-static constexpr double KParticleStaticFriction = 0.3;
-static constexpr double KParticleDynamicFriction = 0.1;
+  auto& sleepC = registry.emplace<Components::Sleep>(wallEnt);
+  sleepC.asleep = true;
+  sleepC.sleepCounter = 9999999;
 
+  registry.emplace<Components::Material>(wallEnt, staticFriction, dynamicFriction);
 
-ScenarioConfig RandomPolygonsScenario::getConfig() const
-{
-    ScenarioConfig cfg;
-    cfg.MetersPerPixel = 1e-2;
-    cfg.UniverseSizeMeters = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
-    cfg.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
-    cfg.TimeAcceleration = 1.0;
-    cfg.GridSize = 50;
-    cfg.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
+  PolygonShape poly;
+  poly.type = Components::ShapeType::Polygon;
+  poly.vertices.emplace_back(-halfW, -halfH);
+  poly.vertices.emplace_back(-halfW, halfH);
+  poly.vertices.emplace_back(halfW, halfH);
+  poly.vertices.emplace_back(halfW, -halfH);
 
-    cfg.ParticleCount = KParticleCount;
-    cfg.ParticleMassMean = 1.0;
-    cfg.ParticleMassStdDev = 0.1;
-    cfg.GravitationalSoftener = 0;
-    cfg.CollisionCoeffRestitution = 0.2;
-    cfg.DragCoeff = 0.0;
-    cfg.ParticleDensity = 0.5;
-    cfg.InitialVelocityFactor = 1.0;
+  registry.emplace<Components::Shape>(wallEnt, Components::ShapeType::Polygon, halfH);
+  registry.emplace<PolygonShape>(wallEnt, poly);
+  registry.emplace<Components::AngularPosition>(wallEnt, 0.0);
+  registry.emplace<Components::Color>(wallEnt, 60, 60, 60);
+}
 
-    cfg.activeSystems = {
-        Systems::SystemType::FLUID,
-        Systems::SystemType::BASIC_GRAVITY,
-        Systems::SystemType::COLLISION,
-        Systems::SystemType::DAMPENING,
-        Systems::SystemType::SLEEP,
-        Systems::SystemType::ROTATION,
-        Systems::SystemType::MOVEMENT,
-    };
+SystemConfig RandomPolygonsScenario::getConfig() const {
+  SystemConfig cfg;
+  cfg.MetersPerPixel = 1e-2;
+  cfg.UniverseSizeMeters =
+      SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
+  cfg.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
+  cfg.TimeAcceleration = 1.0;
+  cfg.GridSize = 50;
+  cfg.CellSizePixels =
+      static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
 
-    return cfg;
+  cfg.GravitationalSoftener = 0.0;
+  cfg.CollisionCoeffRestitution = 0.2;
+  cfg.DragCoeff = 0.0;
+  cfg.ParticleDensity = 0.5;
+
+  // Active ECS systems for this scenario
+  cfg.activeSystems = {
+      Systems::SystemType::FLUID,
+      Systems::SystemType::BASIC_GRAVITY,
+      Systems::SystemType::COLLISION,
+      Systems::SystemType::DAMPENING,
+      Systems::SystemType::SLEEP,
+      Systems::SystemType::ROTATION,
+      Systems::SystemType::MOVEMENT,
+  };
+
+  return cfg;
 }
 
 /**
- * @brief Create a static "wall" entity with infinite mass, minimal thickness,
- *        set asleep, and given a distinct color. 
+ * @brief Populates the simulation with boundary walls and a set of randomly
+ *        generated polygons or circles, according to scenario configuration.
+ * @param registry The ECS registry where new entities are created.
  */
-static void makeWall(entt::registry &registry,
-                     double cx, double cy,
-                     double halfW, double halfH,
-                     double staticFriction, double dynamicFriction)
-{
-    auto wallEnt = registry.create();
+void RandomPolygonsScenario::createEntities(entt::registry& registry) const {
+  // Obtain scenario configuration so we stay consistent with getConfig().
+  SystemConfig cfg = getConfig();
+  double const universeSizeM = cfg.UniverseSizeMeters;
+  int const totalParticles = scenarioConfig.particleCount;
 
-    // Infinite mass => 1e30
-    double const mass = 1e30;
+  std::default_random_engine generator{
+      static_cast<unsigned int>(time(nullptr))};
 
-    registry.emplace<Components::Position>(wallEnt, cx, cy);
-    registry.emplace<Components::Velocity>(wallEnt, 0.0, 0.0);
-    registry.emplace<Components::Mass>(wallEnt, mass);
+  // Create four thin boundary walls around the edges.
+  double const wallThickness = scenarioConfig.wallThickness;
+  double const halfWall = wallThickness * 0.5;
 
-    // Mark it as a boundary + solid so systems skip it
-    registry.emplace<Components::ParticlePhase>(wallEnt, Components::Phase::Solid);
-    registry.emplace<Components::Boundary>(wallEnt);
+  makeWall(registry, 0.0, universeSizeM * 0.5, halfWall, universeSizeM * 0.5,
+           scenarioConfig.wallStaticFriction, scenarioConfig.wallDynamicFriction);
+  makeWall(registry, universeSizeM, universeSizeM * 0.5, halfWall,
+           universeSizeM * 0.5, scenarioConfig.wallStaticFriction, scenarioConfig.wallDynamicFriction);
+  makeWall(registry, universeSizeM * 0.5, 0.0, universeSizeM * 0.5, halfWall,
+           scenarioConfig.floorStaticFriction, scenarioConfig.floorDynamicFriction);
+  makeWall(registry, universeSizeM * 0.5, universeSizeM, universeSizeM * 0.5,
+           halfWall, scenarioConfig.wallStaticFriction, scenarioConfig.wallDynamicFriction);
 
-    // Force it to be asleep
-    auto &sleepC = registry.emplace<Components::Sleep>(wallEnt);
-    sleepC.asleep = true;
-    sleepC.sleepCounter = 9999999; // large
+  // Randomly distribute particles across the universe space as regular polygons or circles.
+  std::uniform_real_distribution<> pos_dist(universeSizeM * 0.1,
+                                          universeSizeM * 0.9);
+  std::uniform_real_distribution<> vel_dist(-2.0, 2.0);
+  std::uniform_real_distribution<> shape_dist(0.0, 1.0);
+  std::uniform_real_distribution<> size_ratio_dist(0.0, 1.0);
+  std::uniform_int_distribution<> color_dist(0, 255);
 
-    // A friction or material if needed
-    registry.emplace<Components::Material>(wallEnt, staticFriction, dynamicFriction);
+  // Mass distribution
+  std::normal_distribution<> mass_dist(scenarioConfig.particleMassMean, scenarioConfig.particleMassStdDev);
 
-    // Use a rectangle polygon with CCW winding
-    PolygonShape poly;
-    poly.type = Components::ShapeType::Polygon;
-    // Start at bottom-left, go CCW
-    poly.vertices.emplace_back(-halfW, -halfH);  // Bottom-left
-    poly.vertices.emplace_back(-halfW,  halfH);  // Top-left
-    poly.vertices.emplace_back( halfW,  halfH);  // Top-right
-    poly.vertices.emplace_back( halfW, -halfH);  // Bottom-right
+  // For regular polygons, we need to decide how many sides.
+  std::uniform_int_distribution<> sides_dist(3, 8);
 
-    registry.emplace<Components::Shape>(wallEnt, Components::ShapeType::Polygon, halfH);
-    registry.emplace<PolygonShape>(wallEnt, poly);
+  for (int i = 0; i < totalParticles; ++i) {
+    // 1. Basic entity creation with position, velocity, mass, etc.
+    auto e = registry.create();
 
-    // Angular data (irrelevant for a static wall, but required)
-    registry.emplace<Components::AngularPosition>(wallEnt, 0.0);
+    double const x = pos_dist(generator);
+    double const y = pos_dist(generator);
+    registry.emplace<Components::Position>(e, x, y);
 
-    // Give the walls a distinct color (e.g. dark gray)
-    registry.emplace<Components::Color>(wallEnt, 60, 60, 60);
-}
+    double velScale = scenarioConfig.initialVelocityFactor;
+    registry.emplace<Components::Velocity>(e, vel_dist(generator) * velScale,
+                                         vel_dist(generator) * velScale);
 
-void RandomPolygonsScenario::createEntities(entt::registry &registry) const
-{
-    std::default_random_engine generator{static_cast<unsigned int>(time(nullptr))};
+    double const mass = std::max(0.1, mass_dist(generator));
+    registry.emplace<Components::Mass>(e, mass);
+    registry.emplace<Components::ParticlePhase>(e, Components::Phase::Solid);
+    registry.emplace<Components::Sleep>(e);
 
-    double const universeSizeM = SimulatorConstants::UniverseSizeMeters;
+    // 2. Generate shape based on random distribution
+    double const shape_type = shape_dist(generator);
+    double size;
 
-    // Thin walls: 0.1m thick
-    double const wallThickness = 0.1;
-    double const halfWall = wallThickness * 0.5;
-
-    // Left wall
-    makeWall(registry, 0.0, universeSizeM*0.5, halfWall, universeSizeM*0.5, KWallStaticFriction, KWallDynamicFriction);
-    // Right wall
-    makeWall(registry, universeSizeM, universeSizeM*0.5, halfWall, universeSizeM*0.5, KWallStaticFriction, KWallDynamicFriction);
-    // Top wall
-    makeWall(registry, universeSizeM*0.5, 0.0, universeSizeM*0.5, halfWall, KWallStaticFriction, KWallDynamicFriction);
-    // Bottom wall
-    makeWall(registry, universeSizeM*0.5, universeSizeM, universeSizeM*0.5, halfWall, KFloorStaticFriction, KFloorDynamicFriction);
-
-    // Now create circles/polygons as before
-    int const totalParticles = SimulatorConstants::ParticleCount;
-    int const circlesCount   = static_cast<int>(std::round(KCirclesFraction * totalParticles));
-    int const regularCount   = static_cast<int>(std::round(KRegularFraction * totalParticles));
-    int const randomCount    = totalParticles - circlesCount - regularCount;
-
-    std::cerr << "Circles: " << circlesCount << ", Regular: " << regularCount << ", Random: " << randomCount << "\n";
-
-    int const side = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(totalParticles))));
-    double const spacing = universeSizeM / (side + 1);
-
-    std::normal_distribution<> velocityDist(0.0, 1.0);
-    std::normal_distribution<> massDist(SimulatorConstants::ParticleMassMean,
-                                        SimulatorConstants::ParticleMassStdDev);
-    std::uniform_real_distribution<double> smallSizeDist(KSmallShapeMin, KSmallShapeMax);
-    std::uniform_real_distribution<double> largeSizeDist(KLargeShapeMin, KLargeShapeMax);
-    std::uniform_real_distribution<double> sizeSelector(0.0, 1.0); // To choose between small and large
-    std::uniform_int_distribution<> colorDist(100, 255);
-
-    int created = 0;
-    int cCount = 0;
-    int rCount = 0;
-
-    std::cerr << "Creating " << totalParticles << " particles\n";
-    for (int i = 0; i < side && created < totalParticles; ++i) {
-        for (int j = 0; j < side && created < totalParticles; ++j) {
-            double xM = (i + 1) * spacing;
-            double yM = (j + 1) * spacing;
-
-            auto entity = registry.create();
-            double const massVal = massDist(generator);
-
-            registry.emplace<Components::Position>(entity, xM, yM);
-            registry.emplace<Components::Velocity>(entity,
-                velocityDist(generator), velocityDist(generator));
-            registry.emplace<Components::Mass>(entity, massVal);
-            registry.emplace<Components::ParticlePhase>(entity, Components::Phase::Solid);
-            registry.emplace<Components::Sleep>(entity);
-            // Lower friction
-            registry.emplace<Components::Material>(entity, KParticleStaticFriction, KParticleDynamicFriction);
-
-            double sz;
-            if (sizeSelector(generator) < KSmallShapeRatio) {
-                sz = smallSizeDist(generator);
-            } else {
-                sz = largeSizeDist(generator);
-            }
-
-            double i; 
-
-            if (cCount < circlesCount) {
-                // Circle - use disc formula
-                registry.emplace<Components::Shape>(entity, Components::ShapeType::Circle, sz);
-                registry.emplace<CircleShape>(entity, sz);
-                i = 0.5 * massVal * (sz * sz);  // Correct for circles
-                cCount++;
-            }
-            else if (rCount < regularCount) {
-                // Regular polygon
-                std::uniform_int_distribution<int> sidesDist(3, 6);
-                int const sides = sidesDist(generator);
-
-                PolygonShape const poly = buildRegularPolygon(sides, sz);
-                registry.emplace<Components::Shape>(entity, Components::ShapeType::Polygon, sz);
-                registry.emplace<PolygonShape>(entity, poly);
-
-                // Calculate proper moment of inertia for the polygon
-                i = calculatePolygonInertia(poly.vertices, massVal);
-                rCount++;
-            }
-            else {
-                // Random polygon
-                PolygonShape const poly = buildRandomConvexPolygon(generator, sz);
-                registry.emplace<Components::Shape>(entity, Components::ShapeType::Polygon, sz);
-                registry.emplace<PolygonShape>(entity, poly);
-
-                // Calculate proper moment of inertia for the polygon
-                i = calculatePolygonInertia(poly.vertices, massVal);
-            }
-
-            registry.emplace<Components::AngularPosition>(entity, 0.0);
-            registry.emplace<Components::AngularVelocity>(entity, 0.0);
-            registry.emplace<Components::Inertia>(entity, i);
-
-            // Random color
-            int rr = colorDist(generator);
-            int gg = colorDist(generator);
-            int bb = colorDist(generator);
-            registry.emplace<Components::Color>(entity, rr, gg, bb);
-
-            created++;
-        }
+    // Decide if this is a small or large shape
+    if (size_ratio_dist(generator) < scenarioConfig.smallShapeRatio) {
+      // Small shape
+      std::uniform_real_distribution<> smallDist(scenarioConfig.smallShapeMin, 
+                                               scenarioConfig.smallShapeMax);
+      size = smallDist(generator);
+    } else {
+      // Large shape
+      std::uniform_real_distribution<> largeDist(scenarioConfig.largeShapeMin, 
+                                               scenarioConfig.largeShapeMax);
+      size = largeDist(generator);
     }
 
-    std::cerr << "Created " << created << " particles\n";
+    // Apply friction coefficient for this particle
+    registry.emplace<Components::Material>(
+        e, scenarioConfig.particleStaticFriction, scenarioConfig.particleDynamicFriction);
+
+    // 3. Shape creation
+    if (shape_type < scenarioConfig.circlesFraction) {
+      // Circle
+      registry.emplace<Components::Shape>(e, Components::ShapeType::Circle, size);
+
+      // Calculate moment of inertia for a circle: I = (1/2) * m * r²
+      double I = 0.5 * mass * size * size;
+      registry.emplace<Components::Inertia>(e, I);
+    } else if (shape_type < (scenarioConfig.circlesFraction + scenarioConfig.regularFraction)) {
+      // Regular polygon
+      int sides = sides_dist(generator);
+      PolygonShape poly = buildRegularPolygon(sides, size);
+
+      registry.emplace<Components::Shape>(e, Components::ShapeType::Polygon, size);
+      registry.emplace<PolygonShape>(e, poly);
+
+      // Calculate moment of inertia for the polygon
+      double I = calculatePolygonInertia(poly.vertices, mass);
+      registry.emplace<Components::Inertia>(e, I);
+    } else {
+      // Random polygon
+      PolygonShape poly = buildRandomConvexPolygon(generator, size);
+
+      registry.emplace<Components::Shape>(e, Components::ShapeType::Polygon, size);
+      registry.emplace<PolygonShape>(e, poly);
+
+      // Calculate moment of inertia for the polygon
+      double I = calculatePolygonInertia(poly.vertices, mass);
+      registry.emplace<Components::Inertia>(e, I);
+    }
+
+    // 4. Angular components
+    registry.emplace<Components::AngularPosition>(e, 0.0);
+    registry.emplace<Components::AngularVelocity>(e, vel_dist(generator) * 0.5);
+
+    // 5. Random color
+    registry.emplace<Components::Color>(e, color_dist(generator),
+                                      color_dist(generator),
+                                      color_dist(generator));
+  }
 }

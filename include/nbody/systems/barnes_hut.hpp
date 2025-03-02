@@ -6,12 +6,55 @@
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sim.hpp"
 #include "nbody/core/constants.hpp"
+#include "nbody/systems/i_system.hpp"
 
 namespace Systems {
-    class BarnesHutSystem {
-    public:
+    
+    /**
+     * @struct BarnesHutConfig
+     * @brief Configuration parameters specific to the Barnes-Hut algorithm
+     */
+    struct BarnesHutConfig {
         // Theta is the accuracy parameter. Smaller = more accurate but slower
-        static constexpr double THETA = 0.5;
+        double theta = 0.5;
+    };
+    
+    /**
+     * @class BarnesHutSystem
+     * @brief Implements an n-body gravitational solver using the Barnes-Hut algorithm
+     * 
+     * The Barnes-Hut algorithm reduces the computational complexity from O(n²) to 
+     * O(n log n) by approximating distant groups of bodies as single points.
+     */
+    class BarnesHutSystem : public ISystem {
+    public:
+        /**
+         * @brief Constructor with default configuration
+         */
+        BarnesHutSystem();
+        
+        /**
+         * @brief Virtual destructor
+         */
+        ~BarnesHutSystem() override = default;
+        
+        /**
+         * @brief Updates gravitational forces on all entities
+         * @param registry EnTT registry containing entities and components
+         */
+        void update(entt::registry& registry) override;
+        
+        /**
+         * @brief Sets the system configuration
+         * @param config System configuration parameters
+         */
+        void setSystemConfig(const SystemConfig& config) override;
+        
+        /**
+         * @brief Sets Barnes-Hut specific configuration
+         * @param config Barnes-Hut specific configuration
+         */
+        void setBarnesHutConfig(const BarnesHutConfig& config);
 
         struct QuadTreeNode {
             const entt::registry* registry = nullptr;
@@ -45,20 +88,21 @@ namespace Systems {
             }
         };
 
-        static void update(entt::registry& registry);
-
     private:
-        static std::unique_ptr<QuadTreeNode> buildTree(const entt::registry& registry);
-        static void insertParticle(QuadTreeNode* node, entt::entity entity, 
-                                 const Components::Position& pos,
-                                 const Components::Mass& mass);
-        static void subdivide(QuadTreeNode* node);
-        static void calculateForce(const QuadTreeNode* node,
-                                 entt::entity entity,
-                                 const Components::Position& pos,
-                                 Components::Velocity& vel,
-                                 const Components::Mass& mass,
-                                 const Components::SimulatorState& state);
+        std::unique_ptr<QuadTreeNode> buildTree(const entt::registry& registry);
+        void insertParticle(QuadTreeNode* node, entt::entity entity, 
+                            const Components::Position& pos,
+                            const Components::Mass& mass);
+        void subdivide(QuadTreeNode* node);
+        void calculateForce(const QuadTreeNode* node,
+                            entt::entity entity,
+                            const Components::Position& pos,
+                            Components::Velocity& vel,
+                            const Components::Mass& mass,
+                            const Components::SimulatorState& state);
+        
+        BarnesHutConfig bhConfig;
+        SystemConfig sysConfig;
     };
 }
 

@@ -18,21 +18,58 @@
 #define MOVEMENT_SYSTEM_HPP
 
 #include <entt/entt.hpp>
+#include "nbody/systems/i_system.hpp"
 
 namespace Systems {
 
 /**
+ * @struct MovementConfig
+ * @brief Configuration parameters specific to the movement system
+ */
+struct MovementConfig {
+    // No specific configuration for now, but we include this
+    // for consistency with other systems and future extensions
+};
+
+/**
+ * @class MovementSystem
  * @brief Updates entity positions according to their velocity
  *
- * Ignores entities that are marked as asleep.
+ * Ignores entities that are marked as asleep or are boundaries.
  */
-class MovementSystem {
+class MovementSystem : public ISystem {
 public:
+    /**
+     * @brief Constructor with default configuration
+     */
+    MovementSystem();
+    
+    /**
+     * @brief Virtual destructor
+     */
+    ~MovementSystem() override = default;
+    
     /**
      * @brief Updates positions for all non-sleeping entities
      * @param registry EnTT registry containing entities and components
      */
-    static void update(entt::registry &registry);
+    void update(entt::registry &registry) override;
+    
+    /**
+     * @brief Sets the system configuration
+     * @param config System configuration parameters
+     */
+    void setSystemConfig(const SystemConfig& config) override;
+    
+    /**
+     * @brief Sets movement-specific configuration
+     * @param config Movement specific configuration
+     */
+    void setMovementConfig(const MovementConfig& config);
+
+private:
+    SystemConfig sysConfig;
+    MovementConfig movementConfig;
 };
 
 } // namespace Systems

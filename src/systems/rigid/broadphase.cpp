@@ -1,6 +1,6 @@
 /**
  * @file broadphase.cpp
- * @brief Implementation of quadtree-based broad-phase collision detection
+ * @brief Implementation of the broad-phase collision detection system
  */
 
 #include <cmath>
@@ -17,8 +17,11 @@
 namespace RigidBodyCollision
 {
 
+// Forward declaration for internal use
+class BoxNode;
+
 /**
- * @brief Entity data with its axis-aligned bounding box
+ * @brief Entity data with AABB bounds for the quadtree
  */
 struct AABBEntity {
     entt::entity entity;
@@ -29,29 +32,30 @@ struct AABBEntity {
  * @brief Tests if two AABBs overlap
  */
 static bool boxesOverlap(const AABBEntity &a, const AABBEntity &b) {
-    if (a.maxx < b.minx || a.minx > b.maxx) { return false;
-}
-    if (a.maxy < b.miny || a.miny > b.maxy) { return false;
-}
+    if (a.maxx < b.minx || a.minx > b.maxx) return false;
+    if (a.maxy < b.miny || a.miny > b.maxy) return false;
     return true;
 }
 
 /**
- * @brief A node in the quadtree spatial partitioning structure
- * 
- * Each node represents a square region of space that can either:
- * - Be a leaf containing up to 'capacity' objects
- * - Be subdivided into four child nodes (NW, NE, SW, SE)
+ * @brief Quadtree node for spatial partitioning
  */
-struct BoxNode {
-    double x, y, size;
-    int capacity;
-    bool is_leaf{true};
-    std::vector<AABBEntity> objects;
-    std::unique_ptr<BoxNode> nw, ne, sw, se;
-
-    BoxNode(double x, double y, double size, int capacity)
-        : x(x), y(y), size(size), capacity(capacity) {}
+class BoxNode {
+private:
+    double x, y;             // Node's region bounds
+    double size;             // Size of the square region
+    int capacity;            // Max objects per node
+    bool is_leaf = true;     // Is this a leaf node?
+    
+    std::vector<AABBEntity> objects; // Objects in this node
+    std::unique_ptr<BoxNode> nw, ne, sw, se; // Child nodes
+    
+public:
+    /**
+     * @brief Constructor for a new quadtree node
+     */
+    BoxNode(double _x, double _y, double _size, int _capacity)
+        : x(_x), y(_y), size(_size), capacity(_capacity) {}
 
     /**
      * @brief Tests if an AABB is fully contained within this node
@@ -65,10 +69,8 @@ struct BoxNode {
      * @brief Tests if an AABB overlaps this node's region
      */
     [[nodiscard]] bool nodeOverlaps(const AABBEntity &bb) const {
-        if (bb.maxx < x || bb.minx > x+size) { return false;
-}
-        if (bb.maxy < y || bb.miny > y+size) { return false;
-}
+        if (bb.maxx < x || bb.minx > x+size) { return false; }
+        if (bb.maxy < y || bb.miny > y+size) { return false; }
         return true;
     }
 
@@ -86,14 +88,9 @@ struct BoxNode {
 
     /**
      * @brief Inserts an AABB into the quadtree
-     * 
-     * If the node is full, it will be subdivided and objects redistributed
-     * to the appropriate child nodes. Objects that span multiple children
-     * remain in the parent node.
      */
     void insert(const AABBEntity &bb) {
-        if (!nodeOverlaps(bb)) { return;
-}
+        if (!nodeOverlaps(bb)) { return; }
 
         if (is_leaf && static_cast<int>(objects.size()) < capacity) {
             objects.push_back(bb);
@@ -106,12 +103,11 @@ struct BoxNode {
             objects.clear();
             for (auto &o : oldObjs) {
                 if (nodeContains(o)) {
-                    if      (nw->nodeContains(o)) { nw->insert(o);
-                    } else if (ne->nodeContains(o)) { ne->insert(o);
-                    } else if (sw->nodeContains(o)) { sw->insert(o);
-                    } else if (se->nodeContains(o)) { se->insert(o);
-                    } else { objects.push_back(o);
-}
+                    if      (nw->nodeContains(o)) { nw->insert(o); }
+                    else if (ne->nodeContains(o)) { ne->insert(o); }
+                    else if (sw->nodeContains(o)) { sw->insert(o); }
+                    else if (se->nodeContains(o)) { se->insert(o); }
+                    else { objects.push_back(o); }
                 } else {
                     objects.push_back(o);
                 }
@@ -119,12 +115,11 @@ struct BoxNode {
         }
 
         if (nodeContains(bb)) {
-            if      (nw->nodeContains(bb)) { nw->insert(bb);
-            } else if (ne->nodeContains(bb)) { ne->insert(bb);
-            } else if (sw->nodeContains(bb)) { sw->insert(bb);
-            } else if (se->nodeContains(bb)) { se->insert(bb);
-            } else { objects.push_back(bb);
-}
+            if      (nw->nodeContains(bb)) { nw->insert(bb); }
+            else if (ne->nodeContains(bb)) { ne->insert(bb); }
+            else if (sw->nodeContains(bb)) { sw->insert(bb); }
+            else if (se->nodeContains(bb)) { se->insert(bb); }
+            else { objects.push_back(bb); }
         } else {
             objects.push_back(bb);
         }
@@ -136,16 +131,12 @@ struct BoxNode {
     void query(double qminx, double qminy, double qmaxx, double qmaxy,
                std::vector<AABBEntity> &found) const
     {
-        if (qmaxx < x || qminx > x+size) { return;
-}
-        if (qmaxy < y || qminy > y+size) { return;
-}
+        if (qmaxx < x || qminx > x+size) { return; }
+        if (qmaxy < y || qminy > y+size) { return; }
 
         for (const auto &o : objects) {
-            if (o.maxx < qminx || o.minx > qmaxx) { continue;
-}
-            if (o.maxy < qminy || o.miny > qmaxy) { continue;
-}
+            if (o.maxx < qminx || o.minx > qmaxx) { continue; }
+            if (o.maxy < qminy || o.miny > qmaxy) { continue; }
             found.push_back(o);
         }
         if (!is_leaf) {
@@ -191,14 +182,10 @@ static void computeAABB(entt::registry &reg, entt::entity e,
         double const wx = pos.x + rx;
         double const wy = pos.y + ry;
 
-        if (wx < minx) { minx = wx;
-}
-        if (wx > maxx) { maxx = wx;
-}
-        if (wy < miny) { miny = wy;
-}
-        if (wy > maxy) { maxy = wy;
-}
+        if (wx < minx) { minx = wx; }
+        if (wx > maxx) { maxx = wx; }
+        if (wy < miny) { miny = wy; }
+        if (wy > maxy) { maxy = wy; }
     }
 }
 
@@ -209,10 +196,13 @@ static void computeAABB(entt::registry &reg, entt::entity e,
  * inserts AABBs for all entities with Position, Mass, and ParticlePhase
  * components.
  */
-static std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry) {
-    double const size = SimulatorConstants::UniverseSizeMeters;
-    double const extra = 500.0; // some buffer
-    auto root = std::make_unique<BoxNode>(-extra, -extra, size + 2*extra, 8);
+static std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry, 
+                                             const BroadphaseConfig& config,
+                                             const SystemConfig& sysConfig) 
+{
+    double const size = sysConfig.UniverseSizeMeters;
+    double const extra = config.boundaryBuffer;
+    auto root = std::make_unique<BoxNode>(-extra, -extra, size + 2*extra, config.quadtreeCapacity);
 
     auto view = registry.view<Components::Position, Components::Mass, Components::ParticlePhase>();
     for (auto e : view) {
@@ -231,15 +221,28 @@ static std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry) {
     return root;
 }
 
-std::vector<CandidatePair> broadPhase(entt::registry &registry)
+/**
+ * @brief Performs broad-phase collision detection using quadtree spatial partitioning
+ * 
+ * @param registry ECS registry containing physics entities
+ * @param sysConfig System configuration parameters
+ * @param bpConfig Broadphase specific configuration
+ * @return Vector of entity pairs that potentially collide
+ */
+std::vector<CandidatePair> Broadphase::detectCollisions(
+    entt::registry& registry,
+    const SystemConfig& sysConfig,
+    const BroadphaseConfig& bpConfig)
 {
     PROFILE_SCOPE("Broadphase");
-    // Build the quadtree spatial partitioning structure using only rigid/solid bodies
-    auto root = buildQuadtree(registry);
     
-    std::vector<CandidatePair> pairs;
+    // Build the quadtree spatial partitioning structure using only rigid/solid bodies
+    auto root = buildQuadtree(registry, bpConfig, sysConfig);
+    
+    std::vector<CandidatePair> candidatePairs;
+    candidatePairs.reserve(128);
+    
     std::vector<AABBEntity> found;
-    pairs.reserve(128);
     found.reserve(64);
 
     // For each entity, find potential collision partners by querying the quadtree with its AABB
@@ -277,13 +280,13 @@ std::vector<CandidatePair> broadPhase(entt::registry &registry)
             // Skip if both are boundaries
             if (!(aBoundary && bBoundary)) {
                 if (boxesOverlap(queryBB, f)) {
-                    pairs.push_back({ e, f.entity });
+                    candidatePairs.push_back({ e, f.entity });
                 }
             }
         }
     }
-
-    return pairs;
+    
+    return candidatePairs;
 }
 
 } // namespace RigidBodyCollision

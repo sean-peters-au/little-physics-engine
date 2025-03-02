@@ -5,12 +5,6 @@
 #include "nbody/systems/systems.hpp"
 
 namespace SimulatorConstants {
-
-    /**
-     * @brief The high-level simulation scenario types. 
-     * 
-     * If you want more (e.g. SOLAR_SYSTEM, MOLECULAR, etc.), add them here.
-     */
     enum class SimulationType {
         KEPLERIAN_DISK,
         RANDOM_POLYGONS,
@@ -18,50 +12,21 @@ namespace SimulatorConstants {
         FLUID_AND_POLYGONS
     };
 
-    // Truly global constants
+    // Fundamental constants (do not change by scenario):
     extern const double Pi;
-    extern const double RealG;  // Real gravitational constant 6.674e-11
+    extern const double RealG;
     extern const double Epsilon;
 
-    // Scenario-specific
-    extern double UniverseSizeMeters;
-    extern double TimeAcceleration;
-    extern double MetersPerPixel;
-    extern double SecondsPerTick;
-    extern double GravitationalSoftener;
-    extern double CollisionCoeffRestitution;
-    extern double DragCoeff;
-    extern double ParticleDensity;
-
-    extern int GridSize;
-    extern double CellSizePixels;
-
-    extern int ParticleCount;
-    extern double ParticleMassMean;
-    extern double ParticleMassStdDev;
-    extern double InitialVelocityFactor;
-
-    // Display constants
+    // Display constants that never change:
     extern const unsigned int ScreenLength;
     extern const unsigned int StepsPerSecond;
     extern const unsigned int Threads;
 
-    // Active ECS systems for the current scenario (populated by scenario config)
-    extern std::vector<Systems::SystemType> ActiveSystems;
+    // Utility conversions (optionally keep here if you like):
+    double pixelsToMeters(double pixels, double metersPerPixel);
+    double metersToPixels(double meters, double metersPerPixel);
 
-    /**
-     * @brief Reset or initialize scenario-dependent variables to safe defaults.
-     * @param type The scenario type (not used directly if you rely on scenario config).
-     */
-    void initializeConstants(SimulationType type);
-
-    // Utility conversions
-    double pixelsToMeters(double pixels);
-    double metersToPixels(double meters);
-    double simulationToRealTime(double ticks);
-    double realToSimulationTime(double seconds);
-
-    // If you want a function listing all possible scenarios:
+    // Scenario listing:
     std::vector<SimulationType> getAllScenarios();
     std::string getScenarioName(SimulationType scenario);
 }

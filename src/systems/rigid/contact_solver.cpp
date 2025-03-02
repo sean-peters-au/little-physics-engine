@@ -6,15 +6,6 @@
  * then solves it using a Projected Gauss-Seidel approach. It accelerates critical
  * vector math (dot products, cross products) with NEON intrinsics on the M2's ARM
  * architecture, reducing the time spent per iteration.
- *
- * Major changes for performance:
- * - Uses single-precision floats and NEON intrinsics for basic vector operations
- * - Minimizes scalar fallback by storing contact geometry in float arrays
- * - Maintains a batched approach to velocity updates
- * - Retains warm-start impulses and friction clamping logic
- *
- * Note: Converting double-precision data to float can have minor numerical side effects.
- *       In many physics simulations, this is acceptable if it significantly improves speed.
  */
 
 #include <arm_neon.h>
@@ -137,7 +128,6 @@ struct ContactRows
  *
  * @param registry ECS registry
  * @param manifolds The collision manifold references
- * @param frictionCoeff Global friction coefficient
  * @return Vector of ContactRows
  */
 static std::vector<ContactRows> buildConstraintRows(
@@ -454,8 +444,12 @@ static void solveLcpPgs(
  *
  * @param registry ECS registry
  * @param manager Contact manager
+ * @param config Contact solver configuration
  */
-void ContactSolver::solveContactConstraints(entt::registry &registry, ContactManager &manager)
+void ContactSolver::solveContactConstraints(
+    entt::registry &registry, 
+    ContactManager &manager,
+    const ContactSolverConfig &config)
 {
     PROFILE_SCOPE("ContactSolver (SIMD LCP)");
 
@@ -513,13 +507,11 @@ void ContactSolver::solveContactConstraints(entt::registry &registry, ContactMan
     }
 
     // Build constraints in float
-    float const frictionCoeff = 0.5F;
     auto contactRows = buildConstraintRows(registry, manifolds);
 
-    // Solve LCP
-    int const solverIterations = 10;
+    // Solve LCP using configuration values
     solveLcpPgs(contactRows, velocity, dofMap, invMassArr, invInertiaArr,
-                 frictionCoeff, solverIterations);
+                config.frictionCoeff, config.iterations);
 
     // Write velocities back to ECS
     for (int i = 0; i < bodyCount; i++) {

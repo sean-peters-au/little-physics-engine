@@ -1,3 +1,8 @@
+/**
+ * @file sleep.cpp
+ * @brief Implementation of sleep state management system
+ */
+
 #include "nbody/systems/sleep.hpp"
 #include "nbody/components/basic.hpp"
 #include "nbody/core/profile.hpp"
@@ -5,16 +10,25 @@
 #include <cmath>
 #include <iostream>
 
-// Thresholds
-static const double LINEAR_SLEEP_THRESHOLD = 0.5;
-static const double ANGULAR_SLEEP_THRESHOLD = 0.5;
-static const int SLEEP_FRAMES = 60;
+namespace Systems {
 
-void Systems::SleepSystem::update(entt::registry &registry) {
+SleepSystem::SleepSystem() {
+    // Initialize with default configurations
+}
+
+void SleepSystem::setSystemConfig(const SystemConfig& config) {
+    sysConfig = config;
+}
+
+void SleepSystem::setSleepConfig(const SleepConfig& config) {
+    sleepConfig = config;
+}
+
+void SleepSystem::update(entt::registry &registry) {
     PROFILE_SCOPE("SleepSystem");
 
-    auto view = registry.view<Components::Velocity, Components::AngularVelocity, Components::ParticlePhase, Components::Mass, Components::Sleep>();
-    for (auto [entity, vel, angVel, phase, mass, sleep] : view.each()) {
+    auto view = registry.view<Components::Velocity, Components::ParticlePhase, Components::Mass, Components::Sleep>();
+    for (auto [entity, vel, phase, mass, sleep] : view.each()) {
         if (phase.phase != Components::Phase::Solid && phase.phase != Components::Phase::Liquid && phase.phase != Components::Phase::Gas) {
             continue; // Only sleep typical bodies
         }
@@ -32,11 +46,11 @@ void Systems::SleepSystem::update(entt::registry &registry) {
             angularSpeed = std::fabs(angVel.omega);
         }
 
-        if (speed < LINEAR_SLEEP_THRESHOLD && angularSpeed < ANGULAR_SLEEP_THRESHOLD) {
+        if (speed < sleepConfig.linearSleepThreshold && angularSpeed < sleepConfig.angularSleepThreshold) {
             // Candidate for sleeping
             if (!sleep.asleep) {
                 sleep.sleepCounter++;
-                if (sleep.sleepCounter > SLEEP_FRAMES) {
+                if (sleep.sleepCounter > sleepConfig.sleepFramesThreshold) {
                     sleep.asleep = true;
                 }
             }
@@ -50,7 +64,14 @@ void Systems::SleepSystem::update(entt::registry &registry) {
         if (sleep.asleep) {
             vel.x = 0;
             vel.y = 0;
-            angVel.omega = 0;
+            
+            // Zero out angular velocity if present
+            if (registry.all_of<Components::AngularVelocity>(entity)) {
+                auto &angVel = registry.get<Components::AngularVelocity>(entity);
+                angVel.omega = 0;
+            }
         }
     }
 }
+
+} // namespace Systems

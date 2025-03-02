@@ -12,6 +12,18 @@
 
 namespace Systems {
 
+BasicGravitySystem::BasicGravitySystem() {
+    // Initialize with default configurations
+}
+
+void BasicGravitySystem::setSystemConfig(const SystemConfig& config) {
+    sysConfig = config;
+}
+
+void BasicGravitySystem::setGravityConfig(const GravityConfig& config) {
+    gravityConfig = config;
+}
+
 void BasicGravitySystem::update(entt::registry& registry) {
     PROFILE_SCOPE("BasicGravitySystem");
 
@@ -20,11 +32,11 @@ void BasicGravitySystem::update(entt::registry& registry) {
         registry.view<Components::SimulatorState>().front()
     );
 
-    // Standard gravitational acceleration (9.8 m/s²)
-    constexpr double GRAVITY = 9.8;
+    // Get the gravitational acceleration from config
+    double gravity = gravityConfig.gravitationalAcceleration;
 
     // Calculate time step with all scaling factors applied
-    double const dt = SimulatorConstants::SecondsPerTick * 
+    double const dt = sysConfig.SecondsPerTick * 
                 state.baseTimeAcceleration * 
                 state.timeScale;
 
@@ -35,7 +47,7 @@ void BasicGravitySystem::update(entt::registry& registry) {
     
     // Update velocities for entities not tagged as a Boundary
     for (auto [entity, phase, vel, mass] : view.each()) {
-        vel.y += GRAVITY * dt;
+        vel.y += gravity * dt;
     }
 }
 

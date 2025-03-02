@@ -12,8 +12,27 @@
 #pragma once
 
 #include <entt/entt.hpp>
+#include "nbody/systems/i_system.hpp"
 
 namespace Systems {
+
+/**
+ * @struct RigidBodyCollisionConfig
+ * @brief Configuration parameters specific to the collision system
+ */
+struct RigidBodyCollisionConfig {
+    // Number of velocity solver iterations
+    int solverIterations = 5;
+    
+    // Number of position correction passes
+    int positionalSolverIterations = 2;
+    
+    // Position correction strength factor
+    double baumgarte = 0.5;
+    
+    // Penetration tolerance before correction
+    double slop = 0.001;
+};
 
 /**
  * @brief Main collision system coordinating detection and resolution
@@ -26,21 +45,43 @@ namespace Systems {
  * - Supports both dynamic and static bodies
  * - Handles different particle phases (solid, fluid)
  */
-class RigidBodyCollisionSystem {
+class RigidBodyCollisionSystem : public ISystem {
 public:
+    /**
+     * @brief Constructor with default configuration
+     */
+    RigidBodyCollisionSystem();
+    
+    /**
+     * @brief Virtual destructor
+     */
+    ~RigidBodyCollisionSystem() override = default;
+    
     /**
      * @brief Executes the complete collision pipeline
      * 
      * @param registry ECS registry containing physics components
-     * @param solverIterations Number of velocity solver iterations (default: 5)
-     * @param positionalSolverIterations Number of position correction passes (default: 2)
-     * @param baumgarte Position correction strength factor (default: 0.5)
-     * @param slop Penetration tolerance before correction (default: 0.001)
      * 
      * @note The system automatically breaks early if no collisions are detected
      *       during broad-phase to avoid unnecessary computation
      */
-    static void update(entt::registry &registry);
+    void update(entt::registry &registry) override;
+    
+    /**
+     * @brief Sets the system configuration
+     * @param config System configuration parameters
+     */
+    void setSystemConfig(const SystemConfig& config) override;
+    
+    /**
+     * @brief Sets collision-specific configuration
+     * @param config Collision specific configuration
+     */
+    void setCollisionConfig(const RigidBodyCollisionConfig& config);
+
+private:
+    SystemConfig sysConfig;
+    RigidBodyCollisionConfig collisionConfig;
 };
 
 } // namespace Systems

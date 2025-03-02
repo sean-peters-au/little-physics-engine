@@ -29,11 +29,6 @@
 
 namespace RigidBodyCollision {
 
-// If you'd like to experiment with fewer or more passes
-static constexpr int PosSolverIterations = 3;
-static constexpr double BaumgarteFactor = 0.2; 
-static constexpr double PenetrationSlop = 0.001;
-
 /**
  * @brief Minimal data needed for position correction of a single contact point
  */
@@ -214,11 +209,14 @@ static void storeBodyData(entt::registry &registry, const std::vector<BodyData> 
  * @brief Performs one iteration of position correction over all contacts
  * 
  * Uses a Baumgarte-style position correction scheme that maintains relative body
- * positions while eliminating penetration. The correction is scaled by BAUMGARTE_FACTOR
+ * positions while eliminating penetration. The correction is scaled by baumgarte
  * to avoid overshooting.
  */
-static void solvePositionContactsOnce(std::vector<BodyData> &bodies,
-                                    const std::vector<PositionContact> &contacts)
+static void solvePositionContactsOnce(
+    std::vector<BodyData> &bodies,
+    const std::vector<PositionContact> &contacts,
+    double baumgarte,
+    double slop)
 {
     for (const auto &c : contacts) {
         int const iA = c.indexA;
@@ -238,14 +236,14 @@ static void solvePositionContactsOnce(std::vector<BodyData> &bodies,
             continue;
         }
 
-        double const pen = c.penetration - PenetrationSlop;
+        double const pen = c.penetration - slop;
         if (pen <= 0.0) {
             continue;
         }
 
         // normal from A to B
         Vector const n = c.normal.normalized();
-        double const corr = BaumgarteFactor * pen;
+        double const corr = baumgarte * pen;
 
         double const invMA = a.invMass;
         double const invMB = b.invMass;
@@ -296,8 +294,12 @@ static void solvePositionContactsOnce(std::vector<BodyData> &bodies,
  * 
  * @param registry ECS registry containing body components
  * @param manifold Collision data from previous frame
+ * @param config Position solver configuration
  */
-void PositionSolver::positionalSolver(entt::registry &registry, const CollisionManifold &manifold)
+void PositionSolver::positionalSolver(
+    entt::registry &registry, 
+    const CollisionManifold &manifold,
+    const PositionSolverConfig &config)
 {
     PROFILE_SCOPE("PositionSolver");
 
@@ -314,8 +316,8 @@ void PositionSolver::positionalSolver(entt::registry &registry, const CollisionM
     loadBodyData(registry, bodies);
 
     // Perform a few solver iterations
-    for (int i = 0; i < PosSolverIterations; i++) {
-        solvePositionContactsOnce(bodies, contacts);
+    for (int i = 0; i < config.iterations; i++) {
+        solvePositionContactsOnce(bodies, contacts, config.baumgarte, config.slop);
     }
 
     // Store results back in ECS

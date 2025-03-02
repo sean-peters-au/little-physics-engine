@@ -71,6 +71,14 @@ FluidSystem::~FluidSystem() {
     if (metalLibrary)          { metalLibrary->release(); }
 }
 
+void FluidSystem::setSystemConfig(const SystemConfig& config) {
+    sysConfig = config;
+}
+
+void FluidSystem::setFluidConfig(const FluidConfig& config) {
+    fluidConfig = config;
+}
+
 MTL::ComputePipelineState* FluidSystem::createPSO(const char* fnName, MTL::Library* lib) {
     if (!lib) {
         return nullptr;
@@ -559,14 +567,13 @@ void FluidSystem::writeBackRigidBodies(
         float invInertia = (rb.inertia > 1e-12f) ? (1.f / rb.inertia) : 0.f;
 
         // Apply force scaling or damping
-        constexpr float dampingFactor = 0.98f;
         rb.vx += rb.accumFx * invMass;
         rb.vy += rb.accumFy * invMass;
-        rb.vx *= dampingFactor;
-        rb.vy *= dampingFactor;
+        rb.vx *= fluidConfig.dampingFactor;
+        rb.vy *= fluidConfig.dampingFactor;
 
         rb.omega += rb.accumTorque * invInertia;
-        rb.omega *= dampingFactor;
+        rb.omega *= fluidConfig.dampingFactor;
 
         // store back accum=0 for next frame
         rb.accumFx = 0.f;
@@ -605,19 +612,19 @@ void FluidSystem::multiStepVelocityVerlet(
 {
     PROFILE_SCOPE("FluidSystem::multiStepVelocityVerlet");
 
-    float dt = float(SimulatorConstants::SecondsPerTick * SimulatorConstants::TimeAcceleration);
-    float subDt = dt / float(N_SUB_STEPS);
+    float dt = float(sysConfig.SecondsPerTick * sysConfig.TimeAcceleration);
+    float subDt = dt / float(fluidConfig.numSubSteps);
 
-    const int BLOCK_SIZE = 256;
+    const int BLOCK_SIZE = fluidConfig.threadsPerGroup;
     int numThreadgroups = (realCount + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    for (int step = 0; step < N_SUB_STEPS; step++) {
+    for (int step = 0; step < fluidConfig.numSubSteps; step++) {
         // A) velocityVerletHalf
         {
             GPUFluidParams params{};
-            params.restDensity = float(SimulatorConstants::ParticleDensity);
-            params.stiffness   = 50.f;
-            params.viscosity   = 0.03f;
+            params.restDensity = fluidConfig.restDensity;
+            params.stiffness   = fluidConfig.stiffness;
+            params.viscosity   = fluidConfig.viscosity;
             params.dt          = subDt;
             params.halfDt      = 0.5f * subDt;
             params.particleCount = static_cast<unsigned int>(paddedCount);
@@ -683,9 +690,9 @@ void FluidSystem::multiStepVelocityVerlet(
             params.gridMinY    = globalMinGy;
             params.gridDimX    = gridDimX;
             params.gridDimY    = gridDimY;
-            params.restDensity = float(SimulatorConstants::ParticleDensity);
-            params.stiffness   = 50.f;
-            params.viscosity   = 0.03f;
+            params.restDensity = fluidConfig.restDensity;
+            params.stiffness   = fluidConfig.stiffness;
+            params.viscosity   = fluidConfig.viscosity;
             params.dt          = subDt;
             params.halfDt      = 0.5f * subDt;
             params.particleCount = static_cast<unsigned int>(paddedCount);

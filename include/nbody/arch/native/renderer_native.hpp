@@ -24,6 +24,7 @@
 #include "nbody/components/basic.hpp"
 #include "nbody/components/sim.hpp"
 #include "nbody/core/constants.hpp"
+#include "nbody/core/coordinates.hpp"
 
 /**
  * @brief Hash function for pixel coordinates
@@ -99,8 +100,12 @@ public:
 
     /**
      * @brief Constructs renderer with given screen dimensions
+     * @param screenWidth Width of the window
+     * @param screenHeight Height of the window
+     * @param config System configuration for coordinate conversion
      */
-    Renderer(int screenWidth, int screenHeight);
+    Renderer(int screenWidth, int screenHeight, 
+             const SystemConfig& config = SystemConfig());
     ~Renderer();
 
     /**
@@ -216,6 +221,12 @@ public:
      */
     bool isDebugVisualization() const;
 
+    /**
+     * @brief Updates coordinate conversion parameters based on new config
+     * @param config The new system configuration
+     */
+    void updateCoordinates(const SystemConfig& config);
+
 private:
     /** The SFML render window */
     sf::RenderWindow window;
@@ -238,9 +249,12 @@ private:
     void renderAngularDebug(const entt::registry &registry);
     void renderPolygonDebug(const entt::registry &registry);
 
+    // Add coordinates converter
+    Simulation::Coordinates coordinates;
+
     /**
      * @brief Builds a map from pixel -> aggregated properties
      */
-    static std::unordered_map<std::pair<int,int>, PixelProperties, PixelCoordHash>
+    std::unordered_map<std::pair<int,int>, PixelProperties, PixelCoordHash>
     aggregateParticlesByPixel(const entt::registry& registry);
 };

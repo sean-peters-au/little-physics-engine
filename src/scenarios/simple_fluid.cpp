@@ -14,27 +14,19 @@
 #include "nbody/components/sph.hpp"
 #include "nbody/math/polygon.hpp"
 
-static constexpr int    KFluidParticleCount = 1000;    // number of fluid particles
-static constexpr double KFluidRestDensity   = 1000.0; // typical for water (kg/m^3 in a scaled sense)
-static constexpr double KFluidParticleMass  = 20.0;    // you can scale this as needed
-
-static constexpr double KWallThickness      = 0.1;    // thickness of bounding walls
-static constexpr double KWallMass           = 1e30;   // effectively infinite
-
-static constexpr double KFluidStaticFriction   = 0.0; 
-static constexpr double KFluidDynamicFriction  = 0.0;
-
 /**
  * @brief Helper: create a static boundary wall with infinite mass
  */
 static void makeBoundaryWall(entt::registry &registry,
                              double cx, double cy,
-                             double halfW, double halfH)
+                             double halfW, double halfH,
+                             double staticFriction, double dynamicFriction,
+                             double wallMass)
 {
     auto wallEnt = registry.create();
     registry.emplace<Components::Position>(wallEnt, cx, cy);
     registry.emplace<Components::Velocity>(wallEnt, 0.0, 0.0);
-    registry.emplace<Components::Mass>(wallEnt, KWallMass);
+    registry.emplace<Components::Mass>(wallEnt, wallMass);
     registry.emplace<Components::Boundary>(wallEnt);
 
     // Mark it as a "solid" boundary so it doesn't move
@@ -46,7 +38,7 @@ static void makeBoundaryWall(entt::registry &registry,
     sleepC.sleepCounter = 9999999;
 
     // Material friction (though for fluid, friction may be minimal)
-    registry.emplace<Components::Material>(wallEnt, KFluidStaticFriction, KFluidDynamicFriction);
+    registry.emplace<Components::Material>(wallEnt, staticFriction, dynamicFriction);
 
     // Build a rectangle polygon shape for collision walls
     PolygonShape poly;
@@ -65,9 +57,9 @@ static void makeBoundaryWall(entt::registry &registry,
  * @class SimpleFluidScenario
  * @brief Scenario with a rectangular tank of fluid.
  */
-ScenarioConfig SimpleFluidScenario::getConfig() const
+SystemConfig SimpleFluidScenario::getConfig() const
 {
-    ScenarioConfig cfg;
+    SystemConfig cfg;
     cfg.MetersPerPixel = 1e-2;
     cfg.UniverseSizeMeters = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
     cfg.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
@@ -75,14 +67,10 @@ ScenarioConfig SimpleFluidScenario::getConfig() const
     cfg.GridSize = 50;
     cfg.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
 
-    cfg.ParticleCount = KFluidParticleCount;
-    cfg.ParticleMassMean = KFluidParticleMass;
-    cfg.ParticleMassStdDev = 0.0; 
     cfg.GravitationalSoftener = 0.0;
     cfg.CollisionCoeffRestitution = 0.0; // for fluid, often near inelastic
     cfg.DragCoeff = 0.0;
-    cfg.ParticleDensity = KFluidRestDensity;
-    cfg.InitialVelocityFactor = 0.0; // no initial random velocity
+    cfg.ParticleDensity = 0.5;
 
     // We enable the "FLUID" system (defined below), plus movement, boundary, etc.
     cfg.activeSystems = {
@@ -99,26 +87,56 @@ ScenarioConfig SimpleFluidScenario::getConfig() const
 
 void SimpleFluidScenario::createEntities(entt::registry &registry) const
 {
-    double const sizeM = SimulatorConstants::UniverseSizeMeters;
+    SystemConfig cfg = getConfig();
+
+    double const sizeM = cfg.UniverseSizeMeters;
 
     // 1) Create bounding walls
-    double halfWall = KWallThickness * 0.5;
+    double halfWall = scenarioConfig.wallThickness * 0.5;
     // Left wall
-    makeBoundaryWall(registry, 0.0, sizeM*0.5, halfWall, sizeM*0.5);
+    makeBoundaryWall(registry, 
+                     0.0, 
+                     sizeM*0.5, 
+                     halfWall, 
+                     sizeM*0.5, 
+                     scenarioConfig.fluidStaticFriction, 
+                     scenarioConfig.fluidDynamicFriction,
+                     scenarioConfig.wallMass);
     // Right wall
-    makeBoundaryWall(registry, sizeM, sizeM*0.5, halfWall, sizeM*0.5);
+    makeBoundaryWall(registry, 
+                     sizeM, 
+                     sizeM*0.5, 
+                     halfWall, 
+                     sizeM*0.5,
+                     scenarioConfig.fluidStaticFriction, 
+                     scenarioConfig.fluidDynamicFriction,
+                     scenarioConfig.wallMass);
     // Bottom wall
-    makeBoundaryWall(registry, sizeM*0.5, 0.0, sizeM*0.5, halfWall);
+    makeBoundaryWall(registry, 
+                     sizeM*0.5, 
+                     0.0, 
+                     sizeM*0.5, 
+                     halfWall,
+                     scenarioConfig.fluidStaticFriction, 
+                     scenarioConfig.fluidDynamicFriction,
+                     scenarioConfig.wallMass);
     // Top wall
-    makeBoundaryWall(registry, sizeM*0.5, sizeM, sizeM*0.5, halfWall);
+    makeBoundaryWall(registry, 
+                     sizeM*0.5, 
+                     sizeM, 
+                     sizeM*0.5, 
+                     halfWall,
+                     scenarioConfig.fluidStaticFriction, 
+                     scenarioConfig.fluidDynamicFriction,
+                     scenarioConfig.wallMass);
 
     // 2) Spawn fluid particles using a grid-based layout with a small jitter 
     // to prevent particles from aligning perfectly.
-    int numParticles = KFluidParticleCount;
-    double x_min = sizeM * 0.3;
-    double x_max = sizeM * 0.7;
-    double y_min = sizeM * 0.3;
-    double y_max = sizeM * 0.7;
+    int numParticles = scenarioConfig.fluidParticleCount;
+    double x_min = sizeM * scenarioConfig.fluidRegionMinX;
+    double x_max = sizeM * scenarioConfig.fluidRegionMaxX;
+    double y_min = sizeM * scenarioConfig.fluidRegionMinY;
+    double y_max = sizeM * scenarioConfig.fluidRegionMaxY;
     double regionWidth = x_max - x_min;
     double regionHeight = y_max - y_min;
 
@@ -147,9 +165,11 @@ void SimpleFluidScenario::createEntities(entt::registry &registry) const
             auto e = registry.create();
             registry.emplace<Components::Position>(e, x, y);
             registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-            registry.emplace<Components::Mass>(e, KFluidParticleMass);
+            registry.emplace<Components::Mass>(e, scenarioConfig.fluidParticleMass);
             registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
-            registry.emplace<Components::Material>(e, KFluidStaticFriction, KFluidDynamicFriction);
+            registry.emplace<Components::Material>(e, 
+                                                  scenarioConfig.fluidStaticFriction, 
+                                                  scenarioConfig.fluidDynamicFriction);
 
             // Use a circle shape for fluid particles
             double const r = 0.02; 

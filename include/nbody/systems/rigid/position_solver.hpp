@@ -16,6 +16,20 @@
 namespace RigidBodyCollision {
 
 /**
+ * @brief Position solver configuration parameters
+ */
+struct PositionSolverConfig {
+    // Number of position correction passes
+    int iterations = 3;
+    
+    // Correction strength factor (0-1)
+    double baumgarte = 0.2;
+    
+    // Penetration tolerance before correction
+    double slop = 0.001;
+};
+
+/**
  * @brief Resolves remaining penetrations through position adjustments
  *
  * Implements a "split impulse" style position solver that:
@@ -32,16 +46,15 @@ public:
      * 
      * @param registry   ECS registry containing position and mass components
      * @param manifold   Collision manifold from narrow-phase
-     * @param iterations Number of correction passes to apply
-     * @param baumgarte  Correction strength factor (0-1)
-     * @param slop       Penetration tolerance before correction
+     * @param config     Position solver configuration parameters
      * 
      * @note Only solid phase particles participate in position correction
      *       to allow fluid-like behavior for non-solid phases
      */
     static void positionalSolver(
         entt::registry &registry,
-        const CollisionManifold &manifold
+        const CollisionManifold &manifold,
+        const PositionSolverConfig &config = PositionSolverConfig()
     );
 };
 
