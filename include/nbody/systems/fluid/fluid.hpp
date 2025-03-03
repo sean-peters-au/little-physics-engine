@@ -139,7 +139,7 @@ struct GPURigidBody {
  */
 struct FluidConfig {
     // Fluid properties
-    float restDensity = 1000.0f;  // Default density of fluid (kg/m³)
+    float restDensity = 0.5f;  // Default density of fluid (kg/m³)
     float stiffness = 50.0f;      // Pressure stiffness coefficient
     float viscosity = 0.03f;      // Viscosity coefficient
     float dampingFactor = 0.98f;  // Velocity damping for rigid bodies

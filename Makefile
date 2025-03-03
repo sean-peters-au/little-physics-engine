@@ -63,12 +63,14 @@ NATIVE_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/native/*.cpp)
 NATIVE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/native/%.o,$(BASE_SRCS)) \
                $(patsubst $(SRC_DIR)/arch/native/%.cpp,$(BUILD_DIR)/arch/native/%.o,$(NATIVE_ARCH_SRCS))
 NATIVE_SRCS := $(BASE_SRCS) $(NATIVE_ARCH_SRCS)
+NATIVE_DEPS := $(NATIVE_OBJS:.o=.d)  # Add dependency files
 
 # Define variables for wasm build
 WASM_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/wasm/*.cpp)
 WASM_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/wasm/%.o,$(BASE_SRCS)) \
              $(patsubst $(SRC_DIR)/arch/wasm/%.cpp,$(BUILD_DIR)/arch/wasm/%.o,$(WASM_ARCH_SRCS))
 WASM_SRCS := $(BASE_SRCS) $(WASM_ARCH_SRCS)
+WASM_DEPS := $(WASM_OBJS:.o=.d)  # Add dependency files
 
 native: CXX := clang++
 native: CXXFLAGS += $(NATIVE_CXXFLAGS) -Xpreprocessor -fopenmp -I$(LIBOMP_PREFIX)/include $(METAL_INCLUDE) $(METAL_CPP_INCLUDE)
@@ -96,22 +98,26 @@ wasm: directories copy_assets $(WASM_OBJS)
 $(BUILD_DIR)/native/%.o: $(SRC_DIR)/%.cpp
 	@echo "Compiling native $<"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD_DIR)/wasm/%.o: $(SRC_DIR)/%.cpp
 	@echo "Compiling wasm $<"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD_DIR)/arch/native/%.o: $(SRC_DIR)/arch/native/%.cpp
 	@echo "Compiling arch-specific native $<"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD_DIR)/arch/wasm/%.o: $(SRC_DIR)/arch/wasm/%.cpp
 	@echo "Compiling arch-specific wasm $<"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
+# Include generated dependency files if they exist
+-include $(NATIVE_DEPS)
+-include $(WASM_DEPS)
 
 # ---------------------------------------------------------------------------------
 # Test targets

@@ -14,7 +14,7 @@
 #include "nbody/components/sph.hpp"
 #include "nbody/math/polygon.hpp"
 
-static constexpr double KFluidParticleMass  = 20.0;    // keeping original mass
+static constexpr double KFluidParticleMass  = 20;
 
 /**
  * @brief Helper: create a static boundary wall with infinite mass

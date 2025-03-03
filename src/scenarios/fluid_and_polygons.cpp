@@ -65,7 +65,7 @@ SystemConfig FluidAndPolygonsScenario::getConfig() const
     cfg.GravitationalSoftener  = 0.0;
     cfg.CollisionCoeffRestitution = 0.2; // slight bounce for rigid shapes
     cfg.DragCoeff              = 0.0;
-    cfg.ParticleDensity        = 0.5;
+    cfg.ParticleDensity        = 100.0;
 
     // Use the same systems as random_polygons.cpp:
     cfg.activeSystems = {

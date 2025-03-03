@@ -12,8 +12,8 @@
 struct FluidAndPolygonsConfig {
     // Fluid parameters
     int fluidParticleCount = 1000;     // Number of fluid particles
-    double fluidParticleMass = 0.005;  // Mass per fluid particle
-    double fluidRestDensity = 1000.0;  // Typical rest density for water
+    double fluidParticleMass = 0.05;  // Mass per fluid particle
+    double fluidRestDensity = 100.0;  // Typical rest density for water
     double InitialVelocityFactor = 1.0;
     
     // Polygon parameters
