@@ -14,7 +14,7 @@
  */
 struct KeplerianDiskConfig {
     // Central body parameters
-    double centralMass = 1e25;  // Mass of the central body
+    double centralMass = 1e36;  // Mass of the central body
     
     // Disk geometry parameters
     double innerRadiusPixels = 100.0;  // Inner radius of the disk in pixels

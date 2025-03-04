@@ -144,8 +144,8 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
                                    const Components::SimulatorState& state) {
     if ((node == nullptr) || node->total_mass == 0.0) { return; }
     
-    double const dx = pos.x - node->center_of_mass_x;
-    double const dy = pos.y - node->center_of_mass_y;
+    double const dx = node->center_of_mass_x - pos.x;
+    double const dy = node->center_of_mass_y - pos.y;
     double const distSq = dx*dx + dy*dy + sysConfig.GravitationalSoftener * sysConfig.GravitationalSoftener;
     double const dist = std::sqrt(distSq);
 
