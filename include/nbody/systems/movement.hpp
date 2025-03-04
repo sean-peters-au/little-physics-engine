@@ -37,7 +37,7 @@ struct MovementConfig {
  *
  * Ignores entities that are marked as asleep or are boundaries.
  */
-class MovementSystem : public ISystem {
+class MovementSystem : public ConfigurableSystem<MovementConfig> {
 public:
     /**
      * @brief Constructor with default configuration
@@ -54,22 +54,6 @@ public:
      * @param registry EnTT registry containing entities and components
      */
     void update(entt::registry &registry) override;
-    
-    /**
-     * @brief Sets the system configuration
-     * @param config System configuration parameters
-     */
-    void setSystemConfig(const SystemConfig& config) override;
-    
-    /**
-     * @brief Sets movement-specific configuration
-     * @param config Movement specific configuration
-     */
-    void setMovementConfig(const MovementConfig& config);
-
-private:
-    SystemConfig sysConfig;
-    MovementConfig movementConfig;
 };
 
 } // namespace Systems

@@ -1,19 +1,16 @@
 /**
- * @file dampening_system.hpp
- * @brief System for applying linear and angular velocity damping
+ * @file dampening.hpp
+ * @brief System for applying velocity dampening to entities
  *
  * This system handles:
- * - Reducing entity velocity by a small factor each frame
- * - Reducing entity angular velocity if present
- * - Skips entities that are asleep
+ * - Applying linear velocity dampening
+ * - Skipping entities that are asleep
  *
  * Required components:
- * - Position (not strictly needed for damping, but included for consistency)
- * - Velocity (to apply linear damping)
+ * - Velocity (to modify)
  *
  * Optional components:
- * - AngularVelocity (to apply rotational damping)
- * - Sleep (to skip asleep entities)
+ * - Sleep (to check if entity is asleep)
  */
 
 #ifndef DAMPENING_SYSTEM_HPP
@@ -29,18 +26,18 @@ namespace Systems {
  * @brief Configuration parameters specific to the dampening system
  */
 struct DampeningConfig {
-    // Linear velocity dampening factor (per-frame multiplier)
-    double linearDampingFactor = 0.99;
-    
-    // Angular velocity dampening factor (per-frame multiplier)
-    double angularDampingFactor = 0.99;
+    // Damping factor applied to velocity each frame (0-1)
+    double linearDamping = 0.99;
 };
 
 /**
  * @class DampeningSystem
- * @brief Dampens linear and angular velocity for non-sleeping entities
+ * @brief Applies velocity dampening to entities
+ *
+ * Reduces velocity by a configurable factor each frame to simulate
+ * drag or friction effects. Ignores entities that are asleep.
  */
-class DampeningSystem : public ISystem {
+class DampeningSystem : public ConfigurableSystem<DampeningConfig> {
 public:
     /**
      * @brief Constructor with default configuration
@@ -53,26 +50,10 @@ public:
     ~DampeningSystem() override = default;
     
     /**
-     * @brief Applies velocity and angular velocity damping
+     * @brief Applies dampening to velocities of all non-sleeping entities
      * @param registry EnTT registry containing entities and components
      */
     void update(entt::registry &registry) override;
-    
-    /**
-     * @brief Sets the system configuration
-     * @param config System configuration parameters
-     */
-    void setSystemConfig(const SystemConfig& config) override;
-    
-    /**
-     * @brief Sets dampening-specific configuration
-     * @param config Dampening specific configuration
-     */
-    void setDampeningConfig(const DampeningConfig& config);
-
-private:
-    SystemConfig sysConfig;
-    DampeningConfig dampeningConfig;
 };
 
 } // namespace Systems

@@ -153,7 +153,7 @@ struct FluidConfig {
  * @class FluidSystem
  * @brief SPH-based fluid solver with GPU-accelerated neighbor search & rigid-fluid interactions.
  */
-class FluidSystem : public ISystem {
+class FluidSystem : public ConfigurableSystem<FluidConfig> {
 public:
     /**
      * @brief Constructor
@@ -170,18 +170,6 @@ public:
      * @param registry The ECS registry containing fluid entities & rigid bodies.
      */
     void update(entt::registry &registry) override;
-    
-    /**
-     * @brief Sets the system configuration
-     * @param config System configuration parameters
-     */
-    void setSystemConfig(const SystemConfig& config) override;
-    
-    /**
-     * @brief Sets fluid-specific configuration
-     * @param config Fluid specific configuration
-     */
-    void setFluidConfig(const FluidConfig& config);
 
 private:
     /**
@@ -353,10 +341,6 @@ private:
 
     // **New**: Impulse solver pipeline
     MTL::ComputePipelineState* rigidFluidImpulsePSO  = nullptr;
-    
-    // Configuration
-    SystemConfig sysConfig;
-    FluidConfig fluidConfig;
 };
 
 } // namespace Systems

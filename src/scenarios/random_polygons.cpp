@@ -185,6 +185,9 @@ void RandomPolygonsScenario::createEntities(entt::registry& registry) const {
       // Calculate moment of inertia for a circle: I = (1/2) * m * r²
       double I = 0.5 * mass * size * size;
       registry.emplace<Components::Inertia>(e, I);
+      
+      // Add CircleShape component
+      registry.emplace<CircleShape>(e, size);
     } else if (shape_type < (scenarioConfig.circlesFraction + scenarioConfig.regularFraction)) {
       // Regular polygon
       int sides = sides_dist(generator);

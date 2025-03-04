@@ -21,14 +21,6 @@ RigidBodyCollisionSystem::RigidBodyCollisionSystem() {
     // Initialize with default configurations
 }
 
-void RigidBodyCollisionSystem::setSystemConfig(const SystemConfig& config) {
-    sysConfig = config;
-}
-
-void RigidBodyCollisionSystem::setCollisionConfig(const RigidBodyCollisionConfig& config) {
-    collisionConfig = config;
-}
-
 void RigidBodyCollisionSystem::update(entt::registry &registry)
 {
     PROFILE_SCOPE("RigidBodyCollisionSystem");

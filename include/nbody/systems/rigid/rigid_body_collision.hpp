@@ -21,17 +21,7 @@ namespace Systems {
  * @brief Configuration parameters specific to the collision system
  */
 struct RigidBodyCollisionConfig {
-    // Number of velocity solver iterations
-    int solverIterations = 5;
-    
-    // Number of position correction passes
-    int positionalSolverIterations = 2;
-    
-    // Position correction strength factor
-    double baumgarte = 0.5;
-    
-    // Penetration tolerance before correction
-    double slop = 0.001;
+    double empty = 0.0;
 };
 
 /**
@@ -66,22 +56,6 @@ public:
      *       during broad-phase to avoid unnecessary computation
      */
     void update(entt::registry &registry) override;
-    
-    /**
-     * @brief Sets the system configuration
-     * @param config System configuration parameters
-     */
-    void setSystemConfig(const SystemConfig& config) override;
-    
-    /**
-     * @brief Sets collision-specific configuration
-     * @param config Collision specific configuration
-     */
-    void setCollisionConfig(const RigidBodyCollisionConfig& config);
-
-private:
-    SystemConfig sysConfig;
-    RigidBodyCollisionConfig collisionConfig;
 };
 
 } // namespace Systems

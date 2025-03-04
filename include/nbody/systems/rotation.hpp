@@ -1,20 +1,21 @@
 /**
- * @file rotation.hpp
- * @brief Angular motion system for physics simulation
+ * @file rotation_system.hpp
+ * @brief System for updating rotations based on angular velocity
  *
- * This system manages rotational dynamics of physics entities, including:
- * - Angular position updates based on velocity
- * - Angular velocity damping
- * - Angular velocity clamping
- * - Angle normalization to [0, 2π)
- * 
+ * This system handles:
+ * - Rotation updates using angular velocity
+ * - Skips entities that are asleep
+ *
  * Required components:
- * - AngularPosition (to modify)
- * - AngularVelocity (to read/modify)
+ * - Rotation (to modify)
+ * - AngularVelocity (to read)
+ *
+ * Optional components:
+ * - Sleep (to check if entity is asleep)
  */
 
-#ifndef ROTATION_SYSTEM_H
-#define ROTATION_SYSTEM_H
+#ifndef ROTATION_SYSTEM_HPP
+#define ROTATION_SYSTEM_HPP
 
 #include <entt/entt.hpp>
 #include "nbody/systems/i_system.hpp"
@@ -35,14 +36,11 @@ struct RotationConfig {
 
 /**
  * @class RotationSystem
- * @brief System that manages rotational motion
- * 
- * Implements angular physics with configurable:
- * - Angular damping per frame
- * - Speed limiting to a maximum value
- * - Angle wrapping to [0, 2π)
+ * @brief Updates entity rotations according to their angular velocity
+ *
+ * Ignores entities that are marked as asleep or are boundaries.
  */
-class RotationSystem : public ISystem {
+class RotationSystem : public ConfigurableSystem<RotationConfig> {
 public:
     /**
      * @brief Constructor with default configuration
@@ -55,26 +53,10 @@ public:
     ~RotationSystem() override = default;
     
     /**
-     * @brief Updates angular motion for all entities with rotation components
+     * @brief Updates rotations for all non-sleeping entities
      * @param registry EnTT registry containing entities and components
      */
     void update(entt::registry &registry) override;
-    
-    /**
-     * @brief Sets the system configuration
-     * @param config System configuration parameters
-     */
-    void setSystemConfig(const SystemConfig& config) override;
-    
-    /**
-     * @brief Sets rotation-specific configuration
-     * @param config Rotation specific configuration
-     */
-    void setRotationConfig(const RotationConfig& config);
-
-private:
-    SystemConfig sysConfig;
-    RotationConfig rotationConfig;
 };
 
 } // namespace Systems

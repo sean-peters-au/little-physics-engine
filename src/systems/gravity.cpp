@@ -16,14 +16,6 @@ BasicGravitySystem::BasicGravitySystem() {
     // Initialize with default configurations
 }
 
-void BasicGravitySystem::setSystemConfig(const SystemConfig& config) {
-    sysConfig = config;
-}
-
-void BasicGravitySystem::setGravityConfig(const GravityConfig& config) {
-    gravityConfig = config;
-}
-
 void BasicGravitySystem::update(entt::registry& registry) {
     PROFILE_SCOPE("BasicGravitySystem");
 
@@ -33,7 +25,7 @@ void BasicGravitySystem::update(entt::registry& registry) {
     );
 
     // Get the gravitational acceleration from config
-    double gravity = gravityConfig.gravitationalAcceleration;
+    double gravity = specificConfig.gravitationalAcceleration;
 
     // Calculate time step with all scaling factors applied
     double const dt = sysConfig.SecondsPerTick * 

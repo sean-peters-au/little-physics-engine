@@ -17,14 +17,6 @@ BarnesHutSystem::BarnesHutSystem() {
     // Initialize with default configurations
 }
 
-void BarnesHutSystem::setSystemConfig(const SystemConfig& config) {
-    sysConfig = config;
-}
-
-void BarnesHutSystem::setBarnesHutConfig(const BarnesHutConfig& config) {
-    bhConfig = config;
-}
-
 void BarnesHutSystem::update(entt::registry& registry) {
     PROFILE_SCOPE("BarnesHutSystem");
 
@@ -157,7 +149,7 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
     double const distSq = dx*dx + dy*dy + sysConfig.GravitationalSoftener * sysConfig.GravitationalSoftener;
     double const dist = std::sqrt(distSq);
 
-    if (node->is_leaf || (node->boundary_size * node->boundary_size / distSq < bhConfig.theta * bhConfig.theta)) {
+    if (node->is_leaf || (node->boundary_size * node->boundary_size / distSq < specificConfig.theta * specificConfig.theta)) {
         if (node->is_leaf && node->particle == entity) { return; }
 
         double const force = SimulatorConstants::RealG * node->total_mass * mass.value / distSq;

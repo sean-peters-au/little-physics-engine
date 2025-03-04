@@ -15,14 +15,6 @@ DampeningSystem::DampeningSystem() {
     // Initialize with default configurations
 }
 
-void DampeningSystem::setSystemConfig(const SystemConfig& config) {
-    sysConfig = config;
-}
-
-void DampeningSystem::setDampeningConfig(const DampeningConfig& config) {
-    dampeningConfig = config;
-}
-
 void DampeningSystem::update(entt::registry &registry) {
     PROFILE_SCOPE("DampeningSystem");
 
@@ -31,13 +23,14 @@ void DampeningSystem::update(entt::registry &registry) {
 
     for (auto [entity, pos, vel] : view.each()) {
         // Apply linear damping
-        vel.x *= dampeningConfig.linearDampingFactor;
-        vel.y *= dampeningConfig.linearDampingFactor;
+        vel.x *= specificConfig.linearDamping;
+        vel.y *= specificConfig.linearDamping;
 
         // If there's angular velocity, apply angular damping
         if (registry.any_of<Components::AngularVelocity>(entity)) {
             auto &angVel = registry.get<Components::AngularVelocity>(entity);
-            angVel.omega *= dampeningConfig.angularDampingFactor;
+            // Use the same damping factor for angular velocity
+            angVel.omega *= specificConfig.linearDamping;
             registry.replace<Components::AngularVelocity>(entity, angVel);
         }
 

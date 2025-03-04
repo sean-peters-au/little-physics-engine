@@ -46,7 +46,7 @@ struct BoundaryConfig {
  * Skips entities that are asleep. Applies a bounce damping
  * factor to velocity. Clamps velocity if it becomes too large.
  */
-class BoundarySystem : public ISystem {
+class BoundarySystem : public ConfigurableSystem<BoundaryConfig> {
 public:
     /**
      * @brief Constructor with default configuration
@@ -59,26 +59,10 @@ public:
     ~BoundarySystem() override = default;
     
     /**
-     * @brief Checks and processes boundary collisions
+     * @brief Updates positions and velocities of entities that hit boundaries
      * @param registry EnTT registry containing entities and components
      */
     void update(entt::registry &registry) override;
-    
-    /**
-     * @brief Sets the system configuration
-     * @param config System configuration parameters
-     */
-    void setSystemConfig(const SystemConfig& config) override;
-    
-    /**
-     * @brief Sets boundary-specific configuration
-     * @param config Boundary specific configuration
-     */
-    void setBoundaryConfig(const BoundaryConfig& config);
-
-private:
-    SystemConfig sysConfig;
-    BoundaryConfig boundaryConfig;
 };
 
 } // namespace Systems

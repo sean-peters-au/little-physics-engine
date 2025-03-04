@@ -14,8 +14,6 @@
 #include "nbody/components/sph.hpp"
 #include "nbody/math/polygon.hpp"
 
-static constexpr double KFluidParticleMass  = 20;
-
 /**
  * @brief Helper: create a static boundary wall with infinite mass
  */
@@ -151,7 +149,7 @@ void SimpleFluidScenario::createEntities(entt::registry &registry) const
             auto e = registry.create();
             registry.emplace<Components::Position>(e, x, y);
             registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-            registry.emplace<Components::Mass>(e, KFluidParticleMass);  // Still keeping original mass
+            registry.emplace<Components::Mass>(e, scenarioConfig.fluidParticleMass);
             registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
             registry.emplace<Components::Material>(e, 
                                                   scenarioConfig.fluidStaticFriction, 

@@ -14,8 +14,8 @@
  */
 struct RandomPolygonsConfig {
     // Shape type distribution
-    double circlesFraction = 0.0;       // Fraction of shapes that are circles
-    double regularFraction = 0.0;       // Fraction of shapes that are regular polygons
+    double circlesFraction = 0.1;       // Fraction of shapes that are circles
+    double regularFraction = 0.6;       // Fraction of shapes that are regular polygons
     // Random polygon fraction is 1.0 - circlesFraction - regularFraction
     
     // Size parameters

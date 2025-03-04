@@ -10,22 +10,14 @@ BoundarySystem::BoundarySystem() {
     // Initialize with default configurations
 }
 
-void BoundarySystem::setSystemConfig(const SystemConfig& config) {
-    sysConfig = config;
-}
-
-void BoundarySystem::setBoundaryConfig(const BoundaryConfig& config) {
-    boundaryConfig = config;
-}
-
 void BoundarySystem::update(entt::registry &registry) {
     PROFILE_SCOPE("BoundarySystem");
 
     // Convert margin to meters
-    const double marginM = boundaryConfig.marginPixels * sysConfig.MetersPerPixel;
+    const double marginM = specificConfig.marginPixels * sysConfig.MetersPerPixel;
     const double universeSizeM = sysConfig.UniverseSizeMeters;
-    const double bounceDamping = boundaryConfig.bounceDamping;
-    const double maxSpeed = boundaryConfig.maxSpeed;
+    const double bounceDamping = specificConfig.bounceDamping;
+    const double maxSpeed = specificConfig.maxSpeed;
 
     // Create a view with Position and Velocity components.
     auto view = registry.view<Components::Position, Components::Velocity>();
@@ -66,19 +58,14 @@ void BoundarySystem::update(entt::registry &registry) {
             bounced = true;
         }
 
+        // If we bounced and the velocity is too high, normalize it
         if (bounced) {
-            // Compute the squared speed first to avoid the costly sqrt call
-            double speedSq = (vel.x * vel.x) + (vel.y * vel.y);
-            if (speedSq > maxSpeed * maxSpeed) {
-                double speed    = std::sqrt(speedSq);
-                double invSpeed = maxSpeed / speed;
-                vel.x *= invSpeed;
-                vel.y *= invSpeed;
+            double speed = std::sqrt(vel.x * vel.x + vel.y * vel.y);
+            if (speed > maxSpeed) {
+                vel.x = (vel.x / speed) * maxSpeed;
+                vel.y = (vel.y / speed) * maxSpeed;
             }
         }
-
-        // Because we are modifying components in place,
-        // there is no need to call registry.replace.
     }
 }
 

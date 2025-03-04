@@ -18,6 +18,9 @@ namespace Systems {
  * Systems can be dynamically enabled/disabled and configured at runtime.
  */
 class ISystem {
+protected:
+    SystemConfig sysConfig;  // Common configuration all systems have
+
 public:
     /**
      * @brief Virtual destructor for proper cleanup of derived classes
@@ -36,7 +39,49 @@ public:
      * 
      * @param config System configuration parameters
      */
-    virtual void setSystemConfig(const SystemConfig& config) = 0;
+    virtual void setSystemConfig(const SystemConfig& config) {
+        sysConfig = config;
+    }
+    
+    /**
+     * @brief Gets the system configuration
+     * 
+     * @return Current system configuration
+     */
+    virtual const SystemConfig& getSystemConfig() const {
+        return sysConfig;
+    }
+};
+
+/**
+ * @brief Template for system-specific configurations
+ * 
+ * This template can be used by derived systems that need additional
+ * configuration beyond the basic SystemConfig.
+ */
+template<typename SpecificConfig>
+class ConfigurableSystem : public ISystem {
+protected:
+    SpecificConfig specificConfig;
+    
+public:
+    /**
+     * @brief Sets the system-specific configuration
+     * 
+     * @param config System-specific configuration parameters
+     */
+    void setSpecificConfig(const SpecificConfig& config) {
+        specificConfig = config;
+    }
+    
+    /**
+     * @brief Gets the system-specific configuration
+     * 
+     * @return Current system-specific configuration
+     */
+    const SpecificConfig& getSpecificConfig() const {
+        return specificConfig;
+    }
 };
 
 } // namespace Systems

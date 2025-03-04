@@ -26,7 +26,7 @@ namespace Systems {
      * The Barnes-Hut algorithm reduces the computational complexity from O(n²) to 
      * O(n log n) by approximating distant groups of bodies as single points.
      */
-    class BarnesHutSystem : public ISystem {
+    class BarnesHutSystem : public ConfigurableSystem<BarnesHutConfig> {
     public:
         /**
          * @brief Constructor with default configuration
@@ -43,18 +43,6 @@ namespace Systems {
          * @param registry EnTT registry containing entities and components
          */
         void update(entt::registry& registry) override;
-        
-        /**
-         * @brief Sets the system configuration
-         * @param config System configuration parameters
-         */
-        void setSystemConfig(const SystemConfig& config) override;
-        
-        /**
-         * @brief Sets Barnes-Hut specific configuration
-         * @param config Barnes-Hut specific configuration
-         */
-        void setBarnesHutConfig(const BarnesHutConfig& config);
 
         struct QuadTreeNode {
             const entt::registry* registry = nullptr;
@@ -100,9 +88,6 @@ namespace Systems {
                             Components::Velocity& vel,
                             const Components::Mass& mass,
                             const Components::SimulatorState& state);
-        
-        BarnesHutConfig bhConfig;
-        SystemConfig sysConfig;
     };
 }
 

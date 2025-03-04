@@ -36,7 +36,7 @@ struct GravityConfig {
  * 
  * Applies constant downward acceleration, scaled by simulation time parameters.
  */
-class BasicGravitySystem : public ISystem {
+class BasicGravitySystem : public ConfigurableSystem<GravityConfig> {
 public:
     /**
      * @brief Constructor with default configuration
@@ -53,22 +53,6 @@ public:
      * @param registry EnTT registry containing entities and components
      */
     void update(entt::registry& registry) override;
-    
-    /**
-     * @brief Sets the system configuration
-     * @param config System configuration parameters
-     */
-    void setSystemConfig(const SystemConfig& config) override;
-    
-    /**
-     * @brief Sets gravity-specific configuration
-     * @param config Gravity specific configuration
-     */
-    void setGravityConfig(const GravityConfig& config);
-
-private:
-    SystemConfig sysConfig;
-    GravityConfig gravityConfig;
 };
 
 } // namespace Systems

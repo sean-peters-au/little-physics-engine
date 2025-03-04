@@ -71,14 +71,6 @@ FluidSystem::~FluidSystem() {
     if (metalLibrary)          { metalLibrary->release(); }
 }
 
-void FluidSystem::setSystemConfig(const SystemConfig& config) {
-    sysConfig = config;
-}
-
-void FluidSystem::setFluidConfig(const FluidConfig& config) {
-    fluidConfig = config;
-}
-
 MTL::ComputePipelineState* FluidSystem::createPSO(const char* fnName, MTL::Library* lib) {
     if (!lib) {
         return nullptr;
@@ -569,11 +561,11 @@ void FluidSystem::writeBackRigidBodies(
         // Apply force scaling or damping
         rb.vx += rb.accumFx * invMass;
         rb.vy += rb.accumFy * invMass;
-        rb.vx *= fluidConfig.dampingFactor;
-        rb.vy *= fluidConfig.dampingFactor;
+        rb.vx *= getSpecificConfig().dampingFactor;
+        rb.vy *= getSpecificConfig().dampingFactor;
 
         rb.omega += rb.accumTorque * invInertia;
-        rb.omega *= fluidConfig.dampingFactor;
+        rb.omega *= getSpecificConfig().dampingFactor;
 
         // store back accum=0 for next frame
         rb.accumFx = 0.f;
@@ -612,19 +604,19 @@ void FluidSystem::multiStepVelocityVerlet(
 {
     PROFILE_SCOPE("FluidSystem::multiStepVelocityVerlet");
 
-    float dt = float(sysConfig.SecondsPerTick * sysConfig.TimeAcceleration);
-    float subDt = dt / float(fluidConfig.numSubSteps);
+    float dt = float(getSystemConfig().SecondsPerTick * getSystemConfig().TimeAcceleration);
+    float subDt = dt / float(getSpecificConfig().numSubSteps);
 
-    const int BLOCK_SIZE = fluidConfig.threadsPerGroup;
+    const int BLOCK_SIZE = getSpecificConfig().threadsPerGroup;
     int numThreadgroups = (realCount + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    for (int step = 0; step < fluidConfig.numSubSteps; step++) {
+    for (int step = 0; step < getSpecificConfig().numSubSteps; step++) {
         // A) velocityVerletHalf
         {
             GPUFluidParams params{};
-            params.restDensity = fluidConfig.restDensity;
-            params.stiffness   = fluidConfig.stiffness;
-            params.viscosity   = fluidConfig.viscosity;
+            params.restDensity = getSpecificConfig().restDensity;
+            params.stiffness   = getSpecificConfig().stiffness;
+            params.viscosity   = getSpecificConfig().viscosity;
             params.dt          = subDt;
             params.halfDt      = 0.5f * subDt;
             params.particleCount = static_cast<unsigned int>(paddedCount);
@@ -690,9 +682,9 @@ void FluidSystem::multiStepVelocityVerlet(
             params.gridMinY    = globalMinGy;
             params.gridDimX    = gridDimX;
             params.gridDimY    = gridDimY;
-            params.restDensity = fluidConfig.restDensity;
-            params.stiffness   = fluidConfig.stiffness;
-            params.viscosity   = fluidConfig.viscosity;
+            params.restDensity = getSpecificConfig().restDensity;
+            params.stiffness   = getSpecificConfig().stiffness;
+            params.viscosity   = getSpecificConfig().viscosity;
             params.dt          = subDt;
             params.halfDt      = 0.5f * subDt;
             params.particleCount = static_cast<unsigned int>(paddedCount);

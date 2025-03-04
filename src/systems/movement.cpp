@@ -10,14 +10,6 @@ MovementSystem::MovementSystem() {
     // Initialize with default configurations
 }
 
-void MovementSystem::setSystemConfig(const SystemConfig& config) {
-    sysConfig = config;
-}
-
-void MovementSystem::setMovementConfig(const MovementConfig& config) {
-    movementConfig = config;
-}
-
 void MovementSystem::update(entt::registry &registry) {
     PROFILE_SCOPE("MovementSystem");
 

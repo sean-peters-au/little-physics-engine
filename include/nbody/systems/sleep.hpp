@@ -1,19 +1,16 @@
 /**
  * @file sleep.hpp
- * @brief Sleep state management system for physics optimization
+ * @brief System for putting entities to sleep when they're not moving
  *
- * This system manages the sleep state of physics entities to optimize simulation
- * performance. Entities with very low linear and angular velocities can be put
- * to "sleep" to avoid unnecessary physics calculations.
- * 
+ * This system handles:
+ * - Checking if entities have been still for a while
+ * - Putting entities to sleep to save computation
+ * - Waking entities when they're disturbed
+ *
  * Required components:
- * - Velocity (to check linear motion)
- * - ParticlePhase (to identify eligible entities)
- * - Mass (required for physics bodies)
- * - Sleep (to store sleep state)
- * 
- * Optional components:
- * - AngularVelocity (to check rotational motion)
+ * - Position (to track movement)
+ * - Velocity (to check if moving)
+ * - Sleep (to modify sleep state)
  */
 
 #ifndef SLEEP_SYSTEM_HPP
@@ -29,26 +26,24 @@ namespace Systems {
  * @brief Configuration parameters specific to the sleep system
  */
 struct SleepConfig {
-    // Velocity threshold for sleep eligibility (units/s)
-    double linearSleepThreshold = 0.5;
+    // Velocity threshold below which an entity is considered "still"
+    double velocityThreshold = 0.01;
     
-    // Angular velocity threshold for sleep eligibility (rad/s)
-    double angularSleepThreshold = 0.5;
+    // Number of consecutive frames an entity must be "still" to sleep
+    int framesBeforeSleep = 60;
     
-    // Number of consecutive frames below threshold before sleeping
-    int sleepFramesThreshold = 60;
+    // Distance threshold for position change that wakes an entity
+    double wakeDistance = 0.1;
 };
 
 /**
  * @class SleepSystem
- * @brief System that manages entity sleep states
- * 
- * Sleep conditions:
- * - Linear velocity below threshold
- * - Angular velocity below threshold
- * - Conditions met for a configurable number of consecutive frames
+ * @brief Manages entity sleep states to optimize performance
+ *
+ * Puts entities to sleep when they haven't moved for a while,
+ * and wakes them when they're disturbed by other entities.
  */
-class SleepSystem : public ISystem {
+class SleepSystem : public ConfigurableSystem<SleepConfig> {
 public:
     /**
      * @brief Constructor with default configuration
@@ -61,26 +56,10 @@ public:
     ~SleepSystem() override = default;
     
     /**
-     * @brief Updates sleep states according to configuration
+     * @brief Updates sleep states for all entities
      * @param registry EnTT registry containing entities and components
      */
-    void update(entt::registry& registry) override;
-    
-    /**
-     * @brief Sets the system configuration
-     * @param config System configuration parameters
-     */
-    void setSystemConfig(const SystemConfig& config) override;
-    
-    /**
-     * @brief Sets sleep-specific configuration
-     * @param config Sleep specific configuration
-     */
-    void setSleepConfig(const SleepConfig& config);
-
-private:
-    SystemConfig sysConfig;
-    SleepConfig sleepConfig;
+    void update(entt::registry &registry) override;
 };
 
 } // namespace Systems
