@@ -1,0 +1,43 @@
+---
+description: Markdown Editing Guidelines
+globs: *.md *.markdown
+---
+# Markdown Editing Guidelines
+
+When editing or creating markdown documentation, follow these guidelines:
+
+## Code Snippets in Markdown
+
+- When proposing an edit to a markdown file, first decide if there will be code snippets in the markdown file.
+- If there are no code snippets, wrap the beginning and end of your answer in backticks and markdown as the language.
+- If there are code snippets, do not wrap the beginning and end of your answers inside backticks. Instead, output the markdown content as free text. You may use backticks for code snippets within the markdown content.
+
+## Example
+
+For a markdown file with code snippets:
+
+```markdown
+# Title
+
+This is some markdown content.
+
+```cpp
+int main() {
+    return 0;
+}
+```
+
+More markdown content.
+```
+
+For a markdown file without code snippets:
+
+```markdown
+# Title
+
+This is a markdown file with no code snippets.
+
+- Item 1
+- Item 2
+- Item 3
+``` 

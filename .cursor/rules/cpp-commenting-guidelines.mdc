@@ -1,0 +1,71 @@
+---
+description: C++ Commenting Guidelines
+globs: *.cpp *.hpp
+---
+# Code Documentation Guidelines
+
+We follow Google's cpp style guide for comments, with some project-specific adaptations.
+
+## File-Level Documentation
+
+Every file should start with (before even imports) a `@fileoverview` comment that explains its purpose:
+
+```cpp
+/**
+ * @file epa.hpp
+ * @brief Implementation of the Expanding Polytope Algorithm (EPA) for collision resolution
+ *
+ * The EPA algorithm is used after GJK has detected a collision to determine the
+ * penetration depth and collision normal. It works by expanding the final GJK
+ * simplex into a polytope that better approximates the Minkowski difference
+ * surface, allowing for precise contact information calculation.
+ * 
+ * This implementation:
+ * - Takes the final simplex from GJK as input
+ * - Iteratively expands the polytope until the closest edge to origin is found
+ * - Provides penetration depth and collision normal for collision response
+ */
+```
+
+## When to Comment
+
+### Required Comments
+- File overviews (`@fileoverview`)
+- Public interfaces and types in the domain layer
+- Complex logic or algorithms
+- Non-obvious edge cases or error conditions
+
+### Skip Comments When
+- Implementation is straightforward
+- Method name is self-documenting
+- Field names are self-explanatory
+- Re-documenting types that are already documented in the domain layer
+- Internal helper methods with clear purpose
+
+## Comment Style
+
+- Use /** for multi line comments
+
+### Method Documentation
+```cpp
+/**
+ * @brief Calculates the perpendicular distance from a line segment to the origin
+ * 
+ * @param a First point of the edge
+ * @param b Second point of the edge
+ * @param[out] normal The normalized perpendicular vector to the edge, pointing away from origin
+ * @return double The perpendicular distance from the edge to the origin
+ * 
+ * @note The normal is always oriented to point away from the origin
+ */
+```
+
+## Anti-Patterns
+
+- Avoid redundant comments that just repeat the code
+- Don't document implementation details in fileoverviews, class or function docstrings that might change
+- Skip obvious comments like `// increment counter`
+- Don't duplicate type information that cpp already provides
+- Don't use comment headers or pseudo underlines e.g. don't do this // ========
+- NEVER number your comments `// 1) do this` then `// 2) do that`
+- Do not include 'thinking' comments 
