@@ -4,7 +4,7 @@
  *        onto an HTML5 canvas (2D context) each frame.
  */
 
-#include "nbody/arch/wasm/renderer_wasm.hpp"
+#include "arch/wasm/renderer_wasm.hpp"
 
 #include <emscripten/html5.h>
 #include <emscripten/emscripten.h>
@@ -12,11 +12,11 @@
 #include <cmath>
 #include <algorithm>
 
-#include "nbody/core/constants.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/components/sim.hpp"
-#include "nbody/math/polygon.hpp"
-#include "nbody/systems/rigid_body_collision/contact_manager.hpp"
+#include "core/constants.hpp"
+#include "entities/entity_components.hpp"
+#include "entities/sim_components.hpp"
+#include "math/polygon.hpp"
+#include "systems/rigid_body_collision/contact_manager.hpp"
 
 WASMRenderer::WASMRenderer(int w, int h)
     : canvasWidth(w)

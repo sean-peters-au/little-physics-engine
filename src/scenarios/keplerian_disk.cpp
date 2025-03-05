@@ -4,10 +4,10 @@
 #include <iostream>
 
 #include "entt/entt.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/scenarios/keplerian_disk.hpp"
-#include "nbody/core/system_config.hpp"
+#include "core/constants.hpp"
+#include "entities/entity_components.hpp"
+#include "scenarios/keplerian_disk.hpp"
+#include "systems/system_config.hpp"
 
 SystemConfig KeplerianDiskScenario::getConfig() const {
     SystemConfig cfg;

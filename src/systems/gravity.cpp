@@ -3,11 +3,11 @@
  * @brief Implementation of basic gravitational force system
  */
 
-#include "nbody/core/profile.hpp"
-#include "nbody/systems/gravity.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/components/sim.hpp"
-#include "nbody/core/constants.hpp"
+#include "core/profile.hpp"
+#include "systems/gravity.hpp"
+#include "entities/entity_components.hpp"
+#include "entities/sim_components.hpp"
+#include "core/constants.hpp"
 #include <cmath>
 
 namespace Systems {

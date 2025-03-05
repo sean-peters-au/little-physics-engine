@@ -12,13 +12,13 @@
 #include <algorithm>
 #include <cmath>
 
-#include "nbody/arch/native/renderer_native.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/components/sim.hpp"
-#include "nbody/math/constants.hpp"
-#include "nbody/math/polygon.hpp"
-#include "nbody/systems/rigid/contact_manager.hpp"
+#include "arch/native/renderer_native.hpp"
+#include "core/constants.hpp"
+#include "entities/entity_components.hpp"
+#include "entities/sim_components.hpp"
+#include "math/constants.hpp"
+#include "math/polygon.hpp"
+#include "systems/rigid/contact_manager.hpp"
 
 static sf::Color densityGrayscale(const Renderer::PixelProperties &props) {
     // Example color mapper if you want a density-based grayscale

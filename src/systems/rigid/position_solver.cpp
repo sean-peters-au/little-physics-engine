@@ -21,11 +21,11 @@
 
 #include <entt/entt.hpp>
 
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/core/profile.hpp"
-#include "nbody/math/vector_math.hpp"
-#include "nbody/systems/rigid/position_solver.hpp"
-#include "nbody/systems/rigid/collision_data.hpp"
+#include "entities/entity_components.hpp"
+#include "core/profile.hpp"
+#include "math/vector_math.hpp"
+#include "systems/rigid/position_solver.hpp"
+#include "systems/rigid/collision_data.hpp"
 
 namespace RigidBodyCollision {
 

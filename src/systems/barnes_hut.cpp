@@ -2,12 +2,12 @@
 #include <iostream>
 #include <cmath>
 
-#include "nbody/core/constants.hpp"
-#include "nbody/components/sim.hpp"
-#include "nbody/systems/barnes_hut.hpp"
-#include "nbody/core/debug.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/core/profile.hpp"
+#include "core/constants.hpp"
+#include "entities/sim_components.hpp"
+#include "systems/barnes_hut.hpp"
+#include "core/debug.hpp"
+#include "entities/entity_components.hpp"
+#include "core/profile.hpp"
 
 namespace Systems {
 

@@ -1,4 +1,4 @@
-#include "nbody/core/debug.hpp"
+#include "core/debug.hpp"
 
 // Initialize static members
 double DebugStats::max_force = 0.0;

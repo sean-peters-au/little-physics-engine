@@ -5,14 +5,14 @@
 
 #include <vector>
 
-#include "nbody/core/profile.hpp"
-#include "nbody/systems/rigid/rigid_body_collision.hpp"
-#include "nbody/systems/rigid/broadphase.hpp"
-#include "nbody/systems/rigid/narrowphase.hpp"
-#include "nbody/systems/rigid/contact_manager.hpp"
-#include "nbody/systems/rigid/contact_solver.hpp"
-#include "nbody/systems/rigid/position_solver.hpp"
-#include "nbody/systems/rigid/collision_data.hpp"
+#include "core/profile.hpp"
+#include "systems/rigid/rigid_body_collision.hpp"
+#include "systems/rigid/broadphase.hpp"
+#include "systems/rigid/narrowphase.hpp"
+#include "systems/rigid/contact_manager.hpp"
+#include "systems/rigid/contact_solver.hpp"
+#include "systems/rigid/position_solver.hpp"
+#include "systems/rigid/collision_data.hpp"
 
 namespace Systems
 {

@@ -49,8 +49,8 @@ Follow these steps to integrate a new scenario into the simulation:
    Create a new class deriving from `IScenario` and implement both `getConfig()` and `createEntities()`. For example:
 
    ```cpp:src/scenarios/my_scenario.cpp
-   #include "nbody/core/i_scenario.hpp"
-   #include "nbody/core/scenario_config.hpp"
+   #include "core/i_scenario.hpp"
+   #include "core/scenario_config.hpp"
 
    class MyScenario final : public IScenario {
    public:

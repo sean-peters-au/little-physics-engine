@@ -1,5 +1,5 @@
-#include "nbody/systems/rigid/gjk.hpp"
-#include "nbody/math/polygon.hpp"
+#include "systems/rigid/gjk.hpp"
+#include "math/polygon.hpp"
 
 #include <cmath>
 #include <limits>

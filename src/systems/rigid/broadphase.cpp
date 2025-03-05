@@ -7,12 +7,12 @@
 #include <memory>
 #include <vector>
 
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/core/profile.hpp"
-#include "nbody/math/polygon.hpp"
-#include "nbody/systems/rigid/broadphase.hpp"
-#include "nbody/systems/rigid/collision_data.hpp"
+#include "entities/entity_components.hpp"
+#include "core/constants.hpp"
+#include "core/profile.hpp"
+#include "math/polygon.hpp"
+#include "systems/rigid/broadphase.hpp"
+#include "systems/rigid/collision_data.hpp"
 
 namespace RigidBodyCollision
 {

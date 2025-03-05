@@ -13,13 +13,12 @@
 #include <Foundation/Foundation.hpp>
 #include <entt/entt.hpp>
 
-#include "nbody/core/constants.hpp"
-#include "nbody/core/profile.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/components/sph.hpp"
-#include "nbody/math/polygon.hpp"
+#include "core/constants.hpp"
+#include "core/profile.hpp"
+#include "entities/entity_components.hpp"
+#include "math/polygon.hpp"
 
-#include "nbody/systems/fluid/fluid.hpp"
+#include "systems/fluid/fluid.hpp"
 
 namespace Systems {
 

@@ -13,11 +13,11 @@
 #include <vector>
 #include <chrono>
 
-#include "nbody/core/simulator.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/components/sim.hpp"
-#include "nbody/core/profile.hpp"
-#include "nbody/arch/wasm/renderer_wasm.hpp"
+#include "sim.hpp"
+#include "core/constants.hpp"
+#include "entities/sim_components.hpp"
+#include "core/profile.hpp"
+#include "arch/wasm/renderer_wasm.hpp"
 
 // Globals
 static ECSSimulator* g_simulator = nullptr;

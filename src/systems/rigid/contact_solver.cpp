@@ -15,11 +15,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include "nbody/systems/rigid/contact_solver.hpp"
-#include "nbody/systems/rigid/contact_manager.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/core/profile.hpp"
+#include "systems/rigid/contact_solver.hpp"
+#include "systems/rigid/contact_manager.hpp"
+#include "entities/entity_components.hpp"
+#include "core/constants.hpp"
+#include "core/profile.hpp"
 
 namespace RigidBodyCollision
 {

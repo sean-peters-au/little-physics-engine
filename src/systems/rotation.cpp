@@ -3,11 +3,11 @@
  * @brief Implementation of rotational motion system
  */
 
-#include "nbody/core/profile.hpp"
-#include "nbody/systems/rotation.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/components/sim.hpp"
-#include "nbody/core/constants.hpp"
+#include "core/profile.hpp"
+#include "systems/rotation.hpp"
+#include "entities/entity_components.hpp"
+#include "entities/sim_components.hpp"
+#include "core/constants.hpp"
 
 namespace Systems {
 

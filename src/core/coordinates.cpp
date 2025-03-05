@@ -3,7 +3,7 @@
  * @brief Implementation of coordinate conversion utilities
  */
 
-#include "nbody/core/coordinates.hpp"
+#include "core/coordinates.hpp"
 
 namespace Simulation {
 

@@ -14,11 +14,11 @@
 #include <iostream>
 #include <random>
 
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/math/polygon.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/core/system_config.hpp"
-#include "nbody/scenarios/random_polygons.hpp"
+#include "entities/entity_components.hpp"
+#include "math/polygon.hpp"
+#include "core/constants.hpp"
+#include "systems/system_config.hpp"
+#include "scenarios/random_polygons.hpp"
 
 /**
  * @brief Creates a static "wall" entity with infinite mass, minimal thickness,

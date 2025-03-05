@@ -9,11 +9,10 @@
 #include <ctime>
 #include <iostream>
 
-#include "nbody/scenarios/fluid_and_polygons.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/components/sph.hpp"
-#include "nbody/math/polygon.hpp"
+#include "scenarios/fluid_and_polygons.hpp"
+#include "core/constants.hpp"
+#include "entities/entity_components.hpp"
+#include "math/polygon.hpp"
 
 // Helper to create a static boundary wall with infinite mass
 static void makeWall(entt::registry &registry,

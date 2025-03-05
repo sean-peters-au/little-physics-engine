@@ -1,4 +1,4 @@
-#include "nbody/core/constants.hpp"
+#include "core/constants.hpp"
 #include <cmath>
 #include <vector>
 

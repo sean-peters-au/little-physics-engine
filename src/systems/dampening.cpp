@@ -3,10 +3,10 @@
  * @brief Implementation of velocity dampening system
  */
 
-#include "nbody/core/profile.hpp"
-#include "nbody/systems/dampening.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/core/constants.hpp"
+#include "core/profile.hpp"
+#include "systems/dampening.hpp"
+#include "entities/entity_components.hpp"
+#include "core/constants.hpp"
 #include <cmath>
 
 namespace Systems {

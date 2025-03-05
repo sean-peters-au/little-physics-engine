@@ -3,9 +3,9 @@
  * @brief Implementation of sleep state management system
  */
 
-#include "nbody/systems/sleep.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/core/profile.hpp"
+#include "systems/sleep.hpp"
+#include "entities/entity_components.hpp"
+#include "core/profile.hpp"
 
 #include <cmath>
 #include <iostream>

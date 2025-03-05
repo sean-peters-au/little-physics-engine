@@ -1,7 +1,7 @@
-#include "nbody/systems/boundary.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/core/profile.hpp"
+#include "systems/boundary.hpp"
+#include "entities/entity_components.hpp"
+#include "core/constants.hpp"
+#include "core/profile.hpp"
 #include <cmath>
 
 namespace Systems {

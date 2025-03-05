@@ -8,11 +8,10 @@
 #include <ctime>
 #include <iostream>
 
-#include "nbody/scenarios/simple_fluid.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/components/sph.hpp"
-#include "nbody/math/polygon.hpp"
+#include "scenarios/simple_fluid.hpp"
+#include "core/constants.hpp"
+#include "entities/entity_components.hpp"
+#include "math/polygon.hpp"
 
 /**
  * @brief Helper: create a static boundary wall with infinite mass

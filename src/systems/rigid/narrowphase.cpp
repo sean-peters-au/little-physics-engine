@@ -11,15 +11,15 @@
 #include <entt/entt.hpp>
 #include <iostream>
 
-#include "nbody/systems/rigid/narrowphase.hpp"
-#include "nbody/systems/rigid/collision_data.hpp"
-#include "nbody/systems/rigid/gjk.hpp"
-#include "nbody/systems/rigid/epa.hpp"
-#include "nbody/entities/entity_components.hpp"
-#include "nbody/core/constants.hpp"
-#include "nbody/math/vector_math.hpp"
-#include "nbody/math/polygon.hpp"
-#include "nbody/core/profile.hpp"
+#include "systems/rigid/narrowphase.hpp"
+#include "systems/rigid/collision_data.hpp"
+#include "systems/rigid/gjk.hpp"
+#include "systems/rigid/epa.hpp"
+#include "entities/entity_components.hpp"
+#include "core/constants.hpp"
+#include "math/vector_math.hpp"
+#include "math/polygon.hpp"
+#include "core/profile.hpp"
 
 namespace RigidBodyCollision {
 

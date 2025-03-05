@@ -11,7 +11,7 @@
 #include <utility>
 #include <cmath>
 
-#include "nbody/systems/rigid/contact_manager.hpp"
+#include "systems/rigid/contact_manager.hpp"
 
 namespace RigidBodyCollision {
 

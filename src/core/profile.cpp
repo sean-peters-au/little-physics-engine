@@ -3,7 +3,7 @@
  * @brief Implementation of the profiling system described in profile.hpp
  */
 
-#include "nbody/core/profile.hpp"
+#include "core/profile.hpp"
 #include <algorithm>
 #include <iomanip>
 #include <iostream>

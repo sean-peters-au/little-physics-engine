@@ -16,8 +16,8 @@
 #include <chrono>
 #include <SFML/System.hpp>
 
-#include "nbody/core/profile.hpp"
-#include "nbody/core/sim_manager.hpp"
+#include "core/profile.hpp"
+#include "sim_manager.hpp"
 
 int main(int /*unused*/, char** /*unused*/)
 {
