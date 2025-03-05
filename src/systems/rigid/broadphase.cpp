@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/core/profile.hpp"
 #include "nbody/math/polygon.hpp"

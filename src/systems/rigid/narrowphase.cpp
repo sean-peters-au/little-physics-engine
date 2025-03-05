@@ -15,7 +15,7 @@
 #include "nbody/systems/rigid/collision_data.hpp"
 #include "nbody/systems/rigid/gjk.hpp"
 #include "nbody/systems/rigid/epa.hpp"
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/math/vector_math.hpp"
 #include "nbody/math/polygon.hpp"

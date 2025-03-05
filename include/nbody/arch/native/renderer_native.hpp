@@ -21,7 +21,7 @@
 #include <SFML/Graphics.hpp>
 #include <memory>
 
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/components/sim.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/core/coordinates.hpp"

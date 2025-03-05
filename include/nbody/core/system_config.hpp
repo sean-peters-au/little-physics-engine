@@ -19,6 +19,4 @@ struct SystemConfig {
 
     int GridSize;
     double CellSizePixels;
-
-    std::vector<Systems::SystemType> activeSystems;
 };

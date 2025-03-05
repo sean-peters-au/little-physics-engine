@@ -11,7 +11,7 @@
 
 #include "nbody/scenarios/fluid_and_polygons.hpp"
 #include "nbody/core/constants.hpp"
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/components/sph.hpp"
 #include "nbody/math/polygon.hpp"
 
@@ -66,18 +66,6 @@ SystemConfig FluidAndPolygonsScenario::getConfig() const
     cfg.CollisionCoeffRestitution = 0.2; // slight bounce for rigid shapes
     cfg.DragCoeff              = 0.0;
     cfg.ParticleDensity        = 100.0;
-
-    // Use the same systems as random_polygons.cpp:
-    cfg.activeSystems = {
-        Systems::SystemType::FLUID,
-        Systems::SystemType::BASIC_GRAVITY,
-        Systems::SystemType::COLLISION,
-        Systems::SystemType::DAMPENING,
-        Systems::SystemType::SLEEP,
-        Systems::SystemType::ROTATION,
-        Systems::SystemType::MOVEMENT,
-        Systems::SystemType::BOUNDARY,
-    };
 
     return cfg;
 }

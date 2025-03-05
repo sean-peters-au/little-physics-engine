@@ -5,7 +5,7 @@
 
 #include "nbody/core/profile.hpp"
 #include "nbody/systems/gravity.hpp"
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/components/sim.hpp"
 #include "nbody/core/constants.hpp"
 #include <cmath>

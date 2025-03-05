@@ -1,0 +1,13 @@
+CompileFlags:
+  CompilationDatabase: build/
+Index:
+  Background: Build
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+InlayHints:
+  Enabled: Yes
+  ParameterNames: Yes
+  DeducedTypes: Yes
+Hover:
+  ShowAKA: Yes 

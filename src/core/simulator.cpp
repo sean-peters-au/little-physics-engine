@@ -8,7 +8,7 @@
 #include <iostream>
 #include <memory>
 
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/components/sim.hpp"
 #include "nbody/core/profile.hpp"
 #include "nbody/core/system_config.hpp"
@@ -66,38 +66,15 @@ void ECSSimulator::createSystems() {
   // Clear previous systems
   systems.clear();
   
-  // Create new system instances based on active systems in the config
-  for (auto systemType : currentConfig.activeSystems) {
-    switch (systemType) {
-      case Systems::SystemType::FLUID:
-        systems.push_back(std::make_unique<Systems::FluidSystem>());
-        break;
-      case Systems::SystemType::COLLISION:
-        systems.push_back(std::make_unique<Systems::RigidBodyCollisionSystem>());
-        break;
-      case Systems::SystemType::BASIC_GRAVITY:
-        systems.push_back(std::make_unique<Systems::BasicGravitySystem>());
-        break;
-      case Systems::SystemType::ROTATION:
-        systems.push_back(std::make_unique<Systems::RotationSystem>());
-        break;
-      case Systems::SystemType::BARNES_HUT:
-        systems.push_back(std::make_unique<Systems::BarnesHutSystem>());
-        break;
-      case Systems::SystemType::MOVEMENT:
-        systems.push_back(std::make_unique<Systems::MovementSystem>());
-        break;
-      case Systems::SystemType::SLEEP:
-        systems.push_back(std::make_unique<Systems::SleepSystem>());
-        break;
-      case Systems::SystemType::DAMPENING:
-        systems.push_back(std::make_unique<Systems::DampeningSystem>());
-        break;
-      case Systems::SystemType::BOUNDARY:
-        systems.push_back(std::make_unique<Systems::BoundarySystem>());
-        break;
-    }
-  }
+  systems.push_back(std::make_unique<Systems::FluidSystem>());
+  // systems.push_back(std::make_unique<Systems::RigidBodyCollisionSystem>());
+  systems.push_back(std::make_unique<Systems::BasicGravitySystem>());
+  systems.push_back(std::make_unique<Systems::BarnesHutSystem>());
+  // systems.push_back(std::make_unique<Systems::DampeningSystem>());
+  systems.push_back(std::make_unique<Systems::RotationSystem>());
+  systems.push_back(std::make_unique<Systems::MovementSystem>());
+  systems.push_back(std::make_unique<Systems::SleepSystem>());
+  systems.push_back(std::make_unique<Systems::BoundarySystem>());
   
   // Configure all systems
   for (auto& system : systems) {

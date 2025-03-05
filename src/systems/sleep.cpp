@@ -4,7 +4,7 @@
  */
 
 #include "nbody/systems/sleep.hpp"
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/core/profile.hpp"
 
 #include <cmath>

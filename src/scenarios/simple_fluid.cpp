@@ -10,7 +10,7 @@
 
 #include "nbody/scenarios/simple_fluid.hpp"
 #include "nbody/core/constants.hpp"
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/components/sph.hpp"
 #include "nbody/math/polygon.hpp"
 
@@ -72,16 +72,6 @@ SystemConfig SimpleFluidScenario::getConfig() const
     cfg.CollisionCoeffRestitution = 0.0; // for fluid, often near inelastic
     cfg.DragCoeff = 0.0;
     cfg.ParticleDensity = scenarioConfig.fluidRestDensity;  // Using config for rest density
-
-    // We enable the "FLUID" system (defined below), plus movement, boundary, etc.
-    cfg.activeSystems = {
-        Systems::SystemType::FLUID,
-        Systems::SystemType::BASIC_GRAVITY,
-        Systems::SystemType::DAMPENING,
-        Systems::SystemType::SLEEP,
-        Systems::SystemType::MOVEMENT,
-        Systems::SystemType::BOUNDARY,
-    };
 
     return cfg;
 }

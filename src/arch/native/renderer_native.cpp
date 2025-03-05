@@ -14,7 +14,7 @@
 
 #include "nbody/arch/native/renderer_native.hpp"
 #include "nbody/core/constants.hpp"
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/components/sim.hpp"
 #include "nbody/math/constants.hpp"
 #include "nbody/math/polygon.hpp"

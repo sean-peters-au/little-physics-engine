@@ -3,13 +3,13 @@
 namespace Components {
     // Smoothing length for SPH kernels
     struct SmoothingLength {
-        double value;
+        double value = 1.0;
         explicit SmoothingLength(double v = 1.0) : value(v) {}
     };
 
     // Speed of sound (for isothermal or simple EOS)
     struct SpeedOfSound {
-        double value;
+        double value = 1000.0;
         explicit SpeedOfSound(double v = 1000.0) : value(v) {}
     };
 

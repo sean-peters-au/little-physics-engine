@@ -14,7 +14,7 @@
 #include <iostream>
 #include <random>
 
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/math/polygon.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/core/system_config.hpp"
@@ -83,17 +83,6 @@ SystemConfig RandomPolygonsScenario::getConfig() const {
   cfg.CollisionCoeffRestitution = 0.2;
   cfg.DragCoeff = 0.0;
   cfg.ParticleDensity = 0.5;
-
-  // Active ECS systems for this scenario
-  cfg.activeSystems = {
-      Systems::SystemType::FLUID,
-      Systems::SystemType::BASIC_GRAVITY,
-      Systems::SystemType::COLLISION,
-      Systems::SystemType::DAMPENING,
-      Systems::SystemType::SLEEP,
-      Systems::SystemType::ROTATION,
-      Systems::SystemType::MOVEMENT,
-  };
 
   return cfg;
 }

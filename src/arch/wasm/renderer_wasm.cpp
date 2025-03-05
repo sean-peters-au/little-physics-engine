@@ -13,7 +13,7 @@
 #include <algorithm>
 
 #include "nbody/core/constants.hpp"
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/components/sim.hpp"
 #include "nbody/math/polygon.hpp"
 #include "nbody/systems/rigid_body_collision/contact_manager.hpp"

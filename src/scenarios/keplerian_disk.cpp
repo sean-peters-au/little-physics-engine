@@ -5,7 +5,7 @@
 
 #include "entt/entt.hpp"
 #include "nbody/core/constants.hpp"
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/scenarios/keplerian_disk.hpp"
 #include "nbody/core/system_config.hpp"
 
@@ -29,12 +29,6 @@ SystemConfig KeplerianDiskScenario::getConfig() const {
     cfg.CollisionCoeffRestitution = 0.5;
     cfg.DragCoeff = 1e-11;
     cfg.ParticleDensity = 0.1;
-
-    // ECS systems
-    cfg.activeSystems = {
-        Systems::SystemType::BARNES_HUT,
-        Systems::SystemType::MOVEMENT
-    };
 
     return cfg;
 }

@@ -2,9 +2,8 @@
 
 #include <entt/entt.hpp>
 #include <memory>
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/components/sim.hpp"
-#include "nbody/core/constants.hpp"
 #include "nbody/systems/i_system.hpp"
 
 namespace Systems {

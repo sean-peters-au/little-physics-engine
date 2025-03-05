@@ -18,7 +18,7 @@
 #include <random>
 #include <vector>
 
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/math/vector_math.hpp"
 
 /**

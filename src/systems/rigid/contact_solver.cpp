@@ -17,7 +17,7 @@
 
 #include "nbody/systems/rigid/contact_solver.hpp"
 #include "nbody/systems/rigid/contact_manager.hpp"
-#include "nbody/components/basic.hpp"
+#include "nbody/entities/entity_components.hpp"
 #include "nbody/core/constants.hpp"
 #include "nbody/core/profile.hpp"
 
