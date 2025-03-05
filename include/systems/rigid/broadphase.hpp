@@ -28,6 +28,9 @@ struct BroadphaseConfig {
     
     // Extra buffer size around universe for boundary objects
     double boundaryBuffer = 500.0;
+
+    // Threshold for small particle collisions (percent of universe size)
+    double smallParticleThreshold = 0.01;
 };
 
 /**

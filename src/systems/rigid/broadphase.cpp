@@ -3,6 +3,7 @@
  * @brief Implementation of the broad-phase collision detection system
  */
 
+#include <iostream>
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -278,10 +279,14 @@ std::vector<CandidatePair> Broadphase::detectCollisions(
             bool const bBoundary = registry.any_of<Components::Boundary>(f.entity);
             
             // Skip if both are boundaries
-            if (!(aBoundary && bBoundary)) {
-                if (boxesOverlap(queryBB, f)) {
-                    candidatePairs.push_back({ e, f.entity });
-                }
+            bool const bothBoundaries = aBoundary && bBoundary;
+            bool const boxOverlap = boxesOverlap(queryBB, f);
+            // Skip if both particles are smaller than the threshold (percent of universe size)
+            double const querySize = std::max(queryBB.maxx - queryBB.minx, queryBB.maxy - queryBB.miny);
+            double const fSize = std::max(f.maxx - f.minx, f.maxy - f.miny);
+            bool const bothSmall = querySize < bpConfig.smallParticleThreshold && fSize < bpConfig.smallParticleThreshold;
+            if (!bothBoundaries && !bothSmall && boxOverlap) {
+                candidatePairs.push_back({ e, f.entity });
             }
         }
     }

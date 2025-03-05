@@ -1,6 +1,6 @@
 /**
  * @file movement_system.hpp
- * @brief System for updating positions based on velocity
+ * @brief System for updating positions of solid and gas particles based on velocity
  *
  * This system handles:
  * - Position updates using velocity

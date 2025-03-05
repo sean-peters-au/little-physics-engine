@@ -20,7 +20,6 @@ namespace SimulatorConstants {
     // Display constants that never change:
     extern const unsigned int ScreenLength;
     extern const unsigned int StepsPerSecond;
-    extern const unsigned int Threads;
 
     // Utility conversions (optionally keep here if you like):
     double pixelsToMeters(double pixels, double metersPerPixel);

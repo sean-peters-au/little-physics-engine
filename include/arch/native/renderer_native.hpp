@@ -129,6 +129,7 @@ public:
 
     void renderSolidParticles(const entt::registry& registry);
     void renderFluidParticles(const entt::registry& registry);
+    void renderGasParticles(const entt::registry& registry);
 
     /**
      * @brief Renders the current FPS in top-left corner

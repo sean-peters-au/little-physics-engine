@@ -55,8 +55,8 @@ public:
     void createEntities(entt::registry &registry) const override;
 
 private:
-    static void createCentralBody(entt::registry &registry, const KeplerianDiskConfig& config);
-    static void createKeplerianDisk(entt::registry &registry, const KeplerianDiskConfig& config);
+    static void createCentralBody(entt::registry &registry, const KeplerianDiskConfig& config, const SystemConfig& sysConfig);
+    static void createKeplerianDisk(entt::registry &registry, const KeplerianDiskConfig& config, const SystemConfig& sysConfig);
     
     KeplerianDiskConfig diskConfig;
 };

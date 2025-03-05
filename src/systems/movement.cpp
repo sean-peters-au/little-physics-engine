@@ -27,7 +27,7 @@ void MovementSystem::update(entt::registry &registry) {
         
         // Hack: Only move solids; skip if ParticlePhase exists and is not Solid
         if (registry.any_of<Components::ParticlePhase>(entity)) {
-            if (registry.get<Components::ParticlePhase>(entity).phase != Components::Phase::Solid) {
+            if (registry.get<Components::ParticlePhase>(entity).phase == Components::Phase::Liquid) {
                 continue; // Skip fluids (or any non-solid phase)
             }
         }

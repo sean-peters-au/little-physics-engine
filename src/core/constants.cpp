@@ -11,7 +11,6 @@ namespace SimulatorConstants {
     // Display
     const unsigned int ScreenLength   = 600;
     const unsigned int StepsPerSecond = 120;
-    const unsigned int Threads        = 1;
 
     double pixelsToMeters(double pixels, double metersPerPixel) {
         return pixels * metersPerPixel;

@@ -107,6 +107,7 @@ Renderer::aggregateParticlesByPixel(const entt::registry &registry)
 void Renderer::renderParticles(const entt::registry &registry) {
     renderSolidParticles(registry);
     renderFluidParticles(registry);
+    renderGasParticles(registry);
 }
 
 void Renderer::renderSolidParticles(const entt::registry &registry) {
@@ -754,6 +755,39 @@ void Renderer::renderFluidParticles(const entt::registry &registry) {
         window.draw(fluidSprite, states);
     } else {
         window.draw(fluidSprite);
+    }
+}
+
+void Renderer::renderGasParticles(const entt::registry &registry) {
+    // Retrieve gas particles with the appropriate components
+    auto view = registry.view<Components::Position, Components::Shape, CircleShape, Components::Color, Components::ParticlePhase>();
+    for (auto entity : view) {
+        const auto &phase = view.get<Components::ParticlePhase>(entity);
+        if (phase.phase != Components::Phase::Gas)
+            continue;
+        
+        const auto &position = view.get<Components::Position>(entity);
+        const auto &shape    = view.get<Components::Shape>(entity);
+        const auto &circle   = view.get<CircleShape>(entity);
+        const auto &color    = view.get<Components::Color>(entity);
+        
+        // Only render circles for gas-phase
+        if (shape.type != Components::ShapeType::Circle)
+            continue;
+        
+        // Create a circle to represent the gas particle
+        float pixelRadius = static_cast<float>(coordinates.metersToPixels(circle.radius));
+        
+        sf::CircleShape gasCircle(pixelRadius);
+        // Semi-transparent with original color
+        gasCircle.setFillColor(sf::Color(color.r, color.g, color.b, 180));
+        gasCircle.setOrigin(pixelRadius, pixelRadius);
+        
+        float pixelX = static_cast<float>(coordinates.metersToPixels(position.x));
+        float pixelY = static_cast<float>(coordinates.metersToPixels(position.y));
+        gasCircle.setPosition(pixelX, pixelY);
+        
+        window.draw(gasCircle);
     }
 }
 
