@@ -3,8 +3,7 @@
  * @brief Manages UI state, event handling, and calls into Renderer for UI drawing.
  */
 
-#ifndef UI_MANAGER_HPP
-#define UI_MANAGER_HPP
+#pragma once
 
 #include <vector>
 #include <string>
@@ -85,5 +84,3 @@ private:
      */
     void computeHighlights(int mouseX, int mouseY);
 };
-
-#endif // UI_MANAGER_HPP

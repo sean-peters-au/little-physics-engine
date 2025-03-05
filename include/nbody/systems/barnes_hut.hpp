@@ -1,5 +1,4 @@
-#ifndef BARNES_HUT_SYSTEM_H
-#define BARNES_HUT_SYSTEM_H
+#pragma once
 
 #include <entt/entt.hpp>
 #include <memory>
@@ -89,6 +88,4 @@ namespace Systems {
                             const Components::Mass& mass,
                             const Components::SimulatorState& state);
     };
-}
-
-#endif 
+} 

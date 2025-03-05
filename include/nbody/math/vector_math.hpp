@@ -9,8 +9,7 @@
  * - Utility functions for common mathematical operations
  */
 
-#ifndef VECTOR_MATH_H
-#define VECTOR_MATH_H
+#pragma once
 
 // Forward declarations
 class Vector;
@@ -261,5 +260,3 @@ public:
  * @return Vector Position of closest point on line segment ab
  */
 Vector closestPointOnLine(const Vector &a, const Vector &b, const Vector &p);
-
-#endif

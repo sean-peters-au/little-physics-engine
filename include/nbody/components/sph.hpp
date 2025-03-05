@@ -1,5 +1,4 @@
-#ifndef COMPONENTS_SPH_H
-#define COMPONENTS_SPH_H
+#pragma once
 
 namespace Components {
     // Smoothing length for SPH kernels
@@ -22,5 +21,3 @@ namespace Components {
         double acc_y = 0.0;
     };
 }
-
-#endif

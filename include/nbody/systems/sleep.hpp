@@ -13,8 +13,7 @@
  * - Sleep (to modify sleep state)
  */
 
-#ifndef SLEEP_SYSTEM_HPP
-#define SLEEP_SYSTEM_HPP
+#pragma once
 
 #include <entt/entt.hpp>
 #include "nbody/systems/i_system.hpp"
@@ -63,5 +62,3 @@ public:
 };
 
 } // namespace Systems
-
-#endif

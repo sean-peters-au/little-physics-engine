@@ -12,8 +12,7 @@
  * - Collision detection between mixed shapes (polygon-circle)
  */
 
-#ifndef GJK_HPP
-#define GJK_HPP
+#pragma once
 
 #include <optional>
 #include <vector>
@@ -42,5 +41,3 @@ struct Simplex {
  *       enclose the origin in the Minkowski difference space
  */
 bool GJKIntersect(const ShapeData &A, const ShapeData &B, Simplex &simplex);
-
-#endif

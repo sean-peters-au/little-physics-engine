@@ -3,8 +3,7 @@
  * @brief Main simulator class managing an ECS registry and scenario lifecycle.
  */
 
-#ifndef SIMULATOR_HPP
-#define SIMULATOR_HPP
+#pragma once
 
 #include <entt/entt.hpp>
 #include <memory>
@@ -83,5 +82,3 @@ class ECSSimulator {
    */
   void createSystems();
 };
-
-#endif  // SIMULATOR_HPP

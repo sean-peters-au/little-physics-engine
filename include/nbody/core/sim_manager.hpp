@@ -3,8 +3,7 @@
  * @brief High-level controller for simulation execution and UI orchestration.
  */
 
-#ifndef SIM_MANAGER_HPP
-#define SIM_MANAGER_HPP
+#pragma once
 
 #include <memory>
 
@@ -86,5 +85,3 @@ class SimManager {
   bool paused;
   bool stepFrame;
 };
-
-#endif  // SIM_MANAGER_HPP

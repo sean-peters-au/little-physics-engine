@@ -13,8 +13,7 @@
  * - Provides penetration depth and collision normal for collision response
  */
 
-#ifndef EPA_HPP
-#define EPA_HPP
+#pragma once
 
 #include <optional>
 #include "gjk.hpp"
@@ -42,5 +41,3 @@ struct EPAResult {
  *       and provided a valid simplex containing exactly 3 points
  */
 std::optional<EPAResult> EPA(const ShapeData &A, const ShapeData &B, const Simplex &simplex);
-
-#endif

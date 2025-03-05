@@ -1,5 +1,4 @@
-#ifndef DEBUG_HELPERS_H
-#define DEBUG_HELPERS_H
+#pragma once
 
 #include <iostream>
 
@@ -82,6 +81,4 @@ private:
     static double avg_dy;
     static int moving_particles;
     static int total_particles;
-};
-
-#endif 
+}; 

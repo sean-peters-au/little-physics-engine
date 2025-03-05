@@ -13,8 +13,7 @@
  * - Mass (for future extensibility)
  */
 
-#ifndef BASIC_GRAVITY_SYSTEM_H
-#define BASIC_GRAVITY_SYSTEM_H
+#pragma once
 
 #include <entt/entt.hpp>
 #include "nbody/systems/i_system.hpp"
@@ -56,5 +55,3 @@ public:
 };
 
 } // namespace Systems
-
-#endif

@@ -3,8 +3,7 @@
  * @brief Manages scenario selection, maintains a list of available scenarios, and creates scenario objects.
  */
 
-#ifndef SCENARIO_MANAGER_HPP
-#define SCENARIO_MANAGER_HPP
+#pragma once
 
 #include <memory>
 #include <string>
@@ -57,5 +56,3 @@ class ScenarioManager {
   SimulatorConstants::SimulationType currentScenario =
       SimulatorConstants::SimulationType::KEPLERIAN_DISK;
 };
-
-#endif  // SCENARIO_MANAGER_HPP

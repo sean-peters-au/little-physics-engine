@@ -16,8 +16,7 @@
  * - Sleep (to skip asleep entities)
  */
 
-#ifndef BOUNDARY_SYSTEM_HPP
-#define BOUNDARY_SYSTEM_HPP
+#pragma once
 
 #include <entt/entt.hpp>
 #include "nbody/systems/i_system.hpp"
@@ -66,5 +65,3 @@ public:
 };
 
 } // namespace Systems
-
-#endif 

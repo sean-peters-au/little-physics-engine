@@ -1,5 +1,4 @@
-#ifndef COMPONENTS_BASIC_HPP
-#define COMPONENTS_BASIC_HPP
+#pragma once
 
 #include <cstdint>
 #include "nbody/math/vector_math.hpp" // for Position, Vector
@@ -84,5 +83,3 @@ namespace Components {
     };
 
 } // namespace Components
-
-#endif

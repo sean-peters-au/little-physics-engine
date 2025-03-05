@@ -13,8 +13,7 @@
  * - Sleep (to check if entity is asleep)
  */
 
-#ifndef DAMPENING_SYSTEM_HPP
-#define DAMPENING_SYSTEM_HPP
+#pragma once
 
 #include <entt/entt.hpp>
 #include "nbody/systems/i_system.hpp"
@@ -57,5 +56,3 @@ public:
 };
 
 } // namespace Systems
-
-#endif 

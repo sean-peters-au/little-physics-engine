@@ -36,34 +36,13 @@ static ShapeData extractShapeData(entt::registry &reg, entt::entity e) {
     if (reg.any_of<Components::AngularPosition>(e)) {
         sd.angle = reg.get<Components::AngularPosition>(e).angle;
     }
-    
-    const auto& shape = reg.get<Components::Shape>(e);
-    
-    if (shape.type == Components::ShapeType::Circle) {
+    if (reg.any_of<CircleShape>(e)) {
         sd.isCircle = true;
-        sd.radius = shape.size;
-        
-        // If we have a CircleShape component, use its radius
-        if (reg.any_of<CircleShape>(e)) {
-            sd.radius = reg.get<CircleShape>(e).radius;
-        }
+        sd.radius = reg.get<CircleShape>(e).radius;
     } else {
         sd.isCircle = false;
         sd.radius = 0.0;
-        
-        // Safely check for PolygonShape component
-        if (reg.any_of<PolygonShape>(e)) {
-            sd.poly = reg.get<PolygonShape>(e);
-        } else {
-            // Create a default polygon if none exists
-            sd.poly.type = Components::ShapeType::Polygon;
-            // Add a simple square as fallback
-            double size = shape.size;
-            sd.poly.vertices.emplace_back(-size, -size);
-            sd.poly.vertices.emplace_back(size, -size);
-            sd.poly.vertices.emplace_back(size, size);
-            sd.poly.vertices.emplace_back(-size, size);
-        }
+        sd.poly = reg.get<PolygonShape>(e);
     }
     return sd;
 }

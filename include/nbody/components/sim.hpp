@@ -1,5 +1,4 @@
-#ifndef COMPONENTS_SIMULATOR_STATE_HPP
-#define COMPONENTS_SIMULATOR_STATE_HPP
+#pragma once
 
 namespace Components {
     struct SimulatorState {
@@ -11,5 +10,3 @@ namespace Components {
             , timeScale(1.0) {}
     };
 }
-
-#endif
