@@ -1,4 +1,23 @@
-#pragma once
+/**
+ * @file sleep.hpp
+ * @brief Sleep state management system for physics optimization
+ *
+ * This system manages the sleep state of physics entities to optimize simulation
+ * performance. Entities with very low linear and angular velocities can be put
+ * to "sleep" to avoid unnecessary physics calculations.
+ * 
+ * Required components:
+ * - Velocity (to check linear motion)
+ * - ParticlePhase (to identify eligible entities)
+ * - Mass (required for physics bodies)
+ * - Sleep (to store sleep state)
+ * 
+ * Optional components:
+ * - AngularVelocity (to check rotational motion)
+ */
+
+#ifndef SLEEP_SYSTEM_HPP
+#define SLEEP_SYSTEM_HPP
 
 #include <entt/entt.hpp>
 #include "systems/i_system.hpp"
@@ -10,30 +29,31 @@ namespace Systems {
  * @brief Configuration parameters specific to the sleep system
  */
 struct SleepConfig {
-    // Linear velocity threshold below which an entity is considered for sleep
+    // Velocity threshold for sleep eligibility (units/s)
     double linearSleepThreshold = 0.5;
-    // Angular velocity threshold below which an entity is considered for sleep
+    
+    // Angular velocity threshold for sleep eligibility (rad/s)
     double angularSleepThreshold = 0.5;
-    // Number of consecutive frames an entity must be "still" to sleep
-    int framesBeforeSleep = 60;
-    // (Optional) Distance threshold for position-based waking (unused here)
-    double wakeDistance = 0.1;
+    
+    // Number of consecutive frames below threshold before sleeping
+    int sleepFramesThreshold = 60;
 };
 
 /**
  * @class SleepSystem
- * @brief Manages entity sleep states to optimize performance
- *
- * Checks both linear and angular velocities. If both are under their respective
- * thresholds for `framesBeforeSleep` consecutive frames, the entity is put to sleep.
- * Once asleep, velocity is zeroed out until the entity is awakened by a higher velocity.
+ * @brief System that manages entity sleep states
+ * 
+ * Sleep conditions:
+ * - Linear velocity below threshold
+ * - Angular velocity below threshold
+ * - Conditions met for a configurable number of consecutive frames
  */
-class SleepSystem : public ConfigurableSystem<SleepConfig> {
+class SleepSystem : public ISystem {
 public:
     /**
      * @brief Constructor with default configuration
      */
-    SleepSystem() = default;
+    SleepSystem();
     
     /**
      * @brief Virtual destructor
@@ -41,10 +61,28 @@ public:
     ~SleepSystem() override = default;
     
     /**
-     * @brief Updates sleep states for all entities
+     * @brief Updates sleep states according to configuration
      * @param registry EnTT registry containing entities and components
      */
-    void update(entt::registry &registry) override;
+    void update(entt::registry& registry) override;
+    
+    /**
+     * @brief Sets the system configuration
+     * @param config System configuration parameters
+     */
+    void setSystemConfig(const SystemConfig& config) override;
+    
+    /**
+     * @brief Sets sleep-specific configuration
+     * @param config Sleep specific configuration
+     */
+    void setSleepConfig(const SleepConfig& config);
+
+private:
+    SystemConfig sysConfig;
+    SleepConfig sleepConfig;
 };
 
 } // namespace Systems
+
+#endif
