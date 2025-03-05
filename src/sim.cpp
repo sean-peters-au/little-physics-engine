@@ -66,10 +66,10 @@ void ECSSimulator::createSystems() {
   // Clear previous systems
   systems.clear();
   
-  // systems.push_back(std::make_unique<Systems::FluidSystem>());
+  systems.push_back(std::make_unique<Systems::FluidSystem>());
   systems.push_back(std::make_unique<Systems::RigidBodyCollisionSystem>());
   systems.push_back(std::make_unique<Systems::BasicGravitySystem>());
-  // systems.push_back(std::make_unique<Systems::BarnesHutSystem>());
+  systems.push_back(std::make_unique<Systems::BarnesHutSystem>());
   systems.push_back(std::make_unique<Systems::DampeningSystem>());
   systems.push_back(std::make_unique<Systems::RotationSystem>());
   systems.push_back(std::make_unique<Systems::MovementSystem>());
