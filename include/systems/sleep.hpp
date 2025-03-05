@@ -1,18 +1,3 @@
-/**
- * @file sleep.hpp
- * @brief System for putting entities to sleep when they're not moving
- *
- * This system handles:
- * - Checking if entities have been still for a while
- * - Putting entities to sleep to save computation
- * - Waking entities when they're disturbed
- *
- * Required components:
- * - Position (to track movement)
- * - Velocity (to check if moving)
- * - Sleep (to modify sleep state)
- */
-
 #pragma once
 
 #include <entt/entt.hpp>
@@ -25,13 +10,13 @@ namespace Systems {
  * @brief Configuration parameters specific to the sleep system
  */
 struct SleepConfig {
-    // Velocity threshold below which an entity is considered "still"
-    double velocityThreshold = 0.01;
-    
+    // Linear velocity threshold below which an entity is considered for sleep
+    double linearSleepThreshold = 0.5;
+    // Angular velocity threshold below which an entity is considered for sleep
+    double angularSleepThreshold = 0.5;
     // Number of consecutive frames an entity must be "still" to sleep
     int framesBeforeSleep = 60;
-    
-    // Distance threshold for position change that wakes an entity
+    // (Optional) Distance threshold for position-based waking (unused here)
     double wakeDistance = 0.1;
 };
 
@@ -39,15 +24,16 @@ struct SleepConfig {
  * @class SleepSystem
  * @brief Manages entity sleep states to optimize performance
  *
- * Puts entities to sleep when they haven't moved for a while,
- * and wakes them when they're disturbed by other entities.
+ * Checks both linear and angular velocities. If both are under their respective
+ * thresholds for `framesBeforeSleep` consecutive frames, the entity is put to sleep.
+ * Once asleep, velocity is zeroed out until the entity is awakened by a higher velocity.
  */
 class SleepSystem : public ConfigurableSystem<SleepConfig> {
 public:
     /**
      * @brief Constructor with default configuration
      */
-    SleepSystem();
+    SleepSystem() = default;
     
     /**
      * @brief Virtual destructor

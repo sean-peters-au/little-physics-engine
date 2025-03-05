@@ -1,8 +1,3 @@
-/**
- * @file sleep.cpp
- * @brief Implementation of sleep state management system
- */
-
 #include "systems/sleep.hpp"
 #include "entities/entity_components.hpp"
 #include "core/profile.hpp"
@@ -12,55 +7,63 @@
 
 namespace Systems {
 
-SleepSystem::SleepSystem() {
-    // Initialize with default configurations
-}
-
 void SleepSystem::update(entt::registry &registry) {
     PROFILE_SCOPE("SleepSystem");
 
-    auto view = registry.view<Components::Velocity, Components::ParticlePhase, Components::Mass, Components::Sleep>();
+    // View of all entities that might sleep
+    auto view = registry.view<
+        Components::Velocity,
+        Components::ParticlePhase,
+        Components::Mass,
+        Components::Sleep
+    >();
     for (auto [entity, vel, phase, mass, sleep] : view.each()) {
-        if (phase.phase != Components::Phase::Solid && phase.phase != Components::Phase::Liquid && phase.phase != Components::Phase::Gas) {
-            continue; // Only sleep typical bodies
+        // Skip if phase is not a typical body
+        if (phase.phase != Components::Phase::Solid
+            && phase.phase != Components::Phase::Liquid
+            && phase.phase != Components::Phase::Gas)
+        {
+            continue;
         }
-        if (registry.all_of<Components::Boundary>(entity)) {
-            continue; // Don't sleep boundaries
+        // Skip boundaries
+        if (registry.any_of<Components::Boundary>(entity)) {
+            continue;
         }
 
         // Compute linear speed
-        double const speed = std::sqrt(vel.x*vel.x + vel.y*vel.y);
+        double const speed = std::sqrt(vel.x * vel.x + vel.y * vel.y);
 
-        // Check angular velocity if exists
+        // Check angular velocity if the entity has it
         double angularSpeed = 0.0;
-        if (registry.all_of<Components::AngularVelocity>(entity)) {
+        if (registry.any_of<Components::AngularVelocity>(entity)) {
             auto &angVel = registry.get<Components::AngularVelocity>(entity);
             angularSpeed = std::fabs(angVel.omega);
         }
 
-        if (speed < specificConfig.velocityThreshold) {
-            // Candidate for sleeping
+        // If both linear and angular speeds are below thresholds, increment counter
+        if (speed < specificConfig.linearSleepThreshold &&
+            angularSpeed < specificConfig.angularSleepThreshold)
+        {
             if (!sleep.asleep) {
-                sleep.sleepCounter++;
+                ++sleep.sleepCounter;
                 if (sleep.sleepCounter > specificConfig.framesBeforeSleep) {
                     sleep.asleep = true;
                 }
             }
         } else {
-            // Entity is active, reset sleep counter
+            // Reset counter if above threshold
             sleep.sleepCounter = 0;
             sleep.asleep = false;
         }
         
-        // If asleep, set velocity, angular velocity to zero
+        // If asleep, zero out motion
         if (sleep.asleep) {
-            vel.x = 0;
-            vel.y = 0;
-            
-            // Zero out angular velocity if present
-            if (registry.all_of<Components::AngularVelocity>(entity)) {
+            vel.x = 0.0;
+            vel.y = 0.0;
+            // Zero angular velocity if present
+            if (registry.any_of<Components::AngularVelocity>(entity)) {
                 auto &angVel = registry.get<Components::AngularVelocity>(entity);
-                angVel.omega = 0;
+                angVel.omega = 0.0;
             }
         }
     }
