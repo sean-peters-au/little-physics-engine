@@ -98,22 +98,22 @@ wasm: directories copy_assets $(WASM_OBJS)
 $(BUILD_DIR)/native/%.o: $(SRC_DIR)/%.cpp
 	@echo "Compiling native $<"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
 
 $(BUILD_DIR)/wasm/%.o: $(SRC_DIR)/%.cpp
 	@echo "Compiling wasm $<"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
 
 $(BUILD_DIR)/arch/native/%.o: $(SRC_DIR)/arch/native/%.cpp
 	@echo "Compiling arch-specific native $<"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
 
 $(BUILD_DIR)/arch/wasm/%.o: $(SRC_DIR)/arch/wasm/%.cpp
 	@echo "Compiling arch-specific wasm $<"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
 
 # Include generated dependency files if they exist
 -include $(NATIVE_DEPS)
