@@ -151,7 +151,7 @@ struct FluidConfig
     float restDensity = 0.5f;    ///< Default density of fluid (kg/m³)
     float stiffness = 50.0f;     ///< Pressure stiffness coefficient
     float viscosity = 0.03f;     ///< Viscosity coefficient
-    float dampingFactor = 0.98f; ///< Velocity damping for rigid bodies
+    float dampingFactor = 0.999f; ///< Velocity damping for rigid bodies
 
     int numSubSteps = 10;        ///< Number of substeps per frame
     int threadsPerGroup = 256;   ///< Threads per threadgroup for GPU
