@@ -8,7 +8,8 @@
  *  - fluid density/pressure/forces
  *  - rigid-fluid impulse exchange
  *  - integrated position solvers
- * All in a single FluidSystem.
+ * All in a single FluidSystem implementation. Updated to help avoid bus errors
+ * by rechecking buffer sizes and clamping bounding box dimensions.
  */
 
 #pragma once
@@ -19,9 +20,11 @@
 #include <functional>
 #include <cstddef>
 #include <limits>
+
 #include "systems/i_system.hpp"
 
-namespace Systems {
+namespace Systems
+{
 
 /**
  * @struct GPUFluidParticle
@@ -29,7 +32,8 @@ namespace Systems {
  *
  * Mirrors the data structures and logic in fluid_kernels.metal.
  */
-struct GPUFluidParticle {
+struct GPUFluidParticle
+{
     float x;
     float y;
     float vx;
@@ -39,8 +43,8 @@ struct GPUFluidParticle {
     float ax;
     float ay;
     float mass;
-    float h;        ///< Smoothing length
-    float c;        ///< Speed of sound
+    float h;         ///< Smoothing length
+    float c;         ///< Speed of sound
     float density;
     float pressure;
 };
@@ -54,7 +58,8 @@ static constexpr int GPU_MAX_PER_CELL = 64;
  * @struct GPUGridCell
  * @brief Stores the indices of particles that fall within a specific grid cell.
  */
-struct GPUGridCell {
+struct GPUGridCell
+{
     int count;
     int indices[GPU_MAX_PER_CELL];
 };
@@ -63,7 +68,8 @@ struct GPUGridCell {
  * @struct GPUFluidParams
  * @brief Parameters controlling the SPH and integration steps on the GPU.
  */
-struct GPUFluidParams {
+struct GPUFluidParams
+{
     float cellSize;
     int   gridMinX;
     int   gridMinY;
@@ -81,7 +87,8 @@ struct GPUFluidParams {
  * @struct BBoxParams
  * @brief Input parameters for the GPU bounding box kernel.
  */
-struct BBoxParams {
+struct BBoxParams
+{
     int particleCount;
     int numThreadgroups;
 };
@@ -90,7 +97,8 @@ struct BBoxParams {
  * @enum GPURigidShapeType
  * @brief Enumerates shape types for GPU-based rigid bodies.
  */
-enum class GPURigidShapeType : int {
+enum class GPURigidShapeType : int
+{
     Circle = 0,
     Polygon = 1
 };
@@ -101,13 +109,14 @@ enum class GPURigidShapeType : int {
  * bounding box, velocity, mass, and partial force/torque for the impulse solver.
  */
 static constexpr int GPU_POLYGON_MAX_VERTS = 16;
-struct GPURigidBody {
+struct GPURigidBody
+{
     // Basic shape data
     GPURigidShapeType shapeType;
     float posX;
     float posY;
-    float angle;      ///< current orientation
-    float radius;     ///< if Circle
+    float angle;      ///< Current orientation
+    float radius;     ///< If Circle
 
     // Polygon data
     int vertCount;
@@ -115,11 +124,11 @@ struct GPURigidBody {
     float vertsY[GPU_POLYGON_MAX_VERTS];
 
     // Extended rigid-body properties
-    float vx;         ///< linear velocity x
-    float vy;         ///< linear velocity y
-    float omega;      ///< angular velocity
-    float mass;       ///< rigid mass
-    float inertia;    ///< moment of inertia
+    float vx;         ///< Linear velocity x
+    float vy;         ///< Linear velocity y
+    float omega;      ///< Angular velocity
+    float mass;       ///< Rigid mass
+    float inertia;    ///< Moment of inertia
 
     // Simple bounding box for broad-phase fluid check
     float minX;
@@ -135,31 +144,36 @@ struct GPURigidBody {
 
 /**
  * @struct FluidConfig
- * @brief Configuration parameters specific to the fluid simulation
+ * @brief Configuration parameters specific to the fluid simulation.
  */
-struct FluidConfig {
-    // Fluid properties
-    float restDensity = 0.5f;  // Default density of fluid (kg/m³)
-    float stiffness = 50.0f;      // Pressure stiffness coefficient
-    float viscosity = 0.03f;      // Viscosity coefficient
-    float dampingFactor = 0.98f;  // Velocity damping for rigid bodies
-    
-    // Simulation parameters
-    int numSubSteps = 10;         // Number of substeps per frame
-    int threadsPerGroup = 256;    // Threads per threadgroup for GPU
+struct FluidConfig
+{
+    float restDensity = 0.5f;    ///< Default density of fluid (kg/m³)
+    float stiffness = 50.0f;     ///< Pressure stiffness coefficient
+    float viscosity = 0.03f;     ///< Viscosity coefficient
+    float dampingFactor = 0.98f; ///< Velocity damping for rigid bodies
+
+    int numSubSteps = 10;        ///< Number of substeps per frame
+    int threadsPerGroup = 256;   ///< Threads per threadgroup for GPU
 };
 
 /**
  * @class FluidSystem
  * @brief SPH-based fluid solver with GPU-accelerated neighbor search & rigid-fluid interactions.
+ *
+ * This class has been refactored to reduce CPU-GPU synchronization by batching passes
+ * into fewer command buffers and to reuse buffers across frames to minimize allocations.
+ * We also clamp the bounding box and re-check our grid buffer sizes each sub-step
+ * to avoid bus errors.
  */
-class FluidSystem : public ConfigurableSystem<FluidConfig> {
+class FluidSystem : public ConfigurableSystem<FluidConfig>
+{
 public:
     /**
      * @brief Constructor
      */
     FluidSystem();
-    
+
     /**
      * @brief Destructor
      */
@@ -173,18 +187,34 @@ public:
 
 private:
     /**
-     * @brief Creates a Metal compute pipeline state for a given function name.
+     * @brief Encodes a compute pass into an existing command encoder without committing.
+     * @param enc The active compute command encoder
+     * @param pipelineState The pipeline state to use
+     * @param encodeFunc Lambda to bind buffer arguments
+     * @param threadsCount Number of threads to dispatch
+     * @param threadsPerGroup Threads per threadgroup
      */
-    MTL::ComputePipelineState* createPSO(const char* fnName, MTL::Library* lib);
-
-    /**
-     * @brief Dispatches a Metal compute pass with a typical command encoder setup.
-     */
-    void dispatchComputePass(
+    void encodeComputePass(
+        MTL::ComputeCommandEncoder* enc,
         MTL::ComputePipelineState* pipelineState,
         const std::function<void(MTL::ComputeCommandEncoder*)>& encodeFunc,
         size_t threadsCount,
-        size_t threadsPerGroup = 256) const;
+        size_t threadsPerGroup) const;
+
+    /**
+     * @brief Allocates or resizes internal GPU buffers if needed, based on the current simulation size.
+     * @param fluidCount Number of fluid particles
+     * @param paddedCount Padded fluid count
+     * @param rigidCount Number of rigid bodies
+     * @param threadgroups Number of bounding box partials
+     * @param gridSize Current grid size (gridDimX * gridDimY)
+     */
+    void initBuffersIfNeeded(
+        int fluidCount,
+        int paddedCount,
+        int rigidCount,
+        int threadgroups,
+        int gridSize);
 
     /**
      * @brief Gathers fluid particles from the ECS into GPU-friendly structures.
@@ -194,32 +224,20 @@ private:
         std::vector<entt::entity>& entityList) const;
 
     /**
-     * @brief Gathers rigid bodies from the ECS (including velocity, mass, bounding box) into GPU-friendly structures.
+     * @brief Gathers rigid bodies from the ECS into GPU-friendly structures.
      */
     std::vector<GPURigidBody> gatherRigidBodies(
         entt::registry& registry,
         std::vector<entt::entity>& rigidEntityList) const;
 
     /**
-     * @brief Part of Velocity Verlet: half-step velocity update.
-     */
-    void dispatchVelocityVerletHalf(
-        MTL::Buffer* particleBuf,
-        MTL::Buffer* paramsBuf,
-        int realCount) const;
-
-    /**
-     * @brief GPU bounding box kernel to compute partial bounding boxes for each threadgroup.
-     */
-    void dispatchComputeBoundingBox(
-        MTL::Buffer* particleBuf,
-        MTL::Buffer* boundingBoxParamsBuf,
-        MTL::Buffer* boundingBoxBuf,
-        int realCount,
-        int numThreadgroups) const;
-
-    /**
-     * @brief CPU-side reduction of partial bounding boxes.
+     * @brief CPU-side reduction of partial bounding boxes from the GPU kernel.
+     * @param boundingBoxBuf GPU buffer with partial bounding boxes
+     * @param numThreadgroups Number of partial bounding boxes
+     * @param[out] minX Global min x
+     * @param[out] maxX Global max x
+     * @param[out] minY Global min y
+     * @param[out] maxY Global max y
      */
     void reduceBoundingBoxOnCPU(
         MTL::Buffer* boundingBoxBuf,
@@ -228,65 +246,6 @@ private:
         float& maxX,
         float& minY,
         float& maxY) const;
-
-    /**
-     * @brief Clears the grid buffer on the GPU for neighbor searches.
-     */
-    void dispatchClearGrid(MTL::Buffer* gridBuf, int gridSize) const;
-
-    /**
-     * @brief Assigns each particle to a grid cell on the GPU.
-     */
-    void dispatchAssignCells(
-        MTL::Buffer* particleBuf,
-        MTL::Buffer* gridBuf,
-        MTL::Buffer* paramsBuf,
-        int realCount) const;
-
-    /**
-     * @brief Computes density for each particle using neighbor lookups in the grid.
-     */
-    void dispatchComputeDensity(
-        MTL::Buffer* particleBuf,
-        MTL::Buffer* gridBuf,
-        MTL::Buffer* paramsBuf,
-        int realCount) const;
-
-    /**
-     * @brief Computes forces (pressure, viscosity) for each particle.
-     */
-    void dispatchComputeForces(
-        MTL::Buffer* particleBuf,
-        MTL::Buffer* gridBuf,
-        MTL::Buffer* paramsBuf,
-        int realCount) const;
-
-    /**
-     * @brief Finishes Velocity Verlet step (velocity by half dt again, final position).
-     */
-    void dispatchVelocityVerletFinish(
-        MTL::Buffer* particleBuf,
-        MTL::Buffer* paramsBuf,
-        int realCount) const;
-
-    /**
-     * @brief GPU-based position solver for fluid -> rigid boundary collisions (already stubbed).
-     */
-    void dispatchRigidFluidPosition(
-        MTL::Buffer* particleBuf,
-        int fluidCount,
-        MTL::Buffer* rigidBuf,
-        int rigidCount) const;
-
-    /**
-     * @brief **New**: GPU-based impulse solver for fluid->rigid forces (like drag, buoyancy).
-     */
-    void dispatchRigidFluidImpulse(
-        MTL::Buffer* particleBuf,
-        int fluidCount,
-        MTL::Buffer* rigidBuf,
-        MTL::Buffer* paramsBuf,
-        int rigidCount) const;
 
     /**
      * @brief Writes updated fluid positions & velocities back to ECS.
@@ -307,40 +266,51 @@ private:
         int rigidCount) const;
 
     /**
-     * @brief Multi-step integration that calls the sub-kernels, including the new rigid-fluid impulse solver.
+     * @brief Executes multiple sub-steps of velocity-verlet and fluid-rigid impulse in batched command buffers.
+     * @param registry ECS registry
+     * @param fluidEntities Fluid entity list
+     * @param rigidEntities Rigid body entity list
+     * @param realCount Actual fluid particle count
+     * @param paddedCount Padded fluid count
+     * @param rigidCount Number of rigid bodies
      */
     void multiStepVelocityVerlet(
         entt::registry& registry,
-        std::vector<entt::entity>& fluidEntities,
-        std::vector<entt::entity>& rigidEntities,
-        MTL::Buffer* particleBuf,
-        MTL::Buffer* paramsBuf,
-        MTL::Buffer* boundingBoxParamsBuf,
-        MTL::Buffer* boundingBoxBuf,
-        MTL::Buffer* rigidBuf,
+        const std::vector<entt::entity>& fluidEntities,
+        const std::vector<entt::entity>& rigidEntities,
         int realCount,
         int paddedCount,
         int rigidCount);
 
 private:
-    MTL::Device* device = nullptr;
-    MTL::CommandQueue* commandQueue = nullptr;
-    MTL::Library* metalLibrary = nullptr;  ///< Keep the library alive while pipeline states are in use
+    MTL::Device* device_ = nullptr;
+    MTL::CommandQueue* commandQueue_ = nullptr;
+    MTL::Library* metalLibrary_ = nullptr; ///< Keep the library alive while pipeline states are in use
 
     // Pipeline states
-    MTL::ComputePipelineState* clearGridPSO          = nullptr;
-    MTL::ComputePipelineState* assignCellsPSO        = nullptr;
-    MTL::ComputePipelineState* computeDensityPSO     = nullptr;
-    MTL::ComputePipelineState* computeForcesPSO      = nullptr;
-    MTL::ComputePipelineState* verletHalfPSO         = nullptr;
-    MTL::ComputePipelineState* verletFinishPSO       = nullptr;
-    MTL::ComputePipelineState* computeBoundingBoxPSO = nullptr;
+    MTL::ComputePipelineState* clearGridPSO_          = nullptr;
+    MTL::ComputePipelineState* assignCellsPSO_        = nullptr;
+    MTL::ComputePipelineState* computeDensityPSO_     = nullptr;
+    MTL::ComputePipelineState* computeForcesPSO_      = nullptr;
+    MTL::ComputePipelineState* verletHalfPSO_         = nullptr;
+    MTL::ComputePipelineState* verletFinishPSO_       = nullptr;
+    MTL::ComputePipelineState* computeBoundingBoxPSO_ = nullptr;
+    MTL::ComputePipelineState* rigidFluidPositionPSO_ = nullptr;
+    MTL::ComputePipelineState* rigidFluidImpulsePSO_  = nullptr;
 
-    // Existing GPU-based position solver
-    MTL::ComputePipelineState* rigidFluidPositionPSO = nullptr;
+    // GPU buffers that are reused/expanded as needed
+    MTL::Buffer* particleBuf_           = nullptr;
+    MTL::Buffer* rigidBuf_              = nullptr;
+    MTL::Buffer* paramsBuf_             = nullptr;
+    MTL::Buffer* boundingBoxParamsBuf_  = nullptr;
+    MTL::Buffer* boundingBoxBuf_        = nullptr;
+    MTL::Buffer* gridBuf_               = nullptr;
 
-    // **New**: Impulse solver pipeline
-    MTL::ComputePipelineState* rigidFluidImpulsePSO  = nullptr;
+    // Cached maximum sizes for reallocation checks
+    int maxFluidParticles_ = 0;
+    int maxRigidBodies_    = 0;
+    int maxGridSize_       = 0;
+    int maxThreadgroups_   = 0;
 };
 
 } // namespace Systems

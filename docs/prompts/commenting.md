@@ -2,6 +2,10 @@
 
 We follow Google's cpp style guide for comments, with some project-specific adaptations.
 
+Avoid introducing details about my prompt into your comments. If I ask you to add feature X, don't include a comment at the top
+of the file saying `// Now this includes feature X`. Comments live beyond our conversations. Write them as if a someone completely
+different comes along to read the file a year later.
+
 ## File-Level Documentation
 
 Every file should start with (before even imports) a `@fileoverview` comment that explains its purpose:
@@ -15,11 +19,6 @@ Every file should start with (before even imports) a `@fileoverview` comment tha
  * penetration depth and collision normal. It works by expanding the final GJK
  * simplex into a polytope that better approximates the Minkowski difference
  * surface, allowing for precise contact information calculation.
- * 
- * This implementation:
- * - Takes the final simplex from GJK as input
- * - Iteratively expands the polytope until the closest edge to origin is found
- * - Provides penetration depth and collision normal for collision response
  */
 
 ```

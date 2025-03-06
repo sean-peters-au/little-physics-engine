@@ -225,7 +225,7 @@ serve: wasm
 
 $(BUILD_DIR)/fluid_kernels.metallib: $(SRC_DIR)/systems/fluid/fluid_kernels.metal | directories
 	@echo "Compiling Metal shader $<"
-	$(METAL) -c $< -o $(BUILD_DIR)/fluid_kernels.air
+	$(METAL) -c $< -I./include -o $(BUILD_DIR)/fluid_kernels.air
 	$(METALLIB) $(BUILD_DIR)/fluid_kernels.air -o $@
 	@rm $(BUILD_DIR)/fluid_kernels.air
 
