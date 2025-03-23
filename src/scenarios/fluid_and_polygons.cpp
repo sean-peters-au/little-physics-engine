@@ -144,7 +144,7 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         registry.emplace<Components::Sleep>(ent);
 
         // Build a random polygon
-        double sizePoly = 0.15 + 0.1 * (i % 3); // vary sizes a bit
+        double sizePoly = 0.15 + 0.1 * 1; // (i % 3); // vary sizes a bit
         // PolygonShape poly = buildRandomConvexPolygon(generator, sizePoly);
         PolygonShape poly = buildRegularPolygon(5, sizePoly);
         registry.emplace<Components::Shape>(ent, Components::ShapeType::Polygon, sizePoly);

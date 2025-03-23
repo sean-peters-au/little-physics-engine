@@ -405,7 +405,7 @@ kernel void computeForces(
                 float wVisc = lapC*diff;
                 float fVisc = pa.viscosity*nbr.mass*(wVisc/rhoj);
                 fx -= fVisc * vx_ij;
-                fy -= fVisc * vy_ij;
+                fx -= fVisc * vy_ij;
 
                 sumFx += fx;
                 sumFy += fy;
@@ -543,6 +543,7 @@ kernel void rigidFluidPositionSolver(
     constant int& fluidCount           [[buffer(1)]],
     device GPURigidBody* rigids        [[buffer(2)]],
     constant int& rigidCount           [[buffer(3)]],
+    device const GPUFluidParams& params [[buffer(4)]],
     uint globalID                      [[thread_position_in_grid]])
 {
     if (globalID >= (uint)fluidCount) {
@@ -553,35 +554,28 @@ kernel void rigidFluidPositionSolver(
     // Position solver parameters - all magic numbers defined as constants here
     // -----------------------------------------------------------------------
     // Collision resolution parameters
-    const float SAFETY_MARGIN = 0.001f;       // Extra separation to prevent re-collision
-    const float RELAX_FACTOR = 0.3f;          // Relaxation for position correction (0-1)
-    
-    // Splash effect parameters
-    const float VELOCITY_TRANSFER_FACTOR = 0.7f;  // How much rigid body velocity transfers to fluid
-    const float MIN_SPLASH_SPEED = 0.5f;          // Minimum speed needed to create splash
-    const float MAX_PENETRATION_DEPTH = 0.05f;    // Depth cap for splash calculations
-    
-    // Velocity adjustment factors - ensure energy conservation!
-    const float NORMAL_SPLASH_AMPLIFICATION = 0.5f;    // Amplify normal component for splash (was 1.2)
-    const float TANGENT_SPLASH_REDUCTION = 0.2f;       // Reduce tangential component
-    const float REFLECTION_RESTITUTION = 0.7f;         // Restitution coefficient (was 1.2!)
+    const float SAFETY_MARGIN = 0.001f;          // Extra separation to prevent re-collision
+    const float RELAX_FACTOR = 0.2f;             // Lower factor for more gradual corrections
     
     // Numerical stability thresholds
-    const float MIN_SAFE_DISTANCE = 1e-10f;    // Minimum safe distance to avoid divide-by-zero
-    const float MIN_SAFE_NORMAL_LENGTH = 1e-6f; // Minimum normal length for normalization
-
+    const float MIN_SAFE_DISTANCE = 1e-10f;      // Minimum safe distance to avoid divide-by-zero
+    const float MIN_POSITION_CHANGE = 1e-6f;     // Minimum position change to consider for velocity update
+    const float VELOCITY_DAMPING = 0.3f;         // Much lower damping to prevent bouncing
+    const float MAX_VELOCITY_UPDATE = 1.0f;      // Clamp maximum velocity change
+    
+    // Get time step
+    float dt = params.dt;
+    if (dt < 1e-10f) dt = 1e-4f;                 // Safety - prevent division by zero
+    
     // Local variables for the current particle
-    float2 accumCorr = float2(0.0f, 0.0f);
     GPUFluidParticle p = particles[globalID];
+    float2 oldPos = float2(p.x, p.y);            // Save initial position for PBD
+    float2 accumCorr = float2(0.0f, 0.0f);
     float px = p.x;
     float py = p.y;
-    
-    // Collision detection variables
+
+    // Track if we had any collisions
     bool hadCollision = false;
-    float2 contactNormal = float2(0.0f, 0.0f);
-    float penetrationDepth = 0.0f;
-    float2 rigidVelocity = float2(0.0f, 0.0f);
-    float rigidSpeed = 0.0f;
 
     for (int r = 0; r < rigidCount; r++) {
         GPURigidBody body = rigids[r];
@@ -598,6 +592,7 @@ kernel void rigidFluidPositionSolver(
             float dist2 = dx*dx + dy*dy;
             float radius = body.radius;
             if (dist2 < radius*radius) {
+                hadCollision = true;
                 float dist = sqrt(dist2);
                 if (dist < MIN_SAFE_DISTANCE) {
                     dist = MIN_SAFE_DISTANCE;
@@ -607,17 +602,6 @@ kernel void rigidFluidPositionSolver(
                 float2 dir = float2(dx, dy) / dist;
                 float2 corr = dir * pen * RELAX_FACTOR;
                 accumCorr += corr;
-                
-                // Record collision data for velocity transfer
-                hadCollision = true;
-                contactNormal = dir;
-                penetrationDepth = pen;
-                
-                // Calculate rigid body velocity at contact point
-                float2 relPos = float2(dx, dy);
-                float2 bodyVel = float2(body.vx, body.vy);
-                rigidVelocity = bodyVel + float2(-body.omega * relPos.y, body.omega * relPos.x);
-                rigidSpeed = length(rigidVelocity);
             }
         }
         else if (body.shapeType == Polygon) {
@@ -626,6 +610,7 @@ kernel void rigidFluidPositionSolver(
             }
             bool inside = pointInPolygon(px, py, body);
             if (inside) {
+                hadCollision = true;
                 float cx, cy;
                 closestPointOnPolygon(px, py, body, cx, cy);
                 float cdx = px - cx;
@@ -640,17 +625,6 @@ kernel void rigidFluidPositionSolver(
                 float2 dir = float2(cdx, cdy) / d;
                 float2 corr = dir * pen * RELAX_FACTOR;
                 accumCorr += corr;
-                
-                // Record collision data for velocity transfer
-                hadCollision = true;
-                contactNormal = dir;
-                penetrationDepth = pen;
-                
-                // Calculate rigid body velocity at contact point
-                float2 relPos = float2(px - body.posX, py - body.posY);
-                float2 bodyVel = float2(body.vx, body.vy);
-                rigidVelocity = bodyVel + float2(-body.omega * relPos.y, body.omega * relPos.x);
-                rigidSpeed = length(rigidVelocity);
             }
         }
     }
@@ -659,66 +633,57 @@ kernel void rigidFluidPositionSolver(
     p.x -= accumCorr.x;
     p.y -= accumCorr.y;
 
-    // Apply reciprocal velocity transfer to create splashing
-    if (hadCollision && rigidSpeed > MIN_SPLASH_SPEED) {
-        // Normalize contact normal for safety
-        float normalLen = length(contactNormal);
-        if (normalLen > MIN_SAFE_NORMAL_LENGTH) {
-            float2 normal = contactNormal / normalLen;
-            
-            // Calculate how much rigid body is pushing into fluid
-            float approachSpeed = dot(rigidVelocity, -normal); // Negative of normal points into fluid
-            
-            // Only apply splash when rigid body is moving into fluid
-            if (approachSpeed > 0.0f) {
-                // Create splash force proportional to penetration depth and approach speed
-                float splashFactor = VELOCITY_TRANSFER_FACTOR * approachSpeed * 
-                                     min(penetrationDepth, MAX_PENETRATION_DEPTH) / MAX_PENETRATION_DEPTH;
-                
-                // Decompose rigid velocity onto normal and tangential components
-                float normalComponent = dot(rigidVelocity, normal);
-                float2 normalVel = normal * normalComponent;
-                float2 tangentialVel = rigidVelocity - normalVel;
-                
-                // Transfer velocities - higher transfer in normal direction (more splashing)
-                // and lower transfer in tangential direction (some dragging)
-                float2 transferVel = tangentialVel * TANGENT_SPLASH_REDUCTION + 
-                                     normalVel * NORMAL_SPLASH_AMPLIFICATION;
-                
-                // Apply transfer as a velocity impulse to create splash
-                p.vx += transferVel.x * splashFactor;
-                p.vy += transferVel.y * splashFactor;
-                
-                // Ensure half-step velocity matches
-                p.vxHalf = p.vx;
-                p.vyHalf = p.vy;
-            }
-        }
-    }
-    // Also apply basic collision response for fluid particles trying to penetrate rigid bodies
-    else if (hadCollision) {
-        // Normalize contact normal for safety
-        float normalLen = length(contactNormal);
-        if (normalLen > MIN_SAFE_NORMAL_LENGTH) {
-            float2 normal = contactNormal / normalLen;
-            
-            // Basic reflection of penetrating velocity component
-            float normalVel = dot(float2(p.vx, p.vy), normal);
-            if (normalVel < 0.0f) {
-                // Apply physically correct reflection with proper restitution (less than 1.0)
-                p.vx -= normalVel * normal.x * (1.0f + REFLECTION_RESTITUTION); 
-                p.vy -= normalVel * normal.y * (1.0f + REFLECTION_RESTITUTION);
-                
-                // Sync half-step velocity
-                p.vxHalf = p.vx;
-                p.vyHalf = p.vy;
-            }
-        }
-    }
-
     // Simple bounds clamp
     if (p.x < 0.f) p.x = 0.f;
     if (p.y < 0.f) p.y = 0.f;
+    
+    // PBD: Update velocities based on position change only if we had collisions
+    if (hadCollision) {
+        float2 newPos = float2(p.x, p.y);
+        float2 posDelta = newPos - oldPos;
+        float posDeltaMag = length(posDelta);
+        
+        if (posDeltaMag > MIN_POSITION_CHANGE) {
+            // Derive new velocity from position change
+            float2 derivedVel = posDelta / dt;
+            
+            // Clamp maximum velocity changes
+            float derivedVelMag = length(derivedVel);
+            if (derivedVelMag > MAX_VELOCITY_UPDATE) {
+                derivedVel = derivedVel * (MAX_VELOCITY_UPDATE / derivedVelMag);
+            }
+            
+            // Get current velocity direction
+            float2 curVel = float2(p.vx, p.vy);
+            float curVelMag = length(curVel);
+            
+            // For collision response, prioritize slowing particles down over speeding them up
+            // This reduces the bouncing effect while still preventing penetration
+            if (curVelMag > 0.001f) {
+                float2 curVelDir = curVel / curVelMag;
+                float dotProd = dot(curVelDir, derivedVel);
+                
+                // If our velocity is being opposed (going into rigid body)
+                if (dotProd < 0.0f) {
+                    // Apply stronger damping to opposing velocity
+                    p.vx = mix(p.vx, derivedVel.x, VELOCITY_DAMPING * 1.5f);
+                    p.vy = mix(p.vy, derivedVel.y, VELOCITY_DAMPING * 1.5f);
+                } else {
+                    // Otherwise just apply normal damping
+                    p.vx = mix(p.vx, derivedVel.x, VELOCITY_DAMPING);
+                    p.vy = mix(p.vy, derivedVel.y, VELOCITY_DAMPING);
+                }
+            } else {
+                // If almost no velocity, apply minimal damping to avoid artificial energy
+                p.vx = mix(p.vx, derivedVel.x, VELOCITY_DAMPING * 0.5f);
+                p.vy = mix(p.vy, derivedVel.y, VELOCITY_DAMPING * 0.5f);
+            }
+            
+            // Update half-step velocity for Verlet integration consistency
+            p.vxHalf = p.vx;
+            p.vyHalf = p.vy;
+        }
+    }
 
     particles[globalID] = p;
 }
@@ -740,6 +705,7 @@ kernel void rigidFluidImpulseSolver(
     device const GPUFluidParams& param      [[buffer(4)]],
     uint globalID                           [[thread_position_in_grid]])
 {
+    return;
     if (globalID >= (uint)fluidCount || rigidCount <= 0) {
         return;
     }
