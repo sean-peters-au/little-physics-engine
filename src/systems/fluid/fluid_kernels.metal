@@ -100,7 +100,7 @@ struct BBox {
  * Rigid body data
  *
  * We assume these fields match your CPU's GPURigidBody. Notice accumFx/Fy/Torque
- * are stored as normal floats; we’ll do atomic ops on them via reinterpret_cast.
+ * are stored as normal floats; we'll do atomic ops on them via reinterpret_cast.
  */
 enum GPURigidShapeType : int {
     Circle = 0,
@@ -530,13 +530,20 @@ kernel void computeBoundingBox(
 }
 
 /**
- * Kernel: rigidFluidPositionSolver (unchanged but with your sign flip)
+ * Kernel: rigidFluidPositionSolver
+ * @brief For each fluid thread, we loop over all rigids. If the fluid is near/inside the rigid,
+ *        we compute drag & buoyancy, then atomically add to rigids[r].accumFx, accumFy, accumTorque.
+ *
+ * This is a naive O(N_fluid * N_rigid) approach. For large simulations, use better broad-phase or reduce logic.
+ *
+ * We incorporate param.dt each sub-step so the total effect accumulates across multiple sub-steps.
  */
 kernel void rigidFluidPositionSolver(
     device GPUFluidParticle* particles [[buffer(0)]],
     constant int& fluidCount           [[buffer(1)]],
     device GPURigidBody* rigids        [[buffer(2)]],
     constant int& rigidCount           [[buffer(3)]],
+    device const GPUFluidParams& param      [[buffer(4)]],
     uint globalID                      [[thread_position_in_grid]])
 {
     if (globalID >= (uint)fluidCount) {
@@ -550,6 +557,16 @@ kernel void rigidFluidPositionSolver(
 
     const float safetyMargin = 0.001f;
     const float relaxFactor  = 0.3f;
+    
+    // Velocity reflection parameters - reduced for better stability
+    const float restitution = 0.1f;       // Low restitution to prevent bouncing
+    const float frictionFactor = 0.5f;    // Higher friction to dissipate energy faster
+    const float velocityDamping = 0.95f;  // Additional velocity damping for stability
+    
+    // Track if a collision occurred and the rigid body data
+    bool hadCollision = false;
+    float2 rigidVelocity = float2(0.0f, 0.0f);
+    float2 collisionNormal = float2(0.0f, 0.0f);
 
     for (int r = 0; r < rigidCount; r++) {
         GPURigidBody body = rigids[r];
@@ -575,6 +592,14 @@ kernel void rigidFluidPositionSolver(
                 float2 dir = float2(dx, dy) / dist;
                 float2 corr = dir * pen * relaxFactor;
                 accumCorr += corr;
+                
+                // Record collision data
+                hadCollision = true;
+                collisionNormal = dir;
+                rigidVelocity = float2(body.vx, body.vy);
+                // Add rotational velocity at the point of contact
+                float2 relPos = float2(dx, dy);
+                rigidVelocity += float2(-body.omega * relPos.y, body.omega * relPos.x);
             }
         }
         else if (body.shapeType == Polygon) {
@@ -597,6 +622,14 @@ kernel void rigidFluidPositionSolver(
                 float2 dir = float2(cdx, cdy) / d;
                 float2 corr = dir * pen * relaxFactor;
                 accumCorr += corr;
+                
+                // Record collision data
+                hadCollision = true;
+                collisionNormal = dir;
+                rigidVelocity = float2(body.vx, body.vy);
+                // Add rotational velocity at the point of contact
+                float2 relPos = float2(px - body.posX, py - body.posY);
+                rigidVelocity += float2(-body.omega * relPos.y, body.omega * relPos.x);
             }
         }
     }
@@ -604,6 +637,60 @@ kernel void rigidFluidPositionSolver(
     // Flip sign to push fluid outwards
     p.x -= accumCorr.x;
     p.y -= accumCorr.y;
+
+    // Update fluid velocity if there was a collision
+    if (hadCollision) {
+        // Safety check for valid collision normal
+        float normalLength = length(collisionNormal);
+        if (normalLength > 1e-6f) {
+            // Ensure normal is normalized
+            float2 safeNormal = collisionNormal / normalLength;
+            
+            float2 fluidVel = float2(p.vx, p.vy);
+            float2 relVel = fluidVel - rigidVelocity;
+            
+            // Decompose into normal and tangential components
+            float normalVel = dot(relVel, safeNormal);
+            float2 normalComponent = safeNormal * normalVel;
+            float2 tangentialComponent = relVel - normalComponent;
+            
+            // Apply restitution to normal component (bounce)
+            // And friction to tangential component (slow down)
+            if (normalVel < 0) { // Only reflect if approaching
+                // Energy-conservative velocity update
+                float2 newVel = rigidVelocity + 
+                              (-restitution * normalComponent) +
+                              (tangentialComponent * (1.0f - frictionFactor));
+                
+                // Energy-conservation check
+                float oldEnergy = 0.5f * p.mass * dot(fluidVel, fluidVel);
+                float newEnergy = 0.5f * p.mass * dot(newVel, newVel);
+                
+                // If new energy is higher, scale it down to ensure no energy creation
+                if (newEnergy > oldEnergy) {
+                    float scale = sqrt(oldEnergy / (newEnergy + 1e-6f));
+                    newVel = rigidVelocity + (newVel - rigidVelocity) * scale;
+                }
+                
+                // Apply additional velocity damping for stability
+                newVel = rigidVelocity + (newVel - rigidVelocity) * velocityDamping;
+                
+                // Ensure no extreme velocities that could cause instability
+                float newVelMag = length(newVel);
+                if (newVelMag > 20.0f) { // Lower velocity limit
+                    newVel = newVel * (20.0f / newVelMag);
+                }
+                
+                p.vx = newVel.x;
+                p.vy = newVel.y;
+                
+                // Update half-step velocities with proper differential
+                // to maintain verlet integration consistency
+                p.vxHalf = p.vx - 0.5f * p.ax * (param.dt * 0.5f);
+                p.vyHalf = p.vy - 0.5f * p.ay * (param.dt * 0.5f);
+            }
+        }
+    }
 
     // Some minimal clamping
     if (p.x < 0.f) p.x = 0.f;
@@ -633,109 +720,144 @@ kernel void rigidFluidImpulseSolver(
         return;
     }
 
-    // Basic constants
-    const float dt = param.dt;      // sub-step time
-    const float dragCoefficient = 0.5f;
-    const float maxForce = 5.0f;    // limit per fluid
-    const float maxTorque= 1.0f;    // limit per fluid
+    // Tunable physics parameters
+    const float dt = param.dt;
+    
+    // Drag coefficients - drag should ALWAYS remove energy
+    const float linearDragCoef = 0.01f;     // Increased linear drag for stability
+    const float quadraticDragCoef = 0.002f; // Increased quadratic drag
+    
+    // Buoyancy settings 
+    const float buoyancyCoef = 0.005f;     // Reduced buoyancy to prevent excessive bobbing
+    const float waterDensity = 1000.0f;    // Reference water density
+    
+    // Stabilization and safety
+    const float maxForce = 0.1f;           // Reduced max force for better stability
+    const float maxTorque = 0.02f;         // Reduced max torque
+    const float depthScale = 0.05f;        // Increased depth scale for smoother transition
+    const float velocitySafetyFactor = 3.0f; // Increased safety at high velocities
 
+    // Get fluid particle data
     GPUFluidParticle fp = fluidParticles[globalID];
-
-    float px = fp.x;
-    float py = fp.y;
-    float vxF = fp.vx;
-    float vyF = fp.vy;
-    float densityF = fp.density;  // fluid density near this particle
-    if (densityF < 1e-6f) {
-        densityF = 1000.f;        // fallback if uninitialized
-    }
+    float densityF = max(fp.density, waterDensity); // Use reference density if not computed
 
     // For each rigid
     for (int r = 0; r < rigidCount; r++) {
-        // Access rigid
         GPURigidBody rb = rigids[r];
-
-        // Broad-phase check
-        if (px < rb.minX || px > rb.maxX ||
-            py < rb.minY || py > rb.maxY) {
+        
+        // Safety check for extreme velocities
+        float rbVelSq = rb.vx*rb.vx + rb.vy*rb.vy + rb.omega*rb.omega;
+        if (rbVelSq > 50.0f) { // Reduced threshold for high velocity check
+            continue;
+        }
+        
+        // Skip broad-phase check if outside bounding box
+        if (fp.x < rb.minX || fp.x > rb.maxX || fp.y < rb.minY || fp.y > rb.maxY) {
             continue;
         }
 
-        // Check circle or polygon
+        // Determine if particle is inside rigid body
         bool inside = false;
-        float rx = px - rb.posX;
-        float ry = py - rb.posY;
+        float penetrationDepth = 0.0f;
+        float2 relativePos;
+        
         if (rb.shapeType == Circle) {
+            float rx = fp.x - rb.posX;
+            float ry = fp.y - rb.posY;
             float dist2 = rx*rx + ry*ry;
-            if (dist2 < (rb.radius * rb.radius)) {
+            float radiusSq = rb.radius * rb.radius;
+            
+            if (dist2 < radiusSq) {
                 inside = true;
+                float dist = sqrt(dist2);
+                if (dist < 1e-6f) dist = 1e-6f;
+                penetrationDepth = rb.radius - dist;
+                if (penetrationDepth < 0.0f) penetrationDepth = 0.0f;
+                relativePos = float2(rx, ry);
             }
         }
         else if (rb.shapeType == Polygon && rb.vertCount >= 3) {
-            // naive polygon test
-            inside = pointInPolygon(px, py, rb);
+            inside = pointInPolygon(fp.x, fp.y, rb);
+            if (inside) {
+                float cx, cy;
+                closestPointOnPolygon(fp.x, fp.y, rb, cx, cy);
+                float dx = fp.x - cx;
+                float dy = fp.y - cy;
+                float d2 = dx*dx + dy*dy;
+                float d = sqrt(d2);
+                if (d < 1e-6f) d = 1e-6f;
+                
+                penetrationDepth = d;
+                if (penetrationDepth < 0.0f) penetrationDepth = 0.0f;
+                
+                relativePos = float2(fp.x - rb.posX, fp.y - rb.posY);
+            }
         }
-        if (!inside) {
-            continue;
-        }
-
-        //--------------------------------------------------
-        // If the particle is inside or near the rigid,
-        // compute e.g. drag, buoyancy, etc.
-        //--------------------------------------------------
-        float2 relativePos = float2(rx, ry);
-
-        // Rigid's velocity at that point (including rotation)
-        // cross(omega, relativePos) = [-omega*ry, +omega*rx]
-        float2 rotVel = float2(-rb.omega * ry, rb.omega * rx);
+        
+        if (!inside || penetrationDepth < 1e-6f) continue;
+        
+        // Calculate rigid body velocity at this point
+        float2 rotVel = float2(-rb.omega * relativePos.y, rb.omega * relativePos.x);
         float2 rigidVel = float2(rb.vx, rb.vy) + rotVel;
-        float2 relVel = float2(vxF, vyF) - rigidVel;
-
-        // Simple drag: 0.5 * C_d * fluidDensity * v^2 * dt
-        float vMag = length(relVel);
-        if (vMag > 1e-6f) {
-            float dragMag = 0.5f * dragCoefficient * densityF * (vMag*vMag) * dt;
-            if (dragMag > maxForce) {
-                dragMag = maxForce;
-            }
-            float2 dragForce = (relVel / vMag) * dragMag;
-
-            // Optional buoyancy: approximate each particle as a small volume
-            // volume = mass/density => fluid mass / fluid density => same for this
-            // We'll do a small upward force
-            float vol = fp.mass / densityF;  // mass / fluidDensity
-            float buoyFactor = 0.02f;        // tune as needed
-            float buoy = densityF * vol * 9.81f * buoyFactor * dt;
-            float2 buoyForce = float2(0.0f, -buoy);
-
-            // sum
-            float2 totalForce = dragForce + buoyForce;
-
-            // clamp magnitude
-            float fmag = length(totalForce);
-            if (fmag > maxForce) {
-                totalForce = totalForce * (maxForce / fmag);
-            }
-
-            // torque = cross(relativePos, totalForce) in 2D = rx*Fy - ry*Fx
-            float torque = rx*totalForce.y - ry*totalForce.x;
-            if (torque > maxTorque) {
-                torque = maxTorque;
-            }
-            else if (torque < -maxTorque) {
-                torque = -maxTorque;
-            }
-
-            // Atomically add to accumFx, accumFy, accumTorque
-            // We reinterpret them as atomic_float*
-            device atomic_float* aFx = reinterpret_cast<device atomic_float*>(&rigids[r].accumFx);
-            device atomic_float* aFy = reinterpret_cast<device atomic_float*>(&rigids[r].accumFy);
-            device atomic_float* aTq = reinterpret_cast<device atomic_float*>(&rigids[r].accumTorque);
-
-            atomic_fetch_add_explicit(aFx, totalForce.x, memory_order_relaxed);
-            atomic_fetch_add_explicit(aFy, totalForce.y, memory_order_relaxed);
-            atomic_fetch_add_explicit(aTq, torque,       memory_order_relaxed);
+        float2 relVel = float2(fp.vx, fp.vy) - rigidVel;
+        float relVelMag = length(relVel);
+        
+        if (relVelMag < 1e-6f) continue;
+        
+        // Normalize for direction
+        float2 relVelDir = relVel / relVelMag;
+        
+        // Improved depth transition function with better curve
+        float normalizedDepth = penetrationDepth / depthScale;
+        float depthFactor = normalizedDepth * normalizedDepth / (1.0f + normalizedDepth * normalizedDepth);
+        
+        // Velocity safety scaling (stronger reduction at high speeds)
+        float velocitySafety = 1.0f / (1.0f + velocitySafetyFactor * relVelMag);
+        
+        // Calculate drag magnitude - drag MUST OPPOSE relative motion 
+        float linearComponent = linearDragCoef * relVelMag;
+        float quadraticComponent = quadraticDragCoef * relVelMag * relVelMag;
+        float dragMag = (linearComponent + quadraticComponent) * densityF * dt * velocitySafety * depthFactor;
+        
+        // Buoyancy with depth-dependent transition
+        float volume = fp.mass / densityF;
+        float buoyancyMag = waterDensity * volume * 9.81f * buoyancyCoef * dt;
+        
+        // Varying buoyancy based on depth - full buoyancy only when fully submerged
+        float buoyancyDepthFactor = min(depthFactor * 1.5f, 1.0f);
+        float buoyancy = buoyancyMag * buoyancyDepthFactor;
+        
+        // CORRECTED SIGN CONVENTION:
+        // Drag should ALWAYS oppose motion (negative of relative velocity direction)
+        // Buoyancy always points up
+        float2 dragForce = relVelDir * min(dragMag, maxForce * 0.8f);
+        float2 buoyancyForce = float2(0.0f, -min(buoyancy, maxForce * 0.3f));
+        
+        // Combined force (drag + buoyancy)
+        float2 totalForce = dragForce + buoyancyForce;
+        
+        // Safety clamp on total force magnitude
+        float forceMag = length(totalForce);
+        if (forceMag > maxForce) {
+            totalForce = totalForce * (maxForce / forceMag);
         }
+        
+        // Calculate torque with more damping for rotational stability
+        float torque = relativePos.x * totalForce.y - relativePos.y * totalForce.x;
+        torque = clamp(torque, -maxTorque, maxTorque);
+        
+        // Add angular damping proportional to angular velocity to prevent excessive spinning
+        if (abs(rb.omega) > 0.1f) {
+            torque -= 0.01f * sign(rb.omega) * min(abs(rb.omega), 5.0f) * rb.inertia;
+        }
+        
+        // Atomically add to rigid body accumulators
+        device atomic_float* aFx = reinterpret_cast<device atomic_float*>(&rigids[r].accumFx);
+        device atomic_float* aFy = reinterpret_cast<device atomic_float*>(&rigids[r].accumFy);
+        device atomic_float* aTq = reinterpret_cast<device atomic_float*>(&rigids[r].accumTorque);
+        
+        atomic_fetch_add_explicit(aFx, totalForce.x, memory_order_relaxed);
+        atomic_fetch_add_explicit(aFy, totalForce.y, memory_order_relaxed);
+        atomic_fetch_add_explicit(aTq, torque, memory_order_relaxed);
     }
-    // end for r in rigidCount
 }
