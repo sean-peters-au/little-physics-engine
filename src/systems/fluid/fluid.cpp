@@ -826,7 +826,6 @@ void FluidSystem::multiStepVelocityVerlet(
                         innerEnc->setBytes(&realCount, sizeof(int), 1);
                         innerEnc->setBuffer(rigidBuf_, 0, 2);
                         innerEnc->setBytes(&rigidCount, sizeof(int), 3);
-                        innerEnc->setBuffer(paramsBuf_, 0, 4);
                     },
                     static_cast<size_t>(realCount),
                     256

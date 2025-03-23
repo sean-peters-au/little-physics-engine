@@ -543,7 +543,6 @@ kernel void rigidFluidPositionSolver(
     constant int& fluidCount           [[buffer(1)]],
     device GPURigidBody* rigids        [[buffer(2)]],
     constant int& rigidCount           [[buffer(3)]],
-    device const GPUFluidParams& param      [[buffer(4)]],
     uint globalID                      [[thread_position_in_grid]])
 {
     if (globalID >= (uint)fluidCount) {
@@ -558,14 +557,12 @@ kernel void rigidFluidPositionSolver(
     const float safetyMargin = 0.001f;
     const float relaxFactor  = 0.3f;
     
-    // Velocity reflection parameters - reduced for better stability
-    const float restitution = 0.1f;       // Low restitution to prevent bouncing
-    const float frictionFactor = 0.5f;    // Higher friction to dissipate energy faster
-    const float velocityDamping = 0.95f;  // Additional velocity damping for stability
+    // Much simpler reflection for minimal velocity adjustment
+    // Only prevents interpenetration without complex physics
+    const float minimalRestitution = 0.2f;
     
-    // Track if a collision occurred and the rigid body data
+    // Track collision status
     bool hadCollision = false;
-    float2 rigidVelocity = float2(0.0f, 0.0f);
     float2 collisionNormal = float2(0.0f, 0.0f);
 
     for (int r = 0; r < rigidCount; r++) {
@@ -593,13 +590,9 @@ kernel void rigidFluidPositionSolver(
                 float2 corr = dir * pen * relaxFactor;
                 accumCorr += corr;
                 
-                // Record collision data
+                // Only record minimal collision data needed
                 hadCollision = true;
                 collisionNormal = dir;
-                rigidVelocity = float2(body.vx, body.vy);
-                // Add rotational velocity at the point of contact
-                float2 relPos = float2(dx, dy);
-                rigidVelocity += float2(-body.omega * relPos.y, body.omega * relPos.x);
             }
         }
         else if (body.shapeType == Polygon) {
@@ -623,13 +616,9 @@ kernel void rigidFluidPositionSolver(
                 float2 corr = dir * pen * relaxFactor;
                 accumCorr += corr;
                 
-                // Record collision data
+                // Only record minimal collision data needed
                 hadCollision = true;
                 collisionNormal = dir;
-                rigidVelocity = float2(body.vx, body.vy);
-                // Add rotational velocity at the point of contact
-                float2 relPos = float2(px - body.posX, py - body.posY);
-                rigidVelocity += float2(-body.omega * relPos.y, body.omega * relPos.x);
             }
         }
     }
@@ -638,61 +627,28 @@ kernel void rigidFluidPositionSolver(
     p.x -= accumCorr.x;
     p.y -= accumCorr.y;
 
-    // Update fluid velocity if there was a collision
+    // Apply just a very minimal velocity adjustment if needed
     if (hadCollision) {
-        // Safety check for valid collision normal
-        float normalLength = length(collisionNormal);
-        if (normalLength > 1e-6f) {
-            // Ensure normal is normalized
-            float2 safeNormal = collisionNormal / normalLength;
+        // Safety normalization
+        float len = length(collisionNormal);
+        if (len > 1e-6f) {
+            float2 normal = collisionNormal / len;
             
-            float2 fluidVel = float2(p.vx, p.vy);
-            float2 relVel = fluidVel - rigidVelocity;
-            
-            // Decompose into normal and tangential components
-            float normalVel = dot(relVel, safeNormal);
-            float2 normalComponent = safeNormal * normalVel;
-            float2 tangentialComponent = relVel - normalComponent;
-            
-            // Apply restitution to normal component (bounce)
-            // And friction to tangential component (slow down)
-            if (normalVel < 0) { // Only reflect if approaching
-                // Energy-conservative velocity update
-                float2 newVel = rigidVelocity + 
-                              (-restitution * normalComponent) +
-                              (tangentialComponent * (1.0f - frictionFactor));
+            // Only reverse velocity component in the normal direction
+            float vdotN = p.vx * normal.x + p.vy * normal.y;
+            if (vdotN < 0.0f) {
+                // Only apply a very minimal reflection
+                p.vx -= (1.0f + minimalRestitution) * vdotN * normal.x;
+                p.vy -= (1.0f + minimalRestitution) * vdotN * normal.y;
                 
-                // Energy-conservation check
-                float oldEnergy = 0.5f * p.mass * dot(fluidVel, fluidVel);
-                float newEnergy = 0.5f * p.mass * dot(newVel, newVel);
-                
-                // If new energy is higher, scale it down to ensure no energy creation
-                if (newEnergy > oldEnergy) {
-                    float scale = sqrt(oldEnergy / (newEnergy + 1e-6f));
-                    newVel = rigidVelocity + (newVel - rigidVelocity) * scale;
-                }
-                
-                // Apply additional velocity damping for stability
-                newVel = rigidVelocity + (newVel - rigidVelocity) * velocityDamping;
-                
-                // Ensure no extreme velocities that could cause instability
-                float newVelMag = length(newVel);
-                if (newVelMag > 20.0f) { // Lower velocity limit
-                    newVel = newVel * (20.0f / newVelMag);
-                }
-                
-                p.vx = newVel.x;
-                p.vy = newVel.y;
-                
-                // Update half-step velocities with proper differential
-                // to maintain verlet integration consistency
-                p.vxHalf = p.vx - 0.5f * p.ax * (param.dt * 0.5f);
-                p.vyHalf = p.vy - 0.5f * p.ay * (param.dt * 0.5f);
+                // Sync half-step velocity
+                p.vxHalf = p.vx;
+                p.vyHalf = p.vy;
             }
         }
     }
 
-    // Some minimal clamping
+    // Simple bounds clamp
     if (p.x < 0.f) p.x = 0.f;
     if (p.y < 0.f) p.y = 0.f;
 
@@ -723,31 +679,30 @@ kernel void rigidFluidImpulseSolver(
     // Tunable physics parameters
     const float dt = param.dt;
     
-    // Drag coefficients - drag should ALWAYS remove energy
-    const float linearDragCoef = 0.01f;     // Increased linear drag for stability
-    const float quadraticDragCoef = 0.002f; // Increased quadratic drag
+    // KEEP YOUR ORIGINAL CONVENTION
+    const float linearDragCoef = 0.006f;     // Linear drag (moderate)
+    const float quadraticDragCoef = 0.001f;  // Quadratic drag (low)
     
-    // Buoyancy settings 
-    const float buoyancyCoef = 0.005f;     // Reduced buoyancy to prevent excessive bobbing
-    const float waterDensity = 1000.0f;    // Reference water density
+    // Buoyancy settings with reasonable values
+    const float buoyancyCoef = 0.007f;      // Moderate buoyancy
+    const float waterDensity = 1000.0f;     // Standard water density
     
-    // Stabilization and safety
-    const float maxForce = 0.1f;           // Reduced max force for better stability
-    const float maxTorque = 0.02f;         // Reduced max torque
-    const float depthScale = 0.05f;        // Increased depth scale for smoother transition
-    const float velocitySafetyFactor = 3.0f; // Increased safety at high velocities
-
-    // Get fluid particle data
+    // Stabilization factors
+    const float maxForce = 0.15f;            // Reasonable force cap
+    const float maxTorque = 0.03f;           // Reasonable torque cap
+    const float depthScale = 0.04f;          // Smooth depth transition
+    
+    // Use your fluid particle with proper density
     GPUFluidParticle fp = fluidParticles[globalID];
-    float densityF = max(fp.density, waterDensity); // Use reference density if not computed
+    float densityF = fp.density > 0.0f ? fp.density : waterDensity;
 
     // For each rigid
     for (int r = 0; r < rigidCount; r++) {
         GPURigidBody rb = rigids[r];
         
-        // Safety check for extreme velocities
+        // Safe velocity check
         float rbVelSq = rb.vx*rb.vx + rb.vy*rb.vy + rb.omega*rb.omega;
-        if (rbVelSq > 50.0f) { // Reduced threshold for high velocity check
+        if (rbVelSq > 80.0f) {  // Less aggressive velocity cap
             continue;
         }
         
@@ -807,51 +762,41 @@ kernel void rigidFluidImpulseSolver(
         // Normalize for direction
         float2 relVelDir = relVel / relVelMag;
         
-        // Improved depth transition function with better curve
-        float normalizedDepth = penetrationDepth / depthScale;
-        float depthFactor = normalizedDepth * normalizedDepth / (1.0f + normalizedDepth * normalizedDepth);
+        // Smooth depth factor
+        float depthFactor = tanh(2.0f * penetrationDepth / depthScale);
         
-        // Velocity safety scaling (stronger reduction at high speeds)
-        float velocitySafety = 1.0f / (1.0f + velocitySafetyFactor * relVelMag);
-        
-        // Calculate drag magnitude - drag MUST OPPOSE relative motion 
+        // Calculate drag with SAME sign convention as before (YOUR working version)
         float linearComponent = linearDragCoef * relVelMag;
         float quadraticComponent = quadraticDragCoef * relVelMag * relVelMag;
-        float dragMag = (linearComponent + quadraticComponent) * densityF * dt * velocitySafety * depthFactor;
+        float dragMag = (linearComponent + quadraticComponent) * densityF * dt * depthFactor;
         
-        // Buoyancy with depth-dependent transition
+        // Buoyancy calculation
         float volume = fp.mass / densityF;
-        float buoyancyMag = waterDensity * volume * 9.81f * buoyancyCoef * dt;
+        float buoyancy = waterDensity * volume * 9.81f * buoyancyCoef * dt * depthFactor;
         
-        // Varying buoyancy based on depth - full buoyancy only when fully submerged
-        float buoyancyDepthFactor = min(depthFactor * 1.5f, 1.0f);
-        float buoyancy = buoyancyMag * buoyancyDepthFactor;
-        
-        // CORRECTED SIGN CONVENTION:
-        // Drag should ALWAYS oppose motion (negative of relative velocity direction)
-        // Buoyancy always points up
-        float2 dragForce = relVelDir * min(dragMag, maxForce * 0.8f);
+        // MAINTAIN YOUR SIGN CONVENTION: This is what worked before
+        float2 dragForce = relVelDir * min(dragMag, maxForce * 0.7f);
         float2 buoyancyForce = float2(0.0f, -min(buoyancy, maxForce * 0.3f));
         
-        // Combined force (drag + buoyancy)
+        // Sum forces
         float2 totalForce = dragForce + buoyancyForce;
         
-        // Safety clamp on total force magnitude
+        // Safety clamp total force magnitude
         float forceMag = length(totalForce);
         if (forceMag > maxForce) {
             totalForce = totalForce * (maxForce / forceMag);
         }
         
-        // Calculate torque with more damping for rotational stability
+        // Calculate torque
         float torque = relativePos.x * totalForce.y - relativePos.y * totalForce.x;
         torque = clamp(torque, -maxTorque, maxTorque);
         
-        // Add angular damping proportional to angular velocity to prevent excessive spinning
-        if (abs(rb.omega) > 0.1f) {
-            torque -= 0.01f * sign(rb.omega) * min(abs(rb.omega), 5.0f) * rb.inertia;
+        // Add minimal angular damping for stability
+        if (abs(rb.omega) > 0.5f) {
+            torque -= 0.005f * sign(rb.omega) * abs(rb.omega) * rb.inertia;
         }
         
-        // Atomically add to rigid body accumulators
+        // Atomically accumulate forces and torque
         device atomic_float* aFx = reinterpret_cast<device atomic_float*>(&rigids[r].accumFx);
         device atomic_float* aFy = reinterpret_cast<device atomic_float*>(&rigids[r].accumFy);
         device atomic_float* aTq = reinterpret_cast<device atomic_float*>(&rigids[r].accumTorque);
