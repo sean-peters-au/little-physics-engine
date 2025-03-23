@@ -79,8 +79,8 @@ FluidSystem::FluidSystem()
       verletHalfPSO_(nullptr),
       verletFinishPSO_(nullptr),
       computeBoundingBoxPSO_(nullptr),
-      rigidFluidPositionPSO_(nullptr),
       rigidFluidImpulsePSO_(nullptr),
+      rigidFluidPositionPSO_(nullptr),
       particleBuf_(nullptr),
       rigidBuf_(nullptr),
       paramsBuf_(nullptr),
@@ -119,8 +119,8 @@ FluidSystem::FluidSystem()
     verletHalfPSO_         = createComputePipeline("velocityVerletHalf",   metalLibrary_, device_);
     verletFinishPSO_       = createComputePipeline("velocityVerletFinish", metalLibrary_, device_);
     computeBoundingBoxPSO_ = createComputePipeline("computeBoundingBox",   metalLibrary_, device_);
-    rigidFluidPositionPSO_ = createComputePipeline("rigidFluidPositionSolver", metalLibrary_, device_);
     rigidFluidImpulsePSO_  = createComputePipeline("rigidFluidImpulseSolver",  metalLibrary_, device_);
+    rigidFluidPositionPSO_ = createComputePipeline("rigidFluidPositionSolver", metalLibrary_, device_);
 }
 
 FluidSystem::~FluidSystem()
@@ -816,21 +816,6 @@ void FluidSystem::multiStepVelocityVerlet(
                     256
                 );
 
-                // rigidFluidPosition
-                encodeComputePass(
-                    enc,
-                    rigidFluidPositionPSO_,
-                    [&](MTL::ComputeCommandEncoder* innerEnc)
-                    {
-                        innerEnc->setBuffer(particleBuf_, 0, 0);
-                        innerEnc->setBytes(&realCount, sizeof(int), 1);
-                        innerEnc->setBuffer(rigidBuf_, 0, 2);
-                        innerEnc->setBytes(&rigidCount, sizeof(int), 3);
-                    },
-                    static_cast<size_t>(realCount),
-                    256
-                );
-
                 // rigidFluidImpulse (if we have rigid bodies)
                 if (rigidCount > 0)
                 {
@@ -849,6 +834,22 @@ void FluidSystem::multiStepVelocityVerlet(
                         256
                     );
                 }
+
+                // rigidFluidPosition
+                encodeComputePass(
+                    enc,
+                    rigidFluidPositionPSO_,
+                    [&](MTL::ComputeCommandEncoder* innerEnc)
+                    {
+                        innerEnc->setBuffer(particleBuf_, 0, 0);
+                        innerEnc->setBytes(&realCount, sizeof(int), 1);
+                        innerEnc->setBuffer(rigidBuf_, 0, 2);
+                        innerEnc->setBytes(&rigidCount, sizeof(int), 3);
+                        innerEnc->setBuffer(paramsBuf_, 0, 4);
+                    },
+                    static_cast<size_t>(realCount),
+                    256
+                );
 
                 enc->endEncoding();
             }

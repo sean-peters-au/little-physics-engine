@@ -722,17 +722,17 @@ kernel void rigidFluidImpulseSolver(
     // -----------------------------------------------------------------------
     // Physics constants
     const float GRAVITY = 9.81f;                 // Gravitational acceleration (m/s²)
-    const float WATER_DENSITY = 100.0f;         // Reference density for water (kg/m³)
-   
+    const float WATER_DENSITY = 1000.0f;         // Reference density for water (kg/m³)
+    
     // Force limits for stability
     const float MAX_FORCE = 0.15f;               // Maximum force magnitude per particle
     const float MAX_TORQUE = 0.03f;              // Maximum torque magnitude per particle
     
     // Force calculation parameters
-    const float VISCOSITY_SCALE = 0.5f;          // Scale param.viscosity for more stable results
+    const float VISCOSITY_SCALE = 0.05f;          // Scale param.viscosity for more stable results
     const float DEPTH_SCALE = 0.04f;             // Scale for penetration depth transition
     const float DEPTH_TRANSITION_RATE = 2.0f;    // Controls how quickly depth effect increases
-    const float PRESSURE_FORCE_LIMIT_RATIO = 0.85f; // Pressure force as ratio of MAX_FORCE
+    const float PRESSURE_FORCE_LIMIT_RATIO = 1.00f; // Pressure force as ratio of MAX_FORCE
     const float VISCOUS_FORCE_LIMIT_RATIO = 0.3f;  // Viscous force as ratio of MAX_FORCE
     
     // Angular damping
@@ -746,6 +746,11 @@ kernel void rigidFluidImpulseSolver(
     const float MAX_SAFE_VELOCITY_SQ = 80.0f;    // Square of max velocity magnitude
     const float MIN_PENETRATION = 1e-6f;         // Minimum penetration to consider collision
     const float MIN_REL_VELOCITY = 1e-6f;        // Minimum relative velocity magnitude
+    
+    // Two-way coupling parameters
+    const float FLUID_FORCE_SCALE = 100.0f;       // Scale factor for fluid forces
+    const float FLUID_FORCE_MAX = 50000.0f;         // Maximum force that can be applied to fluid particle
+    const float BUOYANCY_STRENGTH = 0.2f;       // Buoyancy force strength (1.0 = neutral)
 
     // Get time step from parameters
     const float dt = param.dt;
@@ -754,6 +759,10 @@ kernel void rigidFluidImpulseSolver(
     GPUFluidParticle fp = fluidParticles[globalID];
     float densityF = fp.density > 0.0f ? fp.density : WATER_DENSITY;
     float pressureF = fp.pressure;
+    
+    // Accumulators for forces on this fluid particle (two-way coupling)
+    float2 totalFluidForce = float2(0.0f, 0.0f);
+    bool hadInteraction = false;
 
     // For each rigid
     for (int r = 0; r < rigidCount; r++) {
@@ -816,6 +825,8 @@ kernel void rigidFluidImpulseSolver(
         
         if (!inside || penetrationDepth < MIN_PENETRATION) continue;
         
+        hadInteraction = true;
+        
         // Calculate rigid body velocity at this point
         float2 rotVel = float2(-rb.omega * relativePos.y, rb.omega * relativePos.x);
         float2 rigidVel = float2(rb.vx, rb.vy) + rotVel;
@@ -867,7 +878,27 @@ kernel void rigidFluidImpulseSolver(
         }
         
         // ---------------------------------------------------------------------
-        // 3. COMBINE FORCES with safety clamping
+        // 3. BUOYANCY EFFECT: Enhanced upward force for realistic floating
+        // ---------------------------------------------------------------------
+        // Add stronger buoyancy effect if object is denser than water
+        if (rb.mass > 0.1f) {  // Only for non-trivial mass objects
+            // Calculate buoyancy based on depth and relative density
+            float2 buoyancyForce = float2(0.0f, -1.0f) * // Upward direction
+                                 BUOYANCY_STRENGTH * // Strength multiplier
+                                 penetrationDepth * // More force for deeper penetration
+                                 effectiveArea * // Scale by interaction area
+                                 GRAVITY * // Scale by gravity
+                                 densityF; // Scale by fluid density
+            
+            // Add to total force (only apply buoyancy if it doesn't exceed max force)
+            float2 combinedForce = pressureForceVec + buoyancyForce;
+            if (length(combinedForce) <= MAX_FORCE) {
+                pressureForceVec = combinedForce;
+            }
+        }
+        
+        // ---------------------------------------------------------------------
+        // 4. COMBINE FORCES with safety clamping
         // ---------------------------------------------------------------------
         float2 totalForce = pressureForceVec;
         
@@ -894,5 +925,29 @@ kernel void rigidFluidImpulseSolver(
         atomic_fetch_add_explicit(aFx, totalForce.x, memory_order_relaxed);
         atomic_fetch_add_explicit(aFy, totalForce.y, memory_order_relaxed);
         atomic_fetch_add_explicit(aTq, torque, memory_order_relaxed);
+        
+        // TWO-WAY COUPLING: Apply equal and opposite force to fluid particle
+        // Newton's third law - forces are equal and opposite
+        totalFluidForce -= totalForce * FLUID_FORCE_SCALE;
+    }
+    
+    // Apply accumulated forces to fluid particle if we had any interactions
+    if (hadInteraction) {
+        // Safety clamp forces for stability
+        float fluidForceMag = length(totalFluidForce);
+        if (fluidForceMag > FLUID_FORCE_MAX) {
+            totalFluidForce = totalFluidForce * (FLUID_FORCE_MAX / fluidForceMag);
+        }
+        
+        // Convert force to acceleration (F = ma => a = F/m)
+        float invMass = (fp.mass > 0.0001f) ? 1.0f / fp.mass : 1.0f;
+        float2 accel = totalFluidForce * invMass;
+        
+        // Update accelerations 
+        fp.ax += accel.x;
+        fp.ay += accel.y;
+        
+        // Store the updated particle
+        fluidParticles[globalID] = fp;
     }
 }
