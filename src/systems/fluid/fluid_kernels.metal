@@ -549,17 +549,32 @@ kernel void rigidFluidPositionSolver(
         return;
     }
 
+    // -----------------------------------------------------------------------
+    // Position solver parameters - all magic numbers defined as constants here
+    // -----------------------------------------------------------------------
+    // Collision resolution parameters
+    const float SAFETY_MARGIN = 0.001f;       // Extra separation to prevent re-collision
+    const float RELAX_FACTOR = 0.3f;          // Relaxation for position correction (0-1)
+    
+    // Splash effect parameters
+    const float VELOCITY_TRANSFER_FACTOR = 0.7f;  // How much rigid body velocity transfers to fluid
+    const float MIN_SPLASH_SPEED = 0.5f;          // Minimum speed needed to create splash
+    const float MAX_PENETRATION_DEPTH = 0.05f;    // Depth cap for splash calculations
+    
+    // Velocity adjustment factors - ensure energy conservation!
+    const float NORMAL_SPLASH_AMPLIFICATION = 0.5f;    // Amplify normal component for splash (was 1.2)
+    const float TANGENT_SPLASH_REDUCTION = 0.2f;       // Reduce tangential component
+    const float REFLECTION_RESTITUTION = 0.7f;         // Restitution coefficient (was 1.2!)
+    
+    // Numerical stability thresholds
+    const float MIN_SAFE_DISTANCE = 1e-10f;    // Minimum safe distance to avoid divide-by-zero
+    const float MIN_SAFE_NORMAL_LENGTH = 1e-6f; // Minimum normal length for normalization
+
+    // Local variables for the current particle
     float2 accumCorr = float2(0.0f, 0.0f);
     GPUFluidParticle p = particles[globalID];
     float px = p.x;
     float py = p.y;
-
-    const float safetyMargin = 0.001f;
-    const float relaxFactor  = 0.3f;
-    
-    // Splashing control parameters
-    const float velocityTransferFactor = 0.7f;  // How much rigid body velocity transfers to fluid
-    const float minSplashSpeed = 0.5f;          // Minimum speed needed to create splash
     
     // Collision detection variables
     bool hadCollision = false;
@@ -584,13 +599,13 @@ kernel void rigidFluidPositionSolver(
             float radius = body.radius;
             if (dist2 < radius*radius) {
                 float dist = sqrt(dist2);
-                if (dist < 1e-10f) {
-                    dist = 1e-10f;
+                if (dist < MIN_SAFE_DISTANCE) {
+                    dist = MIN_SAFE_DISTANCE;
                     dx = 1.0f; dy = 0.0f;
                 }
-                float pen = (radius - dist) + safetyMargin;
+                float pen = (radius - dist) + SAFETY_MARGIN;
                 float2 dir = float2(dx, dy) / dist;
-                float2 corr = dir * pen * relaxFactor;
+                float2 corr = dir * pen * RELAX_FACTOR;
                 accumCorr += corr;
                 
                 // Record collision data for velocity transfer
@@ -617,13 +632,13 @@ kernel void rigidFluidPositionSolver(
                 float cdy = py - cy;
                 float d2 = cdx*cdx + cdy*cdy;
                 float d = sqrt(d2);
-                if (d < 1e-10f) {
-                    d = 1e-10f;
+                if (d < MIN_SAFE_DISTANCE) {
+                    d = MIN_SAFE_DISTANCE;
                     cdx = 1.0f; cdy = 0.0f;
                 }
-                float pen = d + safetyMargin;
+                float pen = d + SAFETY_MARGIN;
                 float2 dir = float2(cdx, cdy) / d;
-                float2 corr = dir * pen * relaxFactor;
+                float2 corr = dir * pen * RELAX_FACTOR;
                 accumCorr += corr;
                 
                 // Record collision data for velocity transfer
@@ -645,10 +660,10 @@ kernel void rigidFluidPositionSolver(
     p.y -= accumCorr.y;
 
     // Apply reciprocal velocity transfer to create splashing
-    if (hadCollision && rigidSpeed > minSplashSpeed) {
+    if (hadCollision && rigidSpeed > MIN_SPLASH_SPEED) {
         // Normalize contact normal for safety
         float normalLen = length(contactNormal);
-        if (normalLen > 1e-6f) {
+        if (normalLen > MIN_SAFE_NORMAL_LENGTH) {
             float2 normal = contactNormal / normalLen;
             
             // Calculate how much rigid body is pushing into fluid
@@ -657,7 +672,8 @@ kernel void rigidFluidPositionSolver(
             // Only apply splash when rigid body is moving into fluid
             if (approachSpeed > 0.0f) {
                 // Create splash force proportional to penetration depth and approach speed
-                float splashFactor = velocityTransferFactor * approachSpeed * min(penetrationDepth, 0.05f) / 0.05f;
+                float splashFactor = VELOCITY_TRANSFER_FACTOR * approachSpeed * 
+                                     min(penetrationDepth, MAX_PENETRATION_DEPTH) / MAX_PENETRATION_DEPTH;
                 
                 // Decompose rigid velocity onto normal and tangential components
                 float normalComponent = dot(rigidVelocity, normal);
@@ -666,7 +682,8 @@ kernel void rigidFluidPositionSolver(
                 
                 // Transfer velocities - higher transfer in normal direction (more splashing)
                 // and lower transfer in tangential direction (some dragging)
-                float2 transferVel = tangentialVel * 0.2f + normalVel * 1.2f;
+                float2 transferVel = tangentialVel * TANGENT_SPLASH_REDUCTION + 
+                                     normalVel * NORMAL_SPLASH_AMPLIFICATION;
                 
                 // Apply transfer as a velocity impulse to create splash
                 p.vx += transferVel.x * splashFactor;
@@ -682,15 +699,17 @@ kernel void rigidFluidPositionSolver(
     else if (hadCollision) {
         // Normalize contact normal for safety
         float normalLen = length(contactNormal);
-        if (normalLen > 1e-6f) {
+        if (normalLen > MIN_SAFE_NORMAL_LENGTH) {
             float2 normal = contactNormal / normalLen;
             
             // Basic reflection of penetrating velocity component
             float normalVel = dot(float2(p.vx, p.vy), normal);
             if (normalVel < 0.0f) {
-                p.vx -= normalVel * normal.x * 1.2f; // Slight bounce
-                p.vy -= normalVel * normal.y * 1.2f;
+                // Apply physically correct reflection with proper restitution (less than 1.0)
+                p.vx -= normalVel * normal.x * (1.0f + REFLECTION_RESTITUTION); 
+                p.vy -= normalVel * normal.y * (1.0f + REFLECTION_RESTITUTION);
                 
+                // Sync half-step velocity
                 p.vxHalf = p.vx;
                 p.vyHalf = p.vy;
             }
@@ -725,26 +744,42 @@ kernel void rigidFluidImpulseSolver(
         return;
     }
 
-    // Parameters
+    // -----------------------------------------------------------------------
+    // Impulse solver parameters - all magic numbers defined as constants here
+    // -----------------------------------------------------------------------
+    // Physics constants
+    const float GRAVITY = 9.81f;                 // Gravitational acceleration (m/s²)
+    const float WATER_DENSITY = 1000.0f;         // Reference density for water (kg/m³)
+    
+    // Force limits for stability
+    const float MAX_FORCE = 0.15f;               // Maximum force magnitude per particle
+    const float MAX_TORQUE = 0.03f;              // Maximum torque magnitude per particle
+    
+    // Force calculation parameters
+    const float VISCOSITY_SCALE = 0.5f;          // Scale param.viscosity for more stable results
+    const float DEPTH_SCALE = 0.04f;             // Scale for penetration depth transition
+    const float DEPTH_TRANSITION_RATE = 2.0f;    // Controls how quickly depth effect increases
+    const float PRESSURE_FORCE_LIMIT_RATIO = 0.85f; // Pressure force as ratio of MAX_FORCE
+    const float VISCOUS_FORCE_LIMIT_RATIO = 0.3f;  // Viscous force as ratio of MAX_FORCE
+    
+    // Angular damping
+    const float ANGULAR_DAMPING_THRESHOLD = 0.5f;   // Angular velocity threshold for damping
+    const float ANGULAR_DAMPING_FACTOR = 0.005f;    // Factor for angular velocity damping
+    
+    // Hydrostatic pressure estimation
+    const float DEPTH_ESTIMATE_SCALE = 10.0f;    // Coordinate scale for depth estimation
+    
+    // Safety thresholds
+    const float MAX_SAFE_VELOCITY_SQ = 80.0f;    // Square of max velocity magnitude
+    const float MIN_PENETRATION = 1e-6f;         // Minimum penetration to consider collision
+    const float MIN_REL_VELOCITY = 1e-6f;        // Minimum relative velocity magnitude
+
+    // Get time step from parameters
     const float dt = param.dt;
-    const float waterDensity = 1000.0f;
-    
-    // Safety caps
-    const float maxForce = 0.15f;
-    const float maxTorque = 0.03f;
-    
-    // Viscosity scaling (for tangential forces)
-    const float viscosityCoef = param.viscosity * 0.5f;
-    
-    // Buoyancy parameters
-    const float buoyancyCoef = 0.000f;
-    
-    // Depth transition
-    const float depthScale = 0.04f;
     
     // Get fluid particle data
     GPUFluidParticle fp = fluidParticles[globalID];
-    float densityF = fp.density > 0.0f ? fp.density : waterDensity;
+    float densityF = fp.density > 0.0f ? fp.density : WATER_DENSITY;
     float pressureF = fp.pressure;
 
     // For each rigid
@@ -753,7 +788,7 @@ kernel void rigidFluidImpulseSolver(
         
         // Safety velocity check
         float rbVelSq = rb.vx*rb.vx + rb.vy*rb.vy + rb.omega*rb.omega;
-        if (rbVelSq > 80.0f) {
+        if (rbVelSq > MAX_SAFE_VELOCITY_SQ) {
             continue;
         }
         
@@ -777,7 +812,7 @@ kernel void rigidFluidImpulseSolver(
             if (dist2 < radiusSq) {
                 inside = true;
                 float dist = sqrt(dist2);
-                if (dist < 1e-6f) dist = 1e-6f;
+                if (dist < MIN_PENETRATION) dist = MIN_PENETRATION;
                 penetrationDepth = rb.radius - dist;
                 if (penetrationDepth < 0.0f) penetrationDepth = 0.0f;
                 relativePos = float2(rx, ry);
@@ -795,7 +830,7 @@ kernel void rigidFluidImpulseSolver(
                 float dy = fp.y - cy;
                 float d2 = dx*dx + dy*dy;
                 float d = sqrt(d2);
-                if (d < 1e-6f) d = 1e-6f;
+                if (d < MIN_PENETRATION) d = MIN_PENETRATION;
                 
                 penetrationDepth = d;
                 if (penetrationDepth < 0.0f) penetrationDepth = 0.0f;
@@ -806,7 +841,7 @@ kernel void rigidFluidImpulseSolver(
             }
         }
         
-        if (!inside || penetrationDepth < 1e-6f) continue;
+        if (!inside || penetrationDepth < MIN_PENETRATION) continue;
         
         // Calculate rigid body velocity at this point
         float2 rotVel = float2(-rb.omega * relativePos.y, rb.omega * relativePos.x);
@@ -815,10 +850,9 @@ kernel void rigidFluidImpulseSolver(
         
         // Skip if minimal relative velocity
         float relVelMag = length(relVel);
-        if (relVelMag < 1e-6f) continue;
         
         // Depth factor for smooth transition
-        float depthFactor = tanh(2.0f * penetrationDepth / depthScale);
+        float depthFactor = tanh(DEPTH_TRANSITION_RATE * penetrationDepth / DEPTH_SCALE);
         
         // Decompose relative velocity into normal and tangential components
         float normalVel = dot(relVel, normal);
@@ -826,55 +860,57 @@ kernel void rigidFluidImpulseSolver(
         float2 tangentVelVec = relVel - normalVelVec;
         
         // ---------------------------------------------------------------------
-        // 1. PRESSURE FORCE: Based on actual fluid pressure (physically correct)
+        // 1. PRESSURE FORCE: Based on fluid pressure and hydrostatic effects
         // ---------------------------------------------------------------------
-        // Scale particle pressure by area (mass/density) and depth
+        // Calculate effective area for this particle's interaction
         float particleVolume = fp.mass / densityF;
         float effectiveArea = pow(particleVolume, 2.0f/3.0f); // Approximate area from volume
-        float pressureForce = pressureF * effectiveArea * depthFactor;
         
-        // Apply pressure force in surface normal direction (outward from rigid body)
-        float2 pressureForceVec = normal * min(pressureForce, maxForce * 0.7f);
+        // Consider both dynamic pressure from SPH and hydrostatic pressure
+        // The hydrostatic component naturally creates buoyancy
+        float depth = min(fp.y / DEPTH_ESTIMATE_SCALE, 1.0f); // Estimate depth from top (y=0)
+        float hydrostaticComponent = densityF * GRAVITY * depth;
+        float totalPressure = pressureF + hydrostaticComponent;
+        
+        // Scale by depth factor and area
+        float pressureForce = totalPressure * effectiveArea * depthFactor;
+        
+        // Apply pressure force in normal direction (create floating effect)
+        float2 pressureForceVec = normal * min(pressureForce, MAX_FORCE * PRESSURE_FORCE_LIMIT_RATIO);
         
         // ---------------------------------------------------------------------
-        // 2. VISCOUS FORCE: Apply to tangential direction (like fluid friction)
+        // 2. VISCOUS FORCE: Apply to tangential direction for fluid friction
         // ---------------------------------------------------------------------
         float tangentVelMag = length(tangentVelVec);
-        if (tangentVelMag > 1e-6f) {
+        if (tangentVelMag > MIN_REL_VELOCITY) {
             float2 tangentDir = tangentVelVec / tangentVelMag;
             // Viscous force opposes tangential motion
+            float viscosityCoef = param.viscosity * VISCOSITY_SCALE;
             float viscousForce = viscosityCoef * tangentVelMag * densityF * depthFactor * dt;
-            float2 viscousForceVec = -tangentDir * min(viscousForce, maxForce * 0.3f);
+            float2 viscousForceVec = -tangentDir * min(viscousForce, MAX_FORCE * VISCOUS_FORCE_LIMIT_RATIO);
             
             // Add to total force
             pressureForceVec += viscousForceVec;
         }
         
         // ---------------------------------------------------------------------
-        // 3. BUOYANCY: Based on Archimedes' principle
+        // 3. COMBINE FORCES with safety clamping
         // ---------------------------------------------------------------------
-        float volume = fp.mass / densityF;
-        float buoyancy = waterDensity * volume * 9.81f * buoyancyCoef * dt * depthFactor;
-        float2 buoyancyForce = float2(0.0f, -min(buoyancy, maxForce * 0.3f));
-        
-        // ---------------------------------------------------------------------
-        // 4. COMBINE FORCES with safety clamping
-        // ---------------------------------------------------------------------
-        float2 totalForce = pressureForceVec + buoyancyForce;
+        float2 totalForce = pressureForceVec;
         
         // Safety clamp
         float forceMag = length(totalForce);
-        if (forceMag > maxForce) {
-            totalForce = totalForce * (maxForce / forceMag);
+        if (forceMag > MAX_FORCE) {
+            totalForce = totalForce * (MAX_FORCE / forceMag);
         }
         
         // Calculate torque
         float torque = relativePos.x * totalForce.y - relativePos.y * totalForce.x;
-        torque = clamp(torque, -maxTorque, maxTorque);
+        torque = clamp(torque, -MAX_TORQUE, MAX_TORQUE);
         
         // Minimal angular damping only at high angular velocities
-        if (abs(rb.omega) > 0.5f) {
-            torque -= 0.005f * sign(rb.omega) * abs(rb.omega) * rb.inertia;
+        if (abs(rb.omega) > ANGULAR_DAMPING_THRESHOLD) {
+            torque -= ANGULAR_DAMPING_FACTOR * sign(rb.omega) * abs(rb.omega) * rb.inertia;
         }
         
         // Apply forces to rigid body

@@ -12,13 +12,13 @@
 struct FluidAndPolygonsConfig {
     // Fluid parameters
     int fluidParticleCount = 1000;     // Number of fluid particles
-    double fluidParticleMass = 0.05;  // Mass per fluid particle
+    double fluidParticleMass = 0.005;  // Mass per fluid particle
     double fluidRestDensity = 100.0;  // Typical rest density for water
     double InitialVelocityFactor = 1.0;
     
     // Polygon parameters
     int polygonCount = 5;              // How many random polygons to spawn
-    double polygonMassMean = 1;        // Typical mass for polygons
+    double polygonMassMean = 5;        // Typical mass for polygons
     double polygonMassStdDev = 0.2;    // Variation in polygon mass
     
     // Friction parameters
