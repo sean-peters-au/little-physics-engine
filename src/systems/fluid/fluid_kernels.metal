@@ -563,7 +563,7 @@ kernel void rigidFluidPositionSolver(
     // -----------------------------------------------------------------------
     // Collision resolution parameters
     const float SAFETY_MARGIN = 0.001f;          // Extra separation to prevent re-collision
-    const float RELAX_FACTOR = 0.2f;             // Lower factor for more gradual corrections
+    const float RELAX_FACTOR = 0.9f;             // Lower factor for more gradual corrections
     
     // Numerical stability thresholds
     const float MIN_SAFE_DISTANCE = 1e-10f;      // Minimum safe distance to avoid divide-by-zero
