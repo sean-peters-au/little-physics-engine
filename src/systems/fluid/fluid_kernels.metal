@@ -722,8 +722,8 @@ kernel void rigidFluidImpulseSolver(
     // -----------------------------------------------------------------------
     // Physics constants
     const float GRAVITY = 9.81f;                 // Gravitational acceleration (m/s²)
-    const float WATER_DENSITY = 1000.0f;         // Reference density for water (kg/m³)
-    
+    const float WATER_DENSITY = 100.0f;         // Reference density for water (kg/m³)
+   
     // Force limits for stability
     const float MAX_FORCE = 0.15f;               // Maximum force magnitude per particle
     const float MAX_TORQUE = 0.03f;              // Maximum torque magnitude per particle

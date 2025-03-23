@@ -1,6 +1,6 @@
 /**
  * @file fluid_and_polygons.cpp
- * @brief A scenario placing fluid particles near the top and random polygons below,
+ * @brief A scenario placing fluid particles at the bottom and random polygons at the top,
  *        all falling under gravity in a bounded box.
  */
 
@@ -117,16 +117,16 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         scenarioConfig.wallDynamicFriction,
         scenarioConfig.wallMass);
 
-    // 2) Create random polygon entities on the RIGHT side of the screen
+    // 2) Create random polygon entities at the TOP, centered horizontally
     std::default_random_engine generator(static_cast<unsigned>(std::time(nullptr)));
-    std::uniform_real_distribution<double> xDist(sizeM * 0.6, sizeM * 0.8); // RIGHT side
-    std::uniform_real_distribution<double> yDist(sizeM * 0.3, sizeM * 0.6); // Middle-upper area
+    std::uniform_real_distribution<double> xDist(sizeM * 0.3, sizeM * 0.7); // Centered horizontally
+    std::uniform_real_distribution<double> yDist(sizeM * 0.05, sizeM * 0.2); // Near the top
     std::normal_distribution<double> massDist(scenarioConfig.polygonMassMean, scenarioConfig.polygonMassStdDev);
     std::uniform_int_distribution<int> colorDist(50, 200);
     std::normal_distribution<> velocityDist(0.0, scenarioConfig.initialVelocityScale);
 
     for (int i = 0; i < scenarioConfig.polygonCount; ++i) {
-        // Random position on the RIGHT side
+        // Random position at the top, centered
         double x = xDist(generator);
         double y = yDist(generator);
 
@@ -136,15 +136,15 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         double massVal = std::max(0.1, massDist(generator)); // ensure not zero or negative
         registry.emplace<Components::Position>(ent, x, y);
         registry.emplace<Components::Velocity>(ent, 
-            velocityDist(generator), 
-            velocityDist(generator));
+            velocityDist(generator) * 0.2, // small horizontal velocity
+            std::abs(velocityDist(generator))); // positive (downward) vertical velocity
         registry.emplace<Components::Mass>(ent, massVal);
         registry.emplace<Components::ParticlePhase>(ent, Components::Phase::Solid);
         registry.emplace<Components::Material>(ent, scenarioConfig.polyStaticFriction, scenarioConfig.polyDynamicFriction);
         registry.emplace<Components::Sleep>(ent);
 
         // Build a random polygon
-        double sizePoly = 0.15 + 0.1 * 1; // (i % 3); // vary sizes a bit
+        double sizePoly = 0.15 + 0.1 * (i % 3); // vary sizes a bit
         // PolygonShape poly = buildRandomConvexPolygon(generator, sizePoly);
         PolygonShape poly = buildRegularPolygon(5, sizePoly);
         registry.emplace<Components::Shape>(ent, Components::ShapeType::Polygon, sizePoly);
@@ -165,19 +165,27 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         registry.emplace<Components::Color>(ent, rr, gg, bb);
     }
 
-    // 3) Create fluid particles on the LEFT side of the screen
+    // 3) Create fluid particles at the BOTTOM of the screen
     {
         int numFluid = scenarioConfig.fluidParticleCount;
-        double x_min = sizeM * 0.1;
-        double x_max = sizeM * 0.4; // LEFT side of screen
-        double y_min = sizeM * 0.2; // Higher up
-        double y_max = sizeM * 0.6; // More vertical space
+        double x_min = sizeM * 0.05;
+        double x_max = sizeM * 0.95;
+        double y_min = sizeM * 0.75;
+        double y_max = sizeM * 0.95;
 
         double regionWidth  = x_max - x_min;
         double regionHeight = y_max - y_min;
 
-        int nCols = static_cast<int>(std::sqrt(numFluid));
-        int nRows = (numFluid + nCols - 1) / nCols;  // ceiling division
+        // Calculate a better distribution based on the container's aspect ratio
+        double aspectRatio = regionWidth / regionHeight;
+        // Determine number of rows and columns based on aspect ratio
+        // For N particles in an area with aspect ratio A, we want:
+        // rows * cols = N and cols/rows = A
+        // This gives us: rows = sqrt(N/A) and cols = sqrt(N*A)
+        int nRows = static_cast<int>(std::sqrt(numFluid / aspectRatio));
+        if (nRows < 1) nRows = 1;
+        // Recalculate columns based on total particles needed
+        int nCols = (numFluid + nRows - 1) / nRows; // Ceiling division
 
         double dx = regionWidth / (nCols + 1);
         double dy = regionHeight / (nRows + 1);
@@ -217,9 +225,9 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
                 count++;
             }
         }
-        std::cerr << "Created " << numFluid << " fluid particles at the top.\n";
+        std::cerr << "Created " << numFluid << " fluid particles at the bottom.\n";
     }
 
-    std::cerr << "Created " << scenarioConfig.polygonCount << " random polygons.\n";
+    std::cerr << "Created " << scenarioConfig.polygonCount << " random polygons at the top.\n";
     std::cerr << "Fluid + Polygons scenario ready.\n";
 }

@@ -17,7 +17,7 @@ struct FluidAndPolygonsConfig {
     double InitialVelocityFactor = 1.0;
     
     // Polygon parameters
-    int polygonCount = 1;              // How many random polygons to spawn
+    int polygonCount = 5;              // How many random polygons to spawn
     double polygonMassMean = 5;        // Typical mass for polygons
     double polygonMassStdDev = 0.2;    // Variation in polygon mass
     
