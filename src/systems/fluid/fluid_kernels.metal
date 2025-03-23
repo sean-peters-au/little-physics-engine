@@ -684,7 +684,7 @@ kernel void rigidFluidImpulseSolver(
     const float quadraticDragCoef = 0.001f;  // Quadratic drag (low)
     
     // Buoyancy settings with reasonable values
-    const float buoyancyCoef = 0.007f;      // Moderate buoyancy
+    const float buoyancyCoef = 0.000f;      // Moderate buoyancy
     const float waterDensity = 1000.0f;     // Standard water density
     
     // Stabilization factors
