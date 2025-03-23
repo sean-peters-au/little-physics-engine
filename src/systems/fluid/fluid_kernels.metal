@@ -737,7 +737,7 @@ kernel void rigidFluidImpulseSolver(
     const float viscosityCoef = param.viscosity * 0.5f;
     
     // Buoyancy parameters
-    const float buoyancyCoef = 0.007f;
+    const float buoyancyCoef = 0.000f;
     
     // Depth transition
     const float depthScale = 0.04f;
