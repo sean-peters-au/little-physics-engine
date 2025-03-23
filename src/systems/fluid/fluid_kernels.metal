@@ -405,7 +405,7 @@ kernel void computeForces(
                 float wVisc = lapC*diff;
                 float fVisc = pa.viscosity*nbr.mass*(wVisc/rhoj);
                 fx -= fVisc * vx_ij;
-                fx -= fVisc * vy_ij;
+                fy -= fVisc * vy_ij;
 
                 sumFx += fx;
                 sumFy += fy;
@@ -530,13 +530,21 @@ kernel void computeBoundingBox(
 }
 
 /**
- * Kernel: rigidFluidPositionSolver
- * @brief For each fluid thread, we loop over all rigids. If the fluid is near/inside the rigid,
- *        we compute drag & buoyancy, then atomically add to rigids[r].accumFx, accumFy, accumTorque.
+ * @brief Resolves collisions between fluid particles and rigid bodies using Position-Based Dynamics
+ * 
+ * For each fluid particle, this kernel:
+ * 1. Detects overlaps with rigid bodies (circles and polygons)
+ * 2. Applies position corrections to move particles outside rigid bodies
+ * 3. Updates velocities based on position changes using PBD principles
  *
- * This is a naive O(N_fluid * N_rigid) approach. For large simulations, use better broad-phase or reduce logic.
- *
- * We incorporate param.dt each sub-step so the total effect accumulates across multiple sub-steps.
+ * Uses a direction-aware velocity update to prevent artificial bouncing while
+ * maintaining physical consistency between positions and velocities.
+ * 
+ * @param particles Fluid particle array to process
+ * @param fluidCount Number of fluid particles
+ * @param rigids Array of rigid bodies to check against
+ * @param rigidCount Number of rigid bodies
+ * @param params Fluid simulation parameters (for timestep)
  */
 kernel void rigidFluidPositionSolver(
     device GPUFluidParticle* particles [[buffer(0)]],
@@ -705,7 +713,6 @@ kernel void rigidFluidImpulseSolver(
     device const GPUFluidParams& param      [[buffer(4)]],
     uint globalID                           [[thread_position_in_grid]])
 {
-    return;
     if (globalID >= (uint)fluidCount || rigidCount <= 0) {
         return;
     }
