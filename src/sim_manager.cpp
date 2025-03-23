@@ -74,6 +74,9 @@ bool SimManager::handleEvents() {
         case sf::Keyboard::Num4:
           selectScenario(SimulatorConstants::SimulationType::FLUID_AND_POLYGONS);
           break;
+        case sf::Keyboard::Num5:
+          selectScenario(SimulatorConstants::SimulationType::HOURGLASSES);
+          break;
         default:
           break;
       }

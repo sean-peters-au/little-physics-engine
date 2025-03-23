@@ -26,7 +26,8 @@ namespace SimulatorConstants {
             SimulationType::KEPLERIAN_DISK,
             SimulationType::RANDOM_POLYGONS,
             SimulationType::SIMPLE_FLUID,
-            SimulationType::FLUID_AND_POLYGONS
+            SimulationType::FLUID_AND_POLYGONS,
+            SimulationType::HOURGLASSES
         };
     }
 
@@ -36,6 +37,7 @@ namespace SimulatorConstants {
             case SimulationType::RANDOM_POLYGONS:  return "RANDOM_POLYGONS";
             case SimulationType::SIMPLE_FLUID:     return "SIMPLE_FLUID";
             case SimulationType::FLUID_AND_POLYGONS: return "FLUID_AND_POLYGONS";
+            case SimulationType::HOURGLASSES:      return "HOURGLASSES";
             default: return "UNKNOWN";
         }
     }

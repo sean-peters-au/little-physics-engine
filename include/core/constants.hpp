@@ -9,7 +9,8 @@ namespace SimulatorConstants {
         KEPLERIAN_DISK,
         RANDOM_POLYGONS,
         SIMPLE_FLUID,
-        FLUID_AND_POLYGONS
+        FLUID_AND_POLYGONS,
+        HOURGLASSES
     };
 
     // Fundamental constants (do not change by scenario):

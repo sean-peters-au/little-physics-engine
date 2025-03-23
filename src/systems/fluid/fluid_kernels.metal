@@ -720,6 +720,10 @@ kernel void rigidFluidImpulseSolver(
     // -----------------------------------------------------------------------
     // Impulse solver parameters - all magic numbers defined as constants here
     // -----------------------------------------------------------------------
+    // TODO: These are not using the system and scenario configuration. Need to add these.
+    // TODO: Something has gone wrong with my constants. I had to scale up force by 100x, for things
+    // to look right.
+
     // Physics constants
     const float GRAVITY = 9.81f;                 // Gravitational acceleration (m/s²)
     const float WATER_DENSITY = 1000.0f;         // Reference density for water (kg/m³)

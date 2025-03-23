@@ -12,6 +12,7 @@
 #include "scenarios/keplerian_disk.hpp"
 #include "scenarios/random_polygons.hpp"
 #include "scenarios/simple_fluid.hpp"
+#include "scenarios/hourglasses.hpp"
 
 void ScenarioManager::buildScenarioList() {
   scenarioList.clear();
@@ -47,6 +48,9 @@ std::unique_ptr<IScenario> ScenarioManager::createScenario(
 
     case SimulatorConstants::SimulationType::FLUID_AND_POLYGONS:
       return std::make_unique<FluidAndPolygonsScenario>();
+
+    case SimulatorConstants::SimulationType::HOURGLASSES:
+      return std::make_unique<HourglassesScenario>();
 
     default:
       return std::make_unique<RandomPolygonsScenario>();
