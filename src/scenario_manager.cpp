@@ -13,6 +13,7 @@
 #include "scenarios/random_polygons.hpp"
 #include "scenarios/simple_fluid.hpp"
 #include "scenarios/hourglasses.hpp"
+#include "scenarios/planetary_ocean.hpp"
 
 void ScenarioManager::buildScenarioList() {
   scenarioList.clear();
@@ -51,6 +52,9 @@ std::unique_ptr<IScenario> ScenarioManager::createScenario(
 
     case SimulatorConstants::SimulationType::HOURGLASSES:
       return std::make_unique<HourglassesScenario>();
+
+    case SimulatorConstants::SimulationType::PLANETARY_OCEAN:
+      return std::make_unique<PlanetaryOceanScenario>();
 
     default:
       return std::make_unique<RandomPolygonsScenario>();

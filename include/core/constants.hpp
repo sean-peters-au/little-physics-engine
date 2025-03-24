@@ -10,7 +10,8 @@ namespace SimulatorConstants {
         RANDOM_POLYGONS,
         SIMPLE_FLUID,
         FLUID_AND_POLYGONS,
-        HOURGLASSES
+        HOURGLASSES,
+        PLANETARY_OCEAN
     };
 
     // Fundamental constants (do not change by scenario):

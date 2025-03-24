@@ -27,6 +27,10 @@ namespace Systems {
 struct GravityConfig {
     // Gravitational acceleration in m/s²
     double gravitationalAcceleration = 9.8;
+    
+    // Threshold for considering a mass "planetary" (in kg)
+    // When entities with mass > threshold exist, uniform gravity is disabled
+    double planetaryMassThreshold = 1e10;
 };
 
 /**

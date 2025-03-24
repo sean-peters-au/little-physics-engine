@@ -27,7 +27,8 @@ namespace SimulatorConstants {
             SimulationType::RANDOM_POLYGONS,
             SimulationType::SIMPLE_FLUID,
             SimulationType::FLUID_AND_POLYGONS,
-            SimulationType::HOURGLASSES
+            SimulationType::HOURGLASSES,
+            SimulationType::PLANETARY_OCEAN
         };
     }
 
@@ -38,6 +39,7 @@ namespace SimulatorConstants {
             case SimulationType::SIMPLE_FLUID:     return "SIMPLE_FLUID";
             case SimulationType::FLUID_AND_POLYGONS: return "FLUID_AND_POLYGONS";
             case SimulationType::HOURGLASSES:      return "HOURGLASSES";
+            case SimulationType::PLANETARY_OCEAN:  return "PLANETARY_OCEAN";
             default: return "UNKNOWN";
         }
     }
