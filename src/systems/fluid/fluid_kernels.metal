@@ -638,12 +638,19 @@ kernel void rigidFluidPositionSolver(
     }
 
     // Apply position correction
+    // Add a safety limit to prevent extreme position corrections
+    const float MAX_CORRECTION = 0.1f; // Maximum correction per frame
+    float corrMagnitude = length(accumCorr);
+    if (corrMagnitude > MAX_CORRECTION) {
+        accumCorr = (accumCorr / corrMagnitude) * MAX_CORRECTION;
+    }
+    
     p.x -= accumCorr.x;
     p.y -= accumCorr.y;
 
     // Simple bounds clamp
-    if (p.x < 0.f) p.x = 0.f;
-    if (p.y < 0.f) p.y = 0.f;
+    if (p.x < 0.f) p.x = 0.001f; // Small offset to prevent exact zero
+    if (p.y < 0.f) p.y = 0.001f; // Small offset to prevent exact zero
     
     // PBD: Update velocities based on position change only if we had collisions
     if (hadCollision) {
