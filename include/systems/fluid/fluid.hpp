@@ -178,6 +178,21 @@ struct FluidConfig
         float minRelVelocity = 1e-6f;    ///< Min relative velocity to consider
     } impulseSolver;
     
+    // Grid and particle parameters
+    struct {
+        float gridEpsilon = 1e-6f;            ///< Small offset for grid assignment
+        float defaultSmoothingLength = 0.05f; ///< Default smoothing length if not specified
+        float boundaryOffset = 0.001f;        ///< Offset from boundary when clamping
+    } gridConfig;
+    
+    // Numerical stability parameters
+    struct {
+        float minDistanceThreshold = 1e-14f;  ///< Minimum distance to avoid division by zero
+        float minDensityThreshold = 1e-12f;   ///< Minimum density to consider for force calculation
+        float minTimestep = 1e-10f;           ///< Minimum timestep to use
+        float fallbackTimestep = 1e-4f;       ///< Fallback timestep if below minimum
+    } numericalConfig;
+    
     // General parameters
     float dampingFactor = 0.999f;    ///< Velocity damping for rigid bodies
     int numSubSteps = 10;            ///< Number of substeps per frame

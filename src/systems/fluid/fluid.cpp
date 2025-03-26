@@ -651,8 +651,20 @@ void FluidSystem::multiStepVelocityVerlet(
                     params.impulseSolver.maxSafeVelocitySq = getSpecificConfig().impulseSolver.maxSafeVelocitySq;
                     params.impulseSolver.minPenetration = getSpecificConfig().impulseSolver.minPenetration;
                     params.impulseSolver.minRelVelocity = getSpecificConfig().impulseSolver.minRelVelocity;
-
-                    std::memcpy(paramsBuf_->contents(), &params, sizeof(GPUFluidParams));
+                    
+                    // Set grid configuration parameters
+                    params.gridConfig.gridEpsilon = getSpecificConfig().gridConfig.gridEpsilon;
+                    params.gridConfig.defaultSmoothingLength = getSpecificConfig().gridConfig.defaultSmoothingLength;
+                    params.gridConfig.boundaryOffset = getSpecificConfig().gridConfig.boundaryOffset;
+                    
+                    // Set numerical configuration parameters
+                    params.numericalConfig.minDistanceThreshold = getSpecificConfig().numericalConfig.minDistanceThreshold;
+                    params.numericalConfig.minDensityThreshold = getSpecificConfig().numericalConfig.minDensityThreshold;
+                    params.numericalConfig.minTimestep = getSpecificConfig().numericalConfig.minTimestep;
+                    params.numericalConfig.fallbackTimestep = getSpecificConfig().numericalConfig.fallbackTimestep;
+                    
+                    // Update the parameter buffer
+                    std::memcpy(paramsBuf_->contents(), &params, sizeof(params));
 
                     encodeComputePass(
                         enc,
@@ -791,8 +803,20 @@ void FluidSystem::multiStepVelocityVerlet(
         params.impulseSolver.maxSafeVelocitySq = getSpecificConfig().impulseSolver.maxSafeVelocitySq;
         params.impulseSolver.minPenetration = getSpecificConfig().impulseSolver.minPenetration;
         params.impulseSolver.minRelVelocity = getSpecificConfig().impulseSolver.minRelVelocity;
-
-        std::memcpy(paramsBuf_->contents(), &params, sizeof(GPUFluidParams));
+        
+        // Set grid configuration parameters
+        params.gridConfig.gridEpsilon = getSpecificConfig().gridConfig.gridEpsilon;
+        params.gridConfig.defaultSmoothingLength = getSpecificConfig().gridConfig.defaultSmoothingLength;
+        params.gridConfig.boundaryOffset = getSpecificConfig().gridConfig.boundaryOffset;
+        
+        // Set numerical configuration parameters
+        params.numericalConfig.minDistanceThreshold = getSpecificConfig().numericalConfig.minDistanceThreshold;
+        params.numericalConfig.minDensityThreshold = getSpecificConfig().numericalConfig.minDensityThreshold;
+        params.numericalConfig.minTimestep = getSpecificConfig().numericalConfig.minTimestep;
+        params.numericalConfig.fallbackTimestep = getSpecificConfig().numericalConfig.fallbackTimestep;
+        
+        // Update the parameter buffer
+        std::memcpy(paramsBuf_->contents(), &params, sizeof(params));
 
         // Clear the grid to zero
         if (gridBuf_->contents())

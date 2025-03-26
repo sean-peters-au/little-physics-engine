@@ -19,6 +19,29 @@
 #endif
 
 /**
+ * @struct FluidGridConfig
+ * @brief Configuration parameters related to grid assignment and particle spacing
+ */
+struct FluidGridConfig 
+{
+    float gridEpsilon;        // Small offset for grid assignment (default: 1e-6f)
+    float defaultSmoothingLength; // Default smoothing length if not specified (default: 0.05f)
+    float boundaryOffset;     // Offset from boundary when clamping (default: 0.001f)
+};
+
+/**
+ * @struct FluidNumericalConfig
+ * @brief Configuration parameters for numerical stability and thresholds
+ */
+struct FluidNumericalConfig
+{
+    float minDistanceThreshold;   // Minimum distance to avoid division by zero (default: 1e-14f)
+    float minDensityThreshold;    // Minimum density to consider (default: 1e-12f)
+    float minTimestep;            // Minimum timestep to use (default: 1e-10f)
+    float fallbackTimestep;       // Fallback timestep if below minimum (default: 1e-4f)
+};
+
+/**
  * @struct FluidPositionSolverConfig
  * @brief Configuration parameters specific to the rigid-fluid position solver
  */
@@ -96,6 +119,10 @@ struct GPUFluidParams
     float dt;                 // Current sub-step time
     float halfDt;             // Half of sub-step time (for Verlet)
     unsigned int particleCount; // Number of particles in simulation
+    
+    // Grid and numerical configs
+    FluidGridConfig gridConfig;                // Grid-related parameters
+    FluidNumericalConfig numericalConfig;      // Numerical stability parameters
     
     // Kernel-specific configuration
     FluidPositionSolverConfig positionSolver;  // Position solver configuration

@@ -221,8 +221,8 @@ kernel void assignCells(
     }
     GPUFluidParticle part = particles[globalID];
 
-    float px = part.x + 1e-6f;
-    float py = part.y + 1e-6f;
+    float px = part.x + p.gridConfig.gridEpsilon;
+    float py = part.y + p.gridConfig.gridEpsilon;
     int gx = int(floor(px / p.cellSize));
     int gy = int(floor(py / p.cellSize));
 
@@ -257,13 +257,13 @@ kernel void computeDensity(
 
     float xi = self.x;
     float yi = self.y;
-    float hi = (self.h <= 0.f) ? 0.05f : self.h;
+    float hi = (self.h <= 0.f) ? p.gridConfig.defaultSmoothingLength : self.h;
     float h2 = hi*hi;
     float poly6 = poly6Coeff2D(hi);
 
     float accumDensity = 0.0f;
-    float px = xi + 1e-6f;
-    float py = yi + 1e-6f;
+    float px = xi + p.gridConfig.gridEpsilon;
+    float py = yi + p.gridConfig.gridEpsilon;
     int gx = int(floor(px / p.cellSize));
     int gy = int(floor(py / p.cellSize));
     int cellX = gx - p.gridMinX;
@@ -325,13 +325,13 @@ kernel void computeForces(
     float yi = self.y;
     float pi = self.pressure;
     float rhoi = self.density;
-    float hi = (self.h<=0.f) ? 0.05f : self.h;
+    float hi = (self.h<=0.f) ? pa.gridConfig.defaultSmoothingLength : self.h;
 
     float sumFx = 0.f;
     float sumFy = 0.f;
 
-    float px = xi + 1e-6f;
-    float py = yi + 1e-6f;
+    float px = xi + pa.gridConfig.gridEpsilon;
+    float py = yi + pa.gridConfig.gridEpsilon;
     int gx = int(floor(px / pa.cellSize));
     int gy = int(floor(py / pa.cellSize));
     int cellX = gx - pa.gridMinX;
@@ -356,10 +356,10 @@ kernel void computeForces(
                 float dx = xi - nbr.x;
                 float dy = yi - nbr.y;
                 float r2 = dx*dx + dy*dy;
-                if (r2 < 1e-14f) {
+                if (r2 < pa.numericalConfig.minDistanceThreshold) {
                     continue;
                 }
-                float hj = (nbr.h<=0.f) ? 0.05f : nbr.h;
+                float hj = (nbr.h<=0.f) ? pa.gridConfig.defaultSmoothingLength : nbr.h;
                 float h_ij = 0.5f*(hi + hj);
                 float h_ij2 = h_ij*h_ij;
                 if (r2 >= h_ij2) {
@@ -368,7 +368,8 @@ kernel void computeForces(
                 float r = sqrt(r2);
                 float pj = nbr.pressure;
                 float rhoj = nbr.density;
-                if (rhoj<1e-12f || rhoi<1e-12f) {
+                if (rhoj < pa.numericalConfig.minDensityThreshold || 
+                    rhoi < pa.numericalConfig.minDensityThreshold) {
                     continue;
                 }
                 float term = (pi/(rhoi*rhoi)) + (pj/(rhoj*rhoj));
@@ -556,7 +557,7 @@ kernel void rigidFluidPositionSolver(
     
     // Get time step
     float dt = params.dt;
-    if (dt < 1e-10f) dt = 1e-4f;                 // Safety - prevent division by zero
+    if (dt < params.numericalConfig.minTimestep) dt = params.numericalConfig.fallbackTimestep;
     
     // Local variables for the current particle
     GPUFluidParticle p = particles[globalID];
@@ -631,9 +632,9 @@ kernel void rigidFluidPositionSolver(
     p.x -= accumCorr.x;
     p.y -= accumCorr.y;
 
-    // Simple bounds clamp
-    if (p.x < 0.f) p.x = 0.001f; // Small offset to prevent exact zero
-    if (p.y < 0.f) p.y = 0.001f; // Small offset to prevent exact zero
+    // Simple bounds clamp - use configurable boundary offset
+    if (p.x < 0.f) p.x = params.gridConfig.boundaryOffset;
+    if (p.y < 0.f) p.y = params.gridConfig.boundaryOffset;
     
     // PBD: Update velocities based on position change only if we had collisions
     if (hadCollision) {
