@@ -6,7 +6,7 @@
 #pragma once
 
 #include <entt/entt.hpp>
-#include "systems/system_config.hpp"
+#include "systems/shared_system_config.hpp"
 
 namespace Systems {
 
@@ -19,7 +19,7 @@ namespace Systems {
  */
 class ISystem {
 protected:
-    SystemConfig sysConfig;  // Common configuration all systems have
+    SharedSystemConfig sysConfig;  // Common configuration all systems have
 
 public:
     /**
@@ -39,7 +39,7 @@ public:
      * 
      * @param config System configuration parameters
      */
-    virtual void setSystemConfig(const SystemConfig& config) {
+    virtual void setSharedSystemConfig(const SharedSystemConfig& config) {
         sysConfig = config;
     }
     
@@ -48,7 +48,7 @@ public:
      * 
      * @return Current system configuration
      */
-    virtual const SystemConfig& getSystemConfig() const {
+    virtual const SharedSystemConfig& getSharedSystemConfig() const {
         return sysConfig;
     }
 };
@@ -57,7 +57,7 @@ public:
  * @brief Template for system-specific configurations
  * 
  * This template can be used by derived systems that need additional
- * configuration beyond the basic SystemConfig.
+ * configuration beyond the basic SharedSystemConfig.
  */
 template<typename SpecificConfig>
 class ConfigurableSystem : public ISystem {

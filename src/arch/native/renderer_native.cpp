@@ -30,7 +30,7 @@ static sf::Color densityGrayscale(const Renderer::PixelProperties &props) {
     return {intensity, intensity, intensity};
 }
 
-Renderer::Renderer(int screenWidth, int screenHeight, const SystemConfig& config)
+Renderer::Renderer(int screenWidth, int screenHeight, const SharedSystemConfig& config)
     : initialized(false)
     , screenWidth(screenWidth)
     , screenHeight(screenHeight)
@@ -69,7 +69,7 @@ void Renderer::present() {
     window.display();
 }
 
-void Renderer::updateCoordinates(const SystemConfig& config) {
+void Renderer::updateCoordinates(const SharedSystemConfig& config) {
     coordinates.updateConfig(config);
 }
 

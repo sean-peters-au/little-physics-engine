@@ -17,7 +17,7 @@
 #include "entities/entity_components.hpp"
 #include "math/polygon.hpp"
 #include "core/constants.hpp"
-#include "systems/system_config.hpp"
+#include "systems/shared_system_config.hpp"
 #include "scenarios/random_polygons.hpp"
 
 /**
@@ -68,23 +68,24 @@ static void makeWall(entt::registry& registry,
   registry.emplace<Components::Color>(wallEnt, 60, 60, 60);
 }
 
-SystemConfig RandomPolygonsScenario::getConfig() const {
-  SystemConfig cfg;
-  cfg.MetersPerPixel = 1e-2;
-  cfg.UniverseSizeMeters =
-      SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
-  cfg.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
-  cfg.TimeAcceleration = 1.0;
-  cfg.GridSize = 50;
-  cfg.CellSizePixels =
-      static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
+ScenarioSystemConfig RandomPolygonsScenario::getSystemsConfig() const {
+  ScenarioSystemConfig config;
+  
+  config.sharedConfig.MetersPerPixel = 1e-2;
+  config.sharedConfig.UniverseSizeMeters =
+      SimulatorConstants::ScreenLength * config.sharedConfig.MetersPerPixel;
+  config.sharedConfig.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
+  config.sharedConfig.TimeAcceleration = 1.0;
+  config.sharedConfig.GridSize = 50;
+  config.sharedConfig.CellSizePixels =
+      static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
-  cfg.GravitationalSoftener = 0.0;
-  cfg.CollisionCoeffRestitution = 0.2;
-  cfg.DragCoeff = 0.0;
-  cfg.ParticleDensity = 0.5;
+  config.sharedConfig.GravitationalSoftener = 0.0;
+  config.sharedConfig.CollisionCoeffRestitution = 0.2;
+  config.sharedConfig.DragCoeff = 0.0;
+  config.sharedConfig.ParticleDensity = 0.5;
 
-  return cfg;
+  return config;
 }
 
 /**
@@ -94,25 +95,27 @@ SystemConfig RandomPolygonsScenario::getConfig() const {
  */
 void RandomPolygonsScenario::createEntities(entt::registry& registry) const {
   // Obtain scenario configuration so we stay consistent with getConfig().
-  SystemConfig cfg = getConfig();
-  double const universeSizeM = cfg.UniverseSizeMeters;
-  int const totalParticles = scenarioConfig.particleCount;
+  ScenarioSystemConfig scenarioSystemConfig = getSystemsConfig();
+  SharedSystemConfig sharedConfig = scenarioSystemConfig.sharedConfig;
+
+  double const universeSizeM = sharedConfig.UniverseSizeMeters;
+  int const totalParticles = scenarioEntityConfig.particleCount;
 
   std::default_random_engine generator{
       static_cast<unsigned int>(time(nullptr))};
 
   // Create four thin boundary walls around the edges.
-  double const wallThickness = scenarioConfig.wallThickness;
+  double const wallThickness = scenarioEntityConfig.wallThickness;
   double const halfWall = wallThickness * 0.5;
 
   makeWall(registry, 0.0, universeSizeM * 0.5, halfWall, universeSizeM * 0.5,
-           scenarioConfig.wallStaticFriction, scenarioConfig.wallDynamicFriction);
+           scenarioEntityConfig.wallStaticFriction, scenarioEntityConfig.wallDynamicFriction);
   makeWall(registry, universeSizeM, universeSizeM * 0.5, halfWall,
-           universeSizeM * 0.5, scenarioConfig.wallStaticFriction, scenarioConfig.wallDynamicFriction);
+           universeSizeM * 0.5, scenarioEntityConfig.wallStaticFriction, scenarioEntityConfig.wallDynamicFriction);
   makeWall(registry, universeSizeM * 0.5, 0.0, universeSizeM * 0.5, halfWall,
-           scenarioConfig.floorStaticFriction, scenarioConfig.floorDynamicFriction);
+           scenarioEntityConfig.wallStaticFriction, scenarioEntityConfig.wallDynamicFriction);
   makeWall(registry, universeSizeM * 0.5, universeSizeM, universeSizeM * 0.5,
-           halfWall, scenarioConfig.wallStaticFriction, scenarioConfig.wallDynamicFriction);
+           halfWall, scenarioEntityConfig.wallStaticFriction, scenarioEntityConfig.wallDynamicFriction);
 
   // Randomly distribute particles across the universe space as regular polygons or circles.
   std::uniform_real_distribution<> pos_dist(universeSizeM * 0.1,
@@ -123,7 +126,7 @@ void RandomPolygonsScenario::createEntities(entt::registry& registry) const {
   std::uniform_int_distribution<> color_dist(0, 255);
 
   // Mass distribution
-  std::normal_distribution<> mass_dist(scenarioConfig.particleMassMean, scenarioConfig.particleMassStdDev);
+  std::normal_distribution<> mass_dist(scenarioEntityConfig.particleMassMean, scenarioEntityConfig.particleMassStdDev);
 
   // For regular polygons, we need to decide how many sides.
   std::uniform_int_distribution<> sides_dist(3, 8);
@@ -136,7 +139,7 @@ void RandomPolygonsScenario::createEntities(entt::registry& registry) const {
     double const y = pos_dist(generator);
     registry.emplace<Components::Position>(e, x, y);
 
-    double velScale = scenarioConfig.initialVelocityFactor;
+    double velScale = scenarioEntityConfig.initialVelocityFactor;
     registry.emplace<Components::Velocity>(e, vel_dist(generator) * velScale,
                                          vel_dist(generator) * velScale);
 
@@ -150,24 +153,24 @@ void RandomPolygonsScenario::createEntities(entt::registry& registry) const {
     double size;
 
     // Decide if this is a small or large shape
-    if (size_ratio_dist(generator) < scenarioConfig.smallShapeRatio) {
+    if (size_ratio_dist(generator) < scenarioEntityConfig.smallShapeRatio) {
       // Small shape
-      std::uniform_real_distribution<> smallDist(scenarioConfig.smallShapeMin, 
-                                               scenarioConfig.smallShapeMax);
+      std::uniform_real_distribution<> smallDist(scenarioEntityConfig.smallShapeMin, 
+                                               scenarioEntityConfig.smallShapeMax);
       size = smallDist(generator);
     } else {
       // Large shape
-      std::uniform_real_distribution<> largeDist(scenarioConfig.largeShapeMin, 
-                                               scenarioConfig.largeShapeMax);
+      std::uniform_real_distribution<> largeDist(scenarioEntityConfig.largeShapeMin, 
+                                               scenarioEntityConfig.largeShapeMax);
       size = largeDist(generator);
     }
 
     // Apply friction coefficient for this particle
     registry.emplace<Components::Material>(
-        e, scenarioConfig.particleStaticFriction, scenarioConfig.particleDynamicFriction);
+        e, scenarioEntityConfig.particleStaticFriction, scenarioEntityConfig.particleDynamicFriction);
 
     // 3. Shape creation
-    if (shape_type < scenarioConfig.circlesFraction) {
+    if (shape_type < scenarioEntityConfig.circlesFraction) {
       // Circle
       registry.emplace<Components::Shape>(e, Components::ShapeType::Circle, size);
 
@@ -177,7 +180,7 @@ void RandomPolygonsScenario::createEntities(entt::registry& registry) const {
       
       // Add CircleShape component
       registry.emplace<CircleShape>(e, size);
-    } else if (shape_type < (scenarioConfig.circlesFraction + scenarioConfig.regularFraction)) {
+    } else if (shape_type < (scenarioEntityConfig.circlesFraction + scenarioEntityConfig.regularFraction)) {
       // Regular polygon
       int sides = sides_dist(generator);
       PolygonShape poly = buildRegularPolygon(sides, size);

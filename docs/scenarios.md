@@ -11,7 +11,7 @@ The abstraction of a scenario serves several key purposes:
 
 - **Encapsulation of Simulation Behavior:**  
   The `IScenario` interface requires each scenario to specify:
-  - A configuration phase via `getConfig()`, which returns a `ScenarioConfig` structure defining simulation parameters (e.g., universe scale, physical constants, active systems).
+  - A configuration phase via `getConfig()`, which returns a `ScenarioSystemConfig` structure defining simulation parameters (e.g., universe scale, physical constants, active systems).
   - An entity construction phase via `createEntities()`, which builds the simulation world using an ECS registry.
 
 - **Modularity and Extensibility:**  
@@ -25,7 +25,7 @@ The scenario abstraction is spread across multiple components:
   This abstract interface defines the contract for a simulation scenario with two required methods:
 
   \[
-  \texttt{ScenarioConfig getConfig() const;}
+  \texttt{ScenarioSystemConfig getConfig() const;}
   \]
 
   \[
@@ -34,8 +34,8 @@ The scenario abstraction is spread across multiple components:
 
   Every scenario must implement these methods. The configuration phase gathers all the simulation constants, while the entity creation phase populates the simulation with the necessary entities.
 
-- **`ScenarioConfig` (in `scenario_config.hpp` and `scenario_config.cpp`):**  
-  Although an essential part of a scenario, `ScenarioConfig` is a subsystem used by the scenario to hold specific simulation parameters such as universe size, physical properties, and the active systems. A helper function (`applyScenarioConfig`) applies these configuration settings globally.
+- **`ScenarioSystemConfig` (in `scenario_config.hpp` and `scenario_config.cpp`):**  
+  Although an essential part of a scenario, `ScenarioSystemConfig` is a subsystem used by the scenario to hold specific simulation parameters such as universe size, physical properties, and the active systems. A helper function (`applyScenarioSystemConfig`) applies these configuration settings globally.
 
 - **Illustrative Examples:**  
   Implementations like `SimpleFluidScenario` and `RandomPolygonsScenario` serve as illustrative examples. They show how to concretely implement a scenario by providing customized configuration and entity creation logic. (Note: the specifics of these examples are not to be documented in detail—the focus here is on the abstraction itself.)
@@ -54,8 +54,8 @@ Follow these steps to integrate a new scenario into the simulation:
 
    class MyScenario final : public IScenario {
    public:
-       ScenarioConfig getConfig() const override {
-           ScenarioConfig cfg;
+       ScenarioSystemConfig getConfig() const override {
+           ScenarioSystemConfig cfg;
            // Define simulation parameters:
            cfg.MetersPerPixel = 1e-2;
            cfg.UniverseSizeMeters = 1000.0 * cfg.MetersPerPixel;
@@ -84,8 +84,8 @@ Follow these steps to integrate a new scenario into the simulation:
    ```cpp:src/some_file.cpp
    // 'scenario' is an instance of a class implementing IScenario,
    // and 'registry' is your ECS registry.
-   ScenarioConfig cfg = scenario.getConfig();
-   applyScenarioConfig(cfg);
+   ScenarioSystemConfig cfg = scenario.getConfig();
+   applyScenarioSystemConfig(cfg);
    ```
 
    This call establishes the simulation settings (like universe size, physics properties, etc.) based on your scenario’s configuration.
@@ -103,7 +103,7 @@ Follow these steps to integrate a new scenario into the simulation:
 ## Summary
 
 - The **central abstraction** is encapsulated in the `IScenario` interface, which standardizes both simulation configuration and entity creation.
-- `ScenarioConfig` is an important internal subsystem of a scenario, used to define the simulation constants but is integrated into the overall scenario design.
+- `ScenarioSystemConfig` is an important internal subsystem of a scenario, used to define the simulation constants but is integrated into the overall scenario design.
 - Implementing a new scenario involves:
   - Deriving from `IScenario`
   - Defining the configuration in `getConfig()`

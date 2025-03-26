@@ -16,14 +16,6 @@ SleepSystem::SleepSystem() {
     // Initialize with default configurations
 }
 
-void SleepSystem::setSystemConfig(const SystemConfig& config) {
-    sysConfig = config;
-}
-
-void SleepSystem::setSleepConfig(const SleepConfig& config) {
-    sleepConfig = config;
-}
-
 void SleepSystem::update(entt::registry &registry) {
     PROFILE_SCOPE("SleepSystem");
 
@@ -46,11 +38,11 @@ void SleepSystem::update(entt::registry &registry) {
             angularSpeed = std::fabs(angVel.omega);
         }
 
-        if (speed < sleepConfig.linearSleepThreshold && angularSpeed < sleepConfig.angularSleepThreshold) {
+        if (speed < specificConfig.linearSleepThreshold && angularSpeed < specificConfig.angularSleepThreshold) {
             // Candidate for sleeping
             if (!sleep.asleep) {
                 sleep.sleepCounter++;
-                if (sleep.sleepCounter > sleepConfig.sleepFramesThreshold) {
+                if (sleep.sleepCounter > specificConfig.sleepFramesThreshold) {
                     sleep.asleep = true;
                 }
             }

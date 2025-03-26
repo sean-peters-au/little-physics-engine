@@ -14,7 +14,7 @@
 #include "core/profile.hpp"
 
 SimManager::SimManager()
-    : renderer(SimulatorConstants::ScreenLength + 200, SimulatorConstants::ScreenLength, SystemConfig()),
+    : renderer(SimulatorConstants::ScreenLength + 200, SimulatorConstants::ScreenLength, SharedSystemConfig()),
       simulator(),
       scenarioManager(),
       uiManager(),
@@ -135,10 +135,10 @@ void SimManager::selectScenario(SimulatorConstants::SimulationType scenario) {
   scenarioManager.setInitialScenario(scenario);
 
   auto scenarioPtr = scenarioManager.createScenario(scenario);
-  SystemConfig config = scenarioPtr->getConfig();
+  ScenarioSystemConfig config = scenarioPtr->getSystemsConfig();
 
   simulator.applyConfig(config);
-  renderer.updateCoordinates(config);
+  renderer.updateCoordinates(config.sharedConfig);
   simulator.loadScenario(std::move(scenarioPtr));
   simulator.reset();
 

@@ -199,7 +199,7 @@ static void computeAABB(entt::registry &reg, entt::entity e,
  */
 static std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry, 
                                              const BroadphaseConfig& config,
-                                             const SystemConfig& sysConfig) 
+                                             const SharedSystemConfig& sysConfig) 
 {
     double const size = sysConfig.UniverseSizeMeters;
     double const extra = config.boundaryBuffer;
@@ -232,7 +232,7 @@ static std::unique_ptr<BoxNode> buildQuadtree(entt::registry &registry,
  */
 std::vector<CandidatePair> Broadphase::detectCollisions(
     entt::registry& registry,
-    const SystemConfig& sysConfig,
+    const SharedSystemConfig& sysConfig,
     const BroadphaseConfig& bpConfig)
 {
     PROFILE_SCOPE("Broadphase");

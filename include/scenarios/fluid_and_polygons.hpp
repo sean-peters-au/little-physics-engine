@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/constants.hpp"
-#include "systems/system_config.hpp"
+#include "systems/shared_system_config.hpp"
 #include "scenarios/i_scenario.hpp"
 #include "entt/entt.hpp"
 
@@ -48,9 +48,9 @@ public:
     /**
      * @brief Retrieves the configuration for the test fluid-polygons scenario.
      *
-     * @return SystemConfig with simulation parameters.
+     * @return ScenarioSystemConfig with simulation parameters.
      */
-    SystemConfig getConfig() const;
+    ScenarioSystemConfig getSystemsConfig() const;
 
     /**
      * @brief Creates all entities for the scenario, including boundary walls,
@@ -61,5 +61,5 @@ public:
     void createEntities(entt::registry &registry) const;
     
 private:
-    FluidAndPolygonsConfig scenarioConfig;
+    FluidAndPolygonsConfig scenarioEntityConfig;
 };

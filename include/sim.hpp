@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "scenarios/i_scenario.hpp"
-#include "systems/system_config.hpp"
 #include "systems/i_system.hpp"
 
 /**
@@ -29,10 +28,10 @@ class ECSSimulator {
   void loadScenario(std::unique_ptr<IScenario> scenario);
 
   /**
-   * @brief Applies a SystemConfig to the simulator's internal state.
+   * @brief Applies a SharedSystemConfig to the simulator's internal state.
    * @param cfg The scenario configuration with relevant parameters.
    */
-  void applyConfig(const SystemConfig& cfg);
+  void applyConfig(const ScenarioSystemConfig& cfg);
 
   /**
    * @brief Clears and re-initializes the ECS registry using the loaded scenario.
@@ -75,7 +74,7 @@ class ECSSimulator {
   entt::registry registry;
   std::unique_ptr<IScenario> scenarioPtr;
   std::vector<std::unique_ptr<Systems::ISystem>> systems;
-  SystemConfig currentConfig;
+  ScenarioSystemConfig currentConfig;
 
   /**
    * @brief Create all system instances according to current config

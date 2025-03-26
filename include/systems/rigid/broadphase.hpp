@@ -51,7 +51,7 @@ public:
      */
     static std::vector<CandidatePair> detectCollisions(
         entt::registry& registry,
-        const SystemConfig& sysConfig,
+        const SharedSystemConfig& sysConfig,
         const BroadphaseConfig& bpConfig = BroadphaseConfig()
     );
 };

@@ -51,31 +51,34 @@ static void makeWall(entt::registry &registry,
     registry.emplace<Components::AngularPosition>(wallEnt, 0.0);
 }
 
-SystemConfig FluidAndPolygonsScenario::getConfig() const
+ScenarioSystemConfig FluidAndPolygonsScenario::getSystemsConfig() const
 {
-    SystemConfig cfg;
-    cfg.MetersPerPixel         = 1e-2;
-    cfg.UniverseSizeMeters     = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
-    cfg.SecondsPerTick         = 1.0 / SimulatorConstants::StepsPerSecond;
-    cfg.TimeAcceleration       = 1.0;
-    cfg.GridSize               = 50;
-    cfg.CellSizePixels         = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
+    ScenarioSystemConfig config;
+    
+    // Configure shared parameters
+    config.sharedConfig.MetersPerPixel = 1e-2;
+    config.sharedConfig.UniverseSizeMeters = SimulatorConstants::ScreenLength * config.sharedConfig.MetersPerPixel;
+    config.sharedConfig.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
+    config.sharedConfig.TimeAcceleration = 1.0;
+    config.sharedConfig.GridSize = 50;
+    config.sharedConfig.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
-    cfg.GravitationalSoftener  = 0.0;
-    cfg.CollisionCoeffRestitution = 0.2; // slight bounce for rigid shapes
-    cfg.DragCoeff              = 0.0;
-    cfg.ParticleDensity        = 100.0;
+    config.sharedConfig.GravitationalSoftener = 0.0;
+    config.sharedConfig.CollisionCoeffRestitution = 0.2; // slight bounce for rigid shapes
+    config.sharedConfig.DragCoeff = 0.0;
+    config.sharedConfig.ParticleDensity = 100.0;
 
-    return cfg;
+    return config;
 }
 
 void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
 {
-    SystemConfig systemConfig = getConfig();
+    ScenarioSystemConfig scenarioSystemConfig = getSystemsConfig();
+    SharedSystemConfig sharedConfig = scenarioSystemConfig.sharedConfig;
 
     // 1) Create bounding walls
-    double sizeM = systemConfig.UniverseSizeMeters;
-    double halfWall = scenarioConfig.wallThickness * 0.5;
+    double sizeM = sharedConfig.UniverseSizeMeters;
+    double halfWall = scenarioEntityConfig.wallThickness * 0.5;
 
     // Bottom wall
     makeWall(registry,
@@ -83,9 +86,9 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         sizeM,               // center y at top of the coordinate system (since y=0 is top in your setup)
         sizeM * 0.5,         // half width
         halfWall,            // half height
-        scenarioConfig.floorStaticFriction,
-        scenarioConfig.floorDynamicFriction,
-        scenarioConfig.wallMass);
+        scenarioEntityConfig.floorStaticFriction,
+        scenarioEntityConfig.floorDynamicFriction,
+        scenarioEntityConfig.wallMass);
 
     // Top wall
     makeWall(registry,
@@ -93,9 +96,9 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         0.0,
         sizeM * 0.5,
         halfWall,
-        scenarioConfig.wallStaticFriction,
-        scenarioConfig.wallDynamicFriction,
-        scenarioConfig.wallMass);
+        scenarioEntityConfig.wallStaticFriction,
+        scenarioEntityConfig.wallDynamicFriction,
+        scenarioEntityConfig.wallMass);
 
     // Left wall
     makeWall(registry,
@@ -103,9 +106,9 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         sizeM * 0.5,
         halfWall,
         sizeM * 0.5,
-        scenarioConfig.wallStaticFriction,
-        scenarioConfig.wallDynamicFriction,
-        scenarioConfig.wallMass);
+        scenarioEntityConfig.wallStaticFriction,
+        scenarioEntityConfig.wallDynamicFriction,
+        scenarioEntityConfig.wallMass);
 
     // Right wall
     makeWall(registry,
@@ -113,19 +116,19 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         sizeM * 0.5,
         halfWall,
         sizeM * 0.5,
-        scenarioConfig.wallStaticFriction,
-        scenarioConfig.wallDynamicFriction,
-        scenarioConfig.wallMass);
+        scenarioEntityConfig.wallStaticFriction,
+        scenarioEntityConfig.wallDynamicFriction,
+        scenarioEntityConfig.wallMass);
 
     // 2) Create random polygon entities at the TOP, centered horizontally
     std::default_random_engine generator(static_cast<unsigned>(std::time(nullptr)));
     std::uniform_real_distribution<double> xDist(sizeM * 0.3, sizeM * 0.7); // Centered horizontally
     std::uniform_real_distribution<double> yDist(sizeM * 0.05, sizeM * 0.2); // Near the top
-    std::normal_distribution<double> massDist(scenarioConfig.polygonMassMean, scenarioConfig.polygonMassStdDev);
+    std::normal_distribution<double> massDist(scenarioEntityConfig.polygonMassMean, scenarioEntityConfig.polygonMassStdDev);
     std::uniform_int_distribution<int> colorDist(50, 200);
-    std::normal_distribution<> velocityDist(0.0, scenarioConfig.initialVelocityScale);
+    std::normal_distribution<> velocityDist(0.0, scenarioEntityConfig.initialVelocityScale);
 
-    for (int i = 0; i < scenarioConfig.polygonCount; ++i) {
+    for (int i = 0; i < scenarioEntityConfig.polygonCount; ++i) {
         // Random position at the top, centered
         double x = xDist(generator);
         double y = yDist(generator);
@@ -140,7 +143,7 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
             std::abs(velocityDist(generator))); // positive (downward) vertical velocity
         registry.emplace<Components::Mass>(ent, massVal);
         registry.emplace<Components::ParticlePhase>(ent, Components::Phase::Solid);
-        registry.emplace<Components::Material>(ent, scenarioConfig.polyStaticFriction, scenarioConfig.polyDynamicFriction);
+        registry.emplace<Components::Material>(ent, scenarioEntityConfig.polyStaticFriction, scenarioEntityConfig.polyDynamicFriction);
         registry.emplace<Components::Sleep>(ent);
 
         // Build a random polygon
@@ -167,7 +170,7 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
 
     // 3) Create fluid particles at the BOTTOM of the screen
     {
-        int numFluid = scenarioConfig.fluidParticleCount;
+        int numFluid = scenarioEntityConfig.fluidParticleCount;
         double x_min = sizeM * 0.05;
         double x_max = sizeM * 0.95;
         double y_min = sizeM * 0.75;
@@ -203,7 +206,7 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
                 auto e = registry.create();
                 registry.emplace<Components::Position>(e, x, y);
                 registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-                registry.emplace<Components::Mass>(e, scenarioConfig.fluidParticleMass);
+                registry.emplace<Components::Mass>(e, scenarioEntityConfig.fluidParticleMass);
                 registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
 
                 // No friction for fluid particles
@@ -228,6 +231,6 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         std::cerr << "Created " << numFluid << " fluid particles at the bottom.\n";
     }
 
-    std::cerr << "Created " << scenarioConfig.polygonCount << " random polygons at the top.\n";
+    std::cerr << "Created " << scenarioEntityConfig.polygonCount << " random polygons at the top.\n";
     std::cerr << "Fluid + Polygons scenario ready.\n";
 }

@@ -6,7 +6,7 @@
 #pragma once
 
 #include "scenarios/i_scenario.hpp"
-#include "systems/system_config.hpp"
+#include "systems/shared_system_config.hpp"
 
 /**
  * @struct SimpleFluidConfig
@@ -44,9 +44,9 @@ public:
     SimpleFluidScenario() = default;
     ~SimpleFluidScenario() override = default;
 
-    SystemConfig getConfig() const override;
+    ScenarioSystemConfig getSystemsConfig() const override;
     void createEntities(entt::registry &registry) const override;
     
 private:
-    SimpleFluidConfig scenarioConfig;
+    SimpleFluidConfig scenarioEntityConfig;
 };

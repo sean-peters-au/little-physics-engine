@@ -35,7 +35,7 @@ struct RigidBodyCollisionConfig {
  * - Supports both dynamic and static bodies
  * - Handles different particle phases (solid, fluid)
  */
-class RigidBodyCollisionSystem : public ISystem {
+class RigidBodyCollisionSystem : public ConfigurableSystem<RigidBodyCollisionConfig> {
 public:
     /**
      * @brief Constructor with default configuration

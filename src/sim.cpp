@@ -11,7 +11,8 @@
 #include "entities/entity_components.hpp"
 #include "entities/sim_components.hpp"
 #include "core/profile.hpp"
-#include "systems/system_config.hpp"
+#include "scenarios/i_scenario.hpp"
+#include "systems/shared_system_config.hpp"
 #include "systems/barnes_hut.hpp"
 #include "systems/boundary.hpp"
 #include "systems/dampening.hpp"
@@ -31,12 +32,43 @@ void ECSSimulator::loadScenario(std::unique_ptr<IScenario> scenario) {
   scenarioPtr = std::move(scenario);
 }
 
-void ECSSimulator::applyConfig(const SystemConfig& cfg) {
+void ECSSimulator::applyConfig(const ScenarioSystemConfig& cfg) {
+  // Store the current config
   currentConfig = cfg;
   
-  // Update config for all existing systems
+  // Apply configs to all existing systems
   for (auto& system : systems) {
-    system->setSystemConfig(currentConfig);
+    // Apply shared config to all systems
+    system->setSharedSystemConfig(currentConfig.sharedConfig);
+    
+    // Apply specific configs by type
+    if (auto* dampeningSystem = dynamic_cast<Systems::DampeningSystem*>(system.get())) {
+      dampeningSystem->setSpecificConfig(currentConfig.dampeningConfig);
+    }
+    else if (auto* boundarySystem = dynamic_cast<Systems::BoundarySystem*>(system.get())) {
+      boundarySystem->setSpecificConfig(currentConfig.boundaryConfig);
+    }
+    else if (auto* rotationSystem = dynamic_cast<Systems::RotationSystem*>(system.get())) {
+      rotationSystem->setSpecificConfig(currentConfig.rotationConfig);
+    }
+    else if (auto* movementSystem = dynamic_cast<Systems::MovementSystem*>(system.get())) {
+      movementSystem->setSpecificConfig(currentConfig.movementConfig);
+    }
+    else if (auto* gravitySystem = dynamic_cast<Systems::BasicGravitySystem*>(system.get())) {
+      gravitySystem->setSpecificConfig(currentConfig.gravityConfig);
+    }
+    else if (auto* barnesHutSystem = dynamic_cast<Systems::BarnesHutSystem*>(system.get())) {
+      barnesHutSystem->setSpecificConfig(currentConfig.barnesHutConfig);
+    }
+    else if (auto* fluidSystem = dynamic_cast<Systems::FluidSystem*>(system.get())) {
+      fluidSystem->setSpecificConfig(currentConfig.fluidConfig);
+    }
+    else if (auto* rigidBodySystem = dynamic_cast<Systems::RigidBodyCollisionSystem*>(system.get())) {
+      rigidBodySystem->setSpecificConfig(currentConfig.rigidBodyConfig);
+    }
+    else if (auto* sleepSystem = dynamic_cast<Systems::SleepSystem*>(system.get())) {
+      sleepSystem->setSpecificConfig(currentConfig.sleepConfig);
+    }
   }
 }
 
@@ -76,9 +108,39 @@ void ECSSimulator::createSystems() {
   systems.push_back(std::make_unique<Systems::SleepSystem>());
   systems.push_back(std::make_unique<Systems::BoundarySystem>());
   
-  // Configure all systems
+  // Configure all systems with both shared and specific configs
   for (auto& system : systems) {
-    system->setSystemConfig(currentConfig);
+    // Apply shared config
+    system->setSharedSystemConfig(currentConfig.sharedConfig);
+    
+    // Apply specific configs by type
+    if (auto* dampeningSystem = dynamic_cast<Systems::DampeningSystem*>(system.get())) {
+      dampeningSystem->setSpecificConfig(currentConfig.dampeningConfig);
+    }
+    else if (auto* boundarySystem = dynamic_cast<Systems::BoundarySystem*>(system.get())) {
+      boundarySystem->setSpecificConfig(currentConfig.boundaryConfig);
+    }
+    else if (auto* rotationSystem = dynamic_cast<Systems::RotationSystem*>(system.get())) {
+      rotationSystem->setSpecificConfig(currentConfig.rotationConfig);
+    }
+    else if (auto* movementSystem = dynamic_cast<Systems::MovementSystem*>(system.get())) {
+      movementSystem->setSpecificConfig(currentConfig.movementConfig);
+    }
+    else if (auto* gravitySystem = dynamic_cast<Systems::BasicGravitySystem*>(system.get())) {
+      gravitySystem->setSpecificConfig(currentConfig.gravityConfig);
+    }
+    else if (auto* barnesHutSystem = dynamic_cast<Systems::BarnesHutSystem*>(system.get())) {
+      barnesHutSystem->setSpecificConfig(currentConfig.barnesHutConfig);
+    }
+    else if (auto* fluidSystem = dynamic_cast<Systems::FluidSystem*>(system.get())) {
+      fluidSystem->setSpecificConfig(currentConfig.fluidConfig);
+    }
+    else if (auto* rigidBodySystem = dynamic_cast<Systems::RigidBodyCollisionSystem*>(system.get())) {
+      rigidBodySystem->setSpecificConfig(currentConfig.rigidBodyConfig);
+    }
+    else if (auto* sleepSystem = dynamic_cast<Systems::SleepSystem*>(system.get())) {
+      sleepSystem->setSpecificConfig(currentConfig.sleepConfig);
+    }
   }
 }
 

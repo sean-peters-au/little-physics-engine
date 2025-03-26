@@ -7,7 +7,7 @@
 
 namespace Simulation {
 
-Coordinates::Coordinates(const SystemConfig& config, unsigned int screenSize)
+Coordinates::Coordinates(const SharedSystemConfig& config, unsigned int screenSize)
     : screenSize(screenSize),
       universeSizeMeters(config.UniverseSizeMeters)
 {
@@ -31,7 +31,7 @@ double Coordinates::metersToNormalized(double meters) const {
     return meters / universeSizeMeters;
 }
 
-void Coordinates::updateConfig(const SystemConfig& config) {
+void Coordinates::updateConfig(const SharedSystemConfig& config) {
     universeSizeMeters = config.UniverseSizeMeters;
     // Recalculate meters per pixel
     metersPerPixel = universeSizeMeters / static_cast<double>(screenSize);

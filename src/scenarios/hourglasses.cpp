@@ -82,22 +82,22 @@ static std::vector<std::pair<double, double>> createHexagonVertices(double size)
     return vertices;
 }
 
-SystemConfig HourglassesScenario::getConfig() const
+ScenarioSystemConfig HourglassesScenario::getSystemsConfig() const
 {
-    SystemConfig cfg;
-    cfg.MetersPerPixel         = 1e-2;
-    cfg.UniverseSizeMeters     = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
-    cfg.SecondsPerTick         = 1.0 / SimulatorConstants::StepsPerSecond;
-    cfg.TimeAcceleration       = 1.0;
-    cfg.GridSize               = 50;
-    cfg.CellSizePixels         = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
+    ScenarioSystemConfig config;
+    config.sharedConfig.MetersPerPixel = 1e-2;
+    config.sharedConfig.UniverseSizeMeters = SimulatorConstants::ScreenLength * config.sharedConfig.MetersPerPixel;
+    config.sharedConfig.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
+    config.sharedConfig.TimeAcceleration = 1.0;
+    config.sharedConfig.GridSize = 50;
+    config.sharedConfig.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
-    cfg.GravitationalSoftener  = 0.0;
-    cfg.CollisionCoeffRestitution = 0.2; // slight bounce for rigid shapes
-    cfg.DragCoeff              = 0.0;
-    cfg.ParticleDensity        = 100.0;
+    config.sharedConfig.GravitationalSoftener = 0.0;
+    config.sharedConfig.CollisionCoeffRestitution = 0.2; // slight bounce for rigid shapes
+    config.sharedConfig.DragCoeff = 0.0;
+    config.sharedConfig.ParticleDensity = 100.0;
 
-    return cfg;
+    return config;
 }
 
 void HourglassesScenario::createHourglass(
@@ -106,10 +106,10 @@ void HourglassesScenario::createHourglass(
     double centerY) const 
 {
     // Calculate dimensions
-    double height = scenarioConfig.hourglassHeight;
-    double topWidth = scenarioConfig.hourglassTopWidth;
-    double neckWidth = scenarioConfig.hourglassNeckWidth;
-    double wallThickness = scenarioConfig.hourglassWallThickness;
+    double height = scenarioEntityConfig.hourglassHeight;
+    double topWidth = scenarioEntityConfig.hourglassTopWidth;
+    double neckWidth = scenarioEntityConfig.hourglassNeckWidth;
+    double wallThickness = scenarioEntityConfig.hourglassWallThickness;
     
     // Create a small overlap factor to ensure polygons connect seamlessly
     double overlap = 0.03;
@@ -140,14 +140,14 @@ void HourglassesScenario::createHourglass(
     
     // Create left and right walls
     makeBoundaryPoly(registry, centerX, centerY, leftWallPoints, 
-                    scenarioConfig.wallStaticFriction, 
-                    scenarioConfig.wallDynamicFriction,
-                    scenarioConfig.wallMass);
+                    scenarioEntityConfig.wallStaticFriction, 
+                    scenarioEntityConfig.wallDynamicFriction,
+                    scenarioEntityConfig.wallMass);
                     
     makeBoundaryPoly(registry, centerX, centerY, rightWallPoints, 
-                    scenarioConfig.wallStaticFriction, 
-                    scenarioConfig.wallDynamicFriction,
-                    scenarioConfig.wallMass);
+                    scenarioEntityConfig.wallStaticFriction, 
+                    scenarioEntityConfig.wallDynamicFriction,
+                    scenarioEntityConfig.wallMass);
     
     // Top cap in CCW order with slight overlap
     std::vector<std::pair<double, double>> topCapPoints = {
@@ -166,20 +166,21 @@ void HourglassesScenario::createHourglass(
     };
     
     makeBoundaryPoly(registry, centerX, centerY, topCapPoints, 
-                    scenarioConfig.wallStaticFriction, 
-                    scenarioConfig.wallDynamicFriction,
-                    scenarioConfig.wallMass);
+                    scenarioEntityConfig.wallStaticFriction, 
+                    scenarioEntityConfig.wallDynamicFriction,
+                    scenarioEntityConfig.wallMass);
                     
     makeBoundaryPoly(registry, centerX, centerY, bottomCapPoints, 
-                    scenarioConfig.wallStaticFriction, 
-                    scenarioConfig.wallDynamicFriction,
-                    scenarioConfig.wallMass);
+                    scenarioEntityConfig.wallStaticFriction, 
+                    scenarioEntityConfig.wallDynamicFriction,
+                    scenarioEntityConfig.wallMass);
 }
 
 void HourglassesScenario::createEntities(entt::registry &registry) const
 {
-    SystemConfig systemConfig = getConfig();
-    double sizeM = systemConfig.UniverseSizeMeters;
+    ScenarioSystemConfig scenarioSystemConfig = getSystemsConfig();
+    SharedSystemConfig sharedConfig = scenarioSystemConfig.sharedConfig;
+    double sizeM = sharedConfig.UniverseSizeMeters;
     
     // Create two hourglasses - one on the left, one on the right
     double leftHourglassX = sizeM * 0.3;  // Left side
@@ -195,10 +196,10 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
     
     // 1. Create fluid particles in the left hourglass (top half)
     {
-        int numFluid = scenarioConfig.fluidParticleCount;
-        double height = scenarioConfig.hourglassHeight;
-        double topWidth = scenarioConfig.hourglassTopWidth;
-        double neckWidth = scenarioConfig.hourglassNeckWidth;
+        int numFluid = scenarioEntityConfig.fluidParticleCount;
+        double height = scenarioEntityConfig.hourglassHeight;
+        double topWidth = scenarioEntityConfig.hourglassTopWidth;
+        double neckWidth = scenarioEntityConfig.hourglassNeckWidth;
         
         // Define the top chamber region (with margin to avoid walls)
         double margin = topWidth * 0.15; // Proportional margin based on hourglass size
@@ -259,14 +260,14 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
                 auto e = registry.create();
                 registry.emplace<Components::Position>(e, x, adjustedY);
                 registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-                registry.emplace<Components::Mass>(e, scenarioConfig.fluidParticleMass);
+                registry.emplace<Components::Mass>(e, scenarioEntityConfig.fluidParticleMass);
                 registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
                 
                 // No friction for fluid particles
                 registry.emplace<Components::Material>(e, 0.0, 0.0);
                 
                 // Use a circle shape - size must allow passing through neck
-                double r = scenarioConfig.fluidParticleSize / 2.0; // Use size from config (convert diameter to radius)
+                double r = scenarioEntityConfig.fluidParticleSize / 2.0; // Use size from config (convert diameter to radius)
                 registry.emplace<Components::Shape>(e, Components::ShapeType::Circle, r);
                 registry.emplace<CircleShape>(e, r);
                 
@@ -311,14 +312,14 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
                     auto e = registry.create();
                     registry.emplace<Components::Position>(e, x + jitterX, y + jitterY);
                     registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-                    registry.emplace<Components::Mass>(e, scenarioConfig.fluidParticleMass);
+                    registry.emplace<Components::Mass>(e, scenarioEntityConfig.fluidParticleMass);
                     registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
                     
                     // No friction for fluid particles
                     registry.emplace<Components::Material>(e, 0.0, 0.0);
                     
                     // Use a circle shape
-                    double r = scenarioConfig.fluidParticleSize / 2.0;
+                    double r = scenarioEntityConfig.fluidParticleSize / 2.0;
                     registry.emplace<Components::Shape>(e, Components::ShapeType::Circle, r);
                     registry.emplace<CircleShape>(e, r);
                     
@@ -340,13 +341,13 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
     
     // 2. Create hexagon particles in the right hourglass (top half)
     {
-        int numHexagons = scenarioConfig.hexagonCount;
-        double height = scenarioConfig.hourglassHeight;
-        double topWidth = scenarioConfig.hourglassTopWidth;
-        double neckWidth = scenarioConfig.hourglassNeckWidth;
+        int numHexagons = scenarioEntityConfig.hexagonCount;
+        double height = scenarioEntityConfig.hourglassHeight;
+        double topWidth = scenarioEntityConfig.hourglassTopWidth;
+        double neckWidth = scenarioEntityConfig.hourglassNeckWidth;
         
         // Ensure hexagons fit properly
-        double hexSize = scenarioConfig.hexagonSize;
+        double hexSize = scenarioEntityConfig.hexagonSize;
         double margin = topWidth * 0.15; // Proportional margin for better distribution
         double x_min = rightHourglassX - (topWidth/2) + margin;
         double x_max = rightHourglassX + (topWidth/2) - margin;
@@ -407,11 +408,11 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
                 auto e = registry.create();
                 registry.emplace<Components::Position>(e, x, adjustedY);
                 registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-                registry.emplace<Components::Mass>(e, scenarioConfig.hexagonMass);
+                registry.emplace<Components::Mass>(e, scenarioEntityConfig.hexagonMass);
                 registry.emplace<Components::ParticlePhase>(e, Components::Phase::Solid);
                 registry.emplace<Components::Material>(e, 
-                                                     scenarioConfig.polyStaticFriction, 
-                                                     scenarioConfig.polyDynamicFriction);
+                                                     scenarioEntityConfig.polyStaticFriction, 
+                                                     scenarioEntityConfig.polyDynamicFriction);
                 
                 // Sleep initially to avoid instability when packed densely
                 auto &sleepC = registry.emplace<Components::Sleep>(e);
@@ -428,7 +429,7 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
                 registry.emplace<PolygonShape>(e, poly);
                 
                 // Calculate moment of inertia
-                double I = calculatePolygonInertia(poly.vertices, scenarioConfig.hexagonMass);
+                double I = calculatePolygonInertia(poly.vertices, scenarioEntityConfig.hexagonMass);
                 registry.emplace<Components::Inertia>(e, I);
                 
                 // Angular components

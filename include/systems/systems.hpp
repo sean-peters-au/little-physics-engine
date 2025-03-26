@@ -26,6 +26,6 @@ enum class SystemType {
 
 // (Optional) If you had logic to map a scenario to these systems, you'd do it here.
 // e.g. std::vector<SystemType> getActiveSystems(...);
-// but here we rely on ScenarioConfig for that.
+// but here we rely on ScenarioSystemConfig for that.
 
 } // namespace Systems

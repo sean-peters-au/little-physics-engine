@@ -8,40 +8,41 @@
 #include "entities/entity_components.hpp"
 #include "math/polygon.hpp"
 #include "scenarios/keplerian_disk.hpp"
-#include "systems/system_config.hpp"
+#include "systems/shared_system_config.hpp"
 
-SystemConfig KeplerianDiskScenario::getConfig() const {
-    SystemConfig cfg;
+ScenarioSystemConfig KeplerianDiskScenario::getSystemsConfig() const {
+    ScenarioSystemConfig config;
 
-    cfg.MetersPerPixel = 1e7;
-    cfg.UniverseSizeMeters = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
+    config.sharedConfig.MetersPerPixel = 1e7;
+    config.sharedConfig.UniverseSizeMeters = SimulatorConstants::ScreenLength * config.sharedConfig.MetersPerPixel;
 
-    double const innerR = diskConfig.innerRadiusPixels * cfg.MetersPerPixel;
+    double const innerR = scenarioEntityConfig.innerRadiusPixels * config.sharedConfig.MetersPerPixel;
     double const period = 2 * SimulatorConstants::Pi * std::sqrt(std::pow(innerR, 3) /
-                  (SimulatorConstants::RealG * diskConfig.centralMass));
+                  (SimulatorConstants::RealG * scenarioEntityConfig.centralMass));
 
-    cfg.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
-    cfg.TimeAcceleration = period / (diskConfig.orbitalPeriodFraction * SimulatorConstants::StepsPerSecond) * 20.0;
+    config.sharedConfig.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
+    config.sharedConfig.TimeAcceleration = period / (scenarioEntityConfig.orbitalPeriodFraction * SimulatorConstants::StepsPerSecond) * 20.0;
 
-    cfg.GridSize = 100;
-    cfg.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
+    config.sharedConfig.GridSize = 100;
+    config.sharedConfig.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
-    cfg.GravitationalSoftener = 2e7;
-    cfg.CollisionCoeffRestitution = 0.5;
-    cfg.DragCoeff = 1e-11;
-    cfg.ParticleDensity = 0.1;
+    config.sharedConfig.GravitationalSoftener = 2e7;
+    config.sharedConfig.CollisionCoeffRestitution = 0.5;
+    config.sharedConfig.DragCoeff = 1e-11;
+    config.sharedConfig.ParticleDensity = 0.1;
 
-    return cfg;
+    return config;
 }
 
 void KeplerianDiskScenario::createEntities(entt::registry &registry) const {
-    SystemConfig sysConfig = getConfig();
+    ScenarioSystemConfig scenarioSystemConfig = getSystemsConfig();
+    SharedSystemConfig sharedConfig = scenarioSystemConfig.sharedConfig;
 
-    createCentralBody(registry, diskConfig, sysConfig);
-    createKeplerianDisk(registry, diskConfig, sysConfig);
+    createCentralBody(registry, scenarioEntityConfig, sharedConfig);
+    createKeplerianDisk(registry, scenarioEntityConfig, sharedConfig);
 }
 
-void KeplerianDiskScenario::createCentralBody(entt::registry &registry, const KeplerianDiskConfig& config, const SystemConfig& sysConfig) {
+void KeplerianDiskScenario::createCentralBody(entt::registry &registry, const KeplerianDiskConfig& config, const SharedSystemConfig& sysConfig) {
     auto center = registry.create();
 
     double cx = (SimulatorConstants::ScreenLength / 2.0) * sysConfig.MetersPerPixel;
@@ -75,7 +76,7 @@ namespace {
     }
 }
 
-void KeplerianDiskScenario::createKeplerianDisk(entt::registry &registry, const KeplerianDiskConfig& config, const SystemConfig& sysConfig) {
+void KeplerianDiskScenario::createKeplerianDisk(entt::registry &registry, const KeplerianDiskConfig& config, const SharedSystemConfig& sysConfig) {
     std::cerr << "Creating Keplerian Disk...\n";
 
     std::default_random_engine gen{static_cast<unsigned int>(time(nullptr))};

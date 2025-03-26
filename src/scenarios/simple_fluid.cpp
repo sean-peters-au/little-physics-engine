@@ -57,61 +57,65 @@ static void makeBoundaryWall(entt::registry &registry,
  * @class SimpleFluidScenario
  * @brief Scenario with a rectangular tank of fluid.
  */
-SystemConfig SimpleFluidScenario::getConfig() const
+ScenarioSystemConfig SimpleFluidScenario::getSystemsConfig() const
 {
-    SystemConfig cfg;
-    cfg.MetersPerPixel = 1e-2;
-    cfg.UniverseSizeMeters = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
-    cfg.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
-    cfg.TimeAcceleration = 1.0;
-    cfg.GridSize = 50;
-    cfg.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
+    ScenarioSystemConfig config;
+    
+    // Configure shared parameters
+    config.sharedConfig.MetersPerPixel = 1e-2;
+    config.sharedConfig.UniverseSizeMeters = SimulatorConstants::ScreenLength * config.sharedConfig.MetersPerPixel;
+    config.sharedConfig.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond;
+    config.sharedConfig.TimeAcceleration = 1.0;
+    config.sharedConfig.GridSize = 50;
+    config.sharedConfig.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
-    cfg.GravitationalSoftener = 0.0;
-    cfg.CollisionCoeffRestitution = 0.0; // for fluid, often near inelastic
-    cfg.DragCoeff = 0.0;
-    cfg.ParticleDensity = scenarioConfig.fluidRestDensity;  // Using config for rest density
-
-    return cfg;
+    config.sharedConfig.GravitationalSoftener = 0.0;
+    config.sharedConfig.CollisionCoeffRestitution = 0.0; // for fluid, often near inelastic
+    config.sharedConfig.DragCoeff = 0.0;
+    config.sharedConfig.ParticleDensity = scenarioEntityConfig.fluidRestDensity;  // Using config for rest density
+    
+    return config;
 }
 
 void SimpleFluidScenario::createEntities(entt::registry &registry) const
 {
     // Obtain scenario configuration so we stay consistent with getConfig().
-    SystemConfig cfg = getConfig();
-    double const sizeM = cfg.UniverseSizeMeters;
+    ScenarioSystemConfig scenarioSystemConfig = getSystemsConfig();
+    SharedSystemConfig sharedConfig = scenarioSystemConfig.sharedConfig;
+
+    double const sizeM = sharedConfig.UniverseSizeMeters;
 
     // 1) Create bounding walls
-    double halfWall = scenarioConfig.wallThickness * 0.5;
+    double halfWall = scenarioEntityConfig.wallThickness * 0.5;
     // Left wall
     makeBoundaryWall(registry, 0.0, sizeM*0.5, halfWall, sizeM*0.5,
-                     scenarioConfig.wallMass, 
-                     scenarioConfig.fluidStaticFriction,
-                     scenarioConfig.fluidDynamicFriction);
+                     scenarioEntityConfig.wallMass, 
+                     scenarioEntityConfig.fluidStaticFriction,
+                     scenarioEntityConfig.fluidDynamicFriction);
     // Right wall
     makeBoundaryWall(registry, sizeM, sizeM*0.5, halfWall, sizeM*0.5,
-                     scenarioConfig.wallMass,
-                     scenarioConfig.fluidStaticFriction,
-                     scenarioConfig.fluidDynamicFriction);
+                     scenarioEntityConfig.wallMass,
+                     scenarioEntityConfig.fluidStaticFriction,
+                     scenarioEntityConfig.fluidDynamicFriction);
     // Bottom wall
     makeBoundaryWall(registry, sizeM*0.5, 0.0, sizeM*0.5, halfWall,
-                     scenarioConfig.wallMass,
-                     scenarioConfig.fluidStaticFriction,
-                     scenarioConfig.fluidDynamicFriction);
+                     scenarioEntityConfig.wallMass,
+                     scenarioEntityConfig.fluidStaticFriction,
+                     scenarioEntityConfig.fluidDynamicFriction);
     // Top wall
     makeBoundaryWall(registry, sizeM*0.5, sizeM, sizeM*0.5, halfWall,
-                     scenarioConfig.wallMass,
-                     scenarioConfig.fluidStaticFriction,
-                     scenarioConfig.fluidDynamicFriction);
+                     scenarioEntityConfig.wallMass,
+                     scenarioEntityConfig.fluidStaticFriction,
+                     scenarioEntityConfig.fluidDynamicFriction);
 
     // 2) Spawn fluid particles using a grid-based layout with a small jitter 
     // to prevent particles from aligning perfectly.
-    int numParticles = scenarioConfig.fluidParticleCount;
+    int numParticles = scenarioEntityConfig.fluidParticleCount;
     
-    double x_min = sizeM * scenarioConfig.fluidRegionMinX;
-    double x_max = sizeM * scenarioConfig.fluidRegionMaxX;
-    double y_min = sizeM * scenarioConfig.fluidRegionMinY;
-    double y_max = sizeM * scenarioConfig.fluidRegionMaxY;
+    double x_min = sizeM * scenarioEntityConfig.fluidRegionMinX;
+    double x_max = sizeM * scenarioEntityConfig.fluidRegionMaxX;
+    double y_min = sizeM * scenarioEntityConfig.fluidRegionMinY;
+    double y_max = sizeM * scenarioEntityConfig.fluidRegionMaxY;
     double regionWidth = x_max - x_min;
     double regionHeight = y_max - y_min;
 
@@ -138,11 +142,11 @@ void SimpleFluidScenario::createEntities(entt::registry &registry) const
             auto e = registry.create();
             registry.emplace<Components::Position>(e, x, y);
             registry.emplace<Components::Velocity>(e, 0.0, 0.0);
-            registry.emplace<Components::Mass>(e, scenarioConfig.fluidParticleMass);
+            registry.emplace<Components::Mass>(e, scenarioEntityConfig.fluidParticleMass);
             registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
             registry.emplace<Components::Material>(e, 
-                                                  scenarioConfig.fluidStaticFriction, 
-                                                  scenarioConfig.fluidDynamicFriction);
+                                                  scenarioEntityConfig.fluidStaticFriction, 
+                                                  scenarioEntityConfig.fluidDynamicFriction);
 
             // Use a circle shape for fluid particles
             double const r = 0.02; 

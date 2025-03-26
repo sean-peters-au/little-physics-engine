@@ -6,7 +6,7 @@
 #pragma once
 
 #include "scenarios/i_scenario.hpp"
-#include "systems/system_config.hpp"
+#include "systems/shared_system_config.hpp"
 
 /**
  * @struct PlanetaryOceanConfig
@@ -39,7 +39,7 @@ public:
     PlanetaryOceanScenario() = default;
     ~PlanetaryOceanScenario() override = default;
 
-    SystemConfig getConfig() const override;
+    ScenarioSystemConfig getSystemsConfig() const override;
     void createEntities(entt::registry &registry) const override;
     
 private:
@@ -47,5 +47,5 @@ private:
         entt::registry &registry,
         entt::entity planetEntity) const;
         
-    PlanetaryOceanConfig scenarioConfig;
+    PlanetaryOceanConfig scenarioEntityConfig;
 }; 

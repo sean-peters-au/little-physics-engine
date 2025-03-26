@@ -48,7 +48,7 @@ struct SleepConfig {
  * - Angular velocity below threshold
  * - Conditions met for a configurable number of consecutive frames
  */
-class SleepSystem : public ISystem {
+class SleepSystem : public ConfigurableSystem<SleepConfig> {
 public:
     /**
      * @brief Constructor with default configuration
@@ -65,22 +65,6 @@ public:
      * @param registry EnTT registry containing entities and components
      */
     void update(entt::registry& registry) override;
-    
-    /**
-     * @brief Sets the system configuration
-     * @param config System configuration parameters
-     */
-    void setSystemConfig(const SystemConfig& config) override;
-    
-    /**
-     * @brief Sets sleep-specific configuration
-     * @param config Sleep specific configuration
-     */
-    void setSleepConfig(const SleepConfig& config);
-
-private:
-    SystemConfig sysConfig;
-    SleepConfig sleepConfig;
 };
 
 } // namespace Systems

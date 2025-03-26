@@ -51,12 +51,12 @@ public:
     KeplerianDiskScenario() = default;
     ~KeplerianDiskScenario() override = default;
 
-    SystemConfig getConfig() const override;
+    ScenarioSystemConfig getSystemsConfig() const override;
     void createEntities(entt::registry &registry) const override;
 
 private:
-    static void createCentralBody(entt::registry &registry, const KeplerianDiskConfig& config, const SystemConfig& sysConfig);
-    static void createKeplerianDisk(entt::registry &registry, const KeplerianDiskConfig& config, const SystemConfig& sysConfig);
+    static void createCentralBody(entt::registry &registry, const KeplerianDiskConfig& config, const SharedSystemConfig& sysConfig);
+    static void createKeplerianDisk(entt::registry &registry, const KeplerianDiskConfig& config, const SharedSystemConfig& sysConfig);
     
-    KeplerianDiskConfig diskConfig;
+    KeplerianDiskConfig scenarioEntityConfig;
 };

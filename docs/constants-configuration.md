@@ -18,12 +18,12 @@ The project uses a namespace, `SimulatorConstants`, declared in [constants.hpp](
 - **Initialization:**  
   The function `initializeConstants(SimulationType type)` (located in [constants.cpp](src/core/constants.cpp)) resets or initializes these mutable variables to default "safe" values, depending on the selected simulation type.
 
-## Per-Scenario Configuration via ScenarioConfig
+## Per-Scenario Configuration via ScenarioSystemConfig
 
-Each simulation scenario uses a `ScenarioConfig` structure (defined in [scenario_config.hpp](include/nbody/core/scenario_config.hpp) and implemented in [scenario_config.cpp](src/core/scenario_config.cpp)) to encapsulate its intended configuration. This structure includes many of the same parameters as the global variables in `SimulatorConstants`.
+Each simulation scenario uses a `ScenarioSystemConfig` structure (defined in [scenario_config.hpp](include/nbody/core/scenario_config.hpp) and implemented in [scenario_config.cpp](src/core/scenario_config.cpp)) to encapsulate its intended configuration. This structure includes many of the same parameters as the global variables in `SimulatorConstants`.
 
 - **Scenario Override:**  
-  Each scenario populates a `ScenarioConfig` instance with values tailored to its needs. A helper function, `applyScenarioConfig(const ScenarioConfig &cfg)`, then propagates these values to the global `SimulatorConstants` variables. This ties scenario behavior directly to the simulation’s global state.
+  Each scenario populates a `ScenarioSystemConfig` instance with values tailored to its needs. A helper function, `applyScenarioSystemConfig(const ScenarioSystemConfig &cfg)`, then propagates these values to the global `SimulatorConstants` variables. This ties scenario behavior directly to the simulation’s global state.
 
 - **Hybrid Approach:**  
   While this mechanism exists for centralizing configuration, it represents only part of the picture. Some parts of the code rely on these global settings, while others use hard-coded values.
@@ -49,7 +49,7 @@ These magic numbers make it unclear which values are meant to be configurable an
   While the mutable global state allows quick adjustments to the simulation parameters, it also introduces fragility. Changes in one part of the code might have unintended effects on another, and tracking down the source of a value can be challenging.
 
 - **Documentation Gaps:**  
-  Not all constants are well-documented. The dual approach—configuration via `ScenarioConfig` and direct use of magic numbers—can confuse both developers and automated tools trying to generate or verify configuration data.
+  Not all constants are well-documented. The dual approach—configuration via `ScenarioSystemConfig` and direct use of magic numbers—can confuse both developers and automated tools trying to generate or verify configuration data.
 
 ## Future Directions
 
@@ -64,4 +64,4 @@ These magic numbers make it unclear which values are meant to be configurable an
 
 ## Conclusion
 
-The current configuration strategy is both flexible and fragmented. Global variables in `SimulatorConstants` provide a central point for many simulation parameters, while each scenario influences these parameters through a dedicated `ScenarioConfig`. However, magic numbers and hard-coded values still permeate various parts of the codebase, from scenario implementations to collision solvers. This document aims to capture the "lay of the land" as it stands, providing a reference point before a more cohesive configuration management system is implemented.
+The current configuration strategy is both flexible and fragmented. Global variables in `SimulatorConstants` provide a central point for many simulation parameters, while each scenario influences these parameters through a dedicated `ScenarioSystemConfig`. However, magic numbers and hard-coded values still permeate various parts of the codebase, from scenario implementations to collision solvers. This document aims to capture the "lay of the land" as it stands, providing a reference point before a more cohesive configuration management system is implemented.

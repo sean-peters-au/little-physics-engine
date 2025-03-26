@@ -105,7 +105,7 @@ public:
      * @param config System configuration for coordinate conversion
      */
     Renderer(int screenWidth, int screenHeight, 
-             const SystemConfig& config = SystemConfig());
+             const SharedSystemConfig& config = SharedSystemConfig());
     ~Renderer();
 
     /**
@@ -226,7 +226,7 @@ public:
      * @brief Updates coordinate conversion parameters based on new config
      * @param config The new system configuration
      */
-    void updateCoordinates(const SystemConfig& config);
+    void updateCoordinates(const SharedSystemConfig& config);
 
 private:
     /** The SFML render window */

@@ -29,7 +29,7 @@ public:
      * @param config System configuration with universe size and other parameters
      * @param screenSize Screen size in pixels (default: from SimulatorConstants)
      */
-    explicit Coordinates(const SystemConfig& config, 
+    explicit Coordinates(const SharedSystemConfig& config, 
                          unsigned int screenSize = SimulatorConstants::ScreenLength);
     
     /**
@@ -83,7 +83,7 @@ public:
      * 
      * @param config New system configuration
      */
-    void updateConfig(const SystemConfig& config);
+    void updateConfig(const SharedSystemConfig& config);
 
 private:
     double metersPerPixel;       ///< Conversion ratio from pixels to meters

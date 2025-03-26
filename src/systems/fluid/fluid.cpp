@@ -590,7 +590,7 @@ void FluidSystem::multiStepVelocityVerlet(
 {
     PROFILE_SCOPE("FluidSystem::multiStepVelocityVerlet");
 
-    float dt = static_cast<float>(getSystemConfig().SecondsPerTick * getSystemConfig().TimeAcceleration);
+    float dt = static_cast<float>(getSharedSystemConfig().SecondsPerTick * getSharedSystemConfig().TimeAcceleration);
     float subDt = dt / static_cast<float>(getSpecificConfig().numSubSteps);
 
     int blockSize = getSpecificConfig().threadsPerGroup;

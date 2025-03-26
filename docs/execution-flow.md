@@ -13,7 +13,7 @@ flowchart TD
     C["Scenario Selection"]
     D["Initialize Global Constants: initializeConstants"]
     E["Create Scenario Object: IScenario"]
-    F["Apply Scenario Config: applyScenarioConfig"]
+    F["Apply Scenario Config: applyScenarioSystemConfig"]
     G["Create ECS Entities: createEntities"]
     H["Enter Simulation Loop"]
     I["Update Simulation Systems: tick"]

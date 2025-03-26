@@ -4,10 +4,10 @@
 #include "systems/systems.hpp"
 
 /**
- * @struct SystemConfig
+ * @struct SharedSystemConfig
  * @brief Holds all system configuration parameters for the simulation.
  */
-struct SystemConfig {
+struct SharedSystemConfig {
     double UniverseSizeMeters;
     double TimeAcceleration;
     double MetersPerPixel;

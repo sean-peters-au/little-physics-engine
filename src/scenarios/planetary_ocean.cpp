@@ -13,37 +13,64 @@
 #include "entities/entity_components.hpp"
 #include "math/polygon.hpp"
 
-SystemConfig PlanetaryOceanScenario::getConfig() const
+ScenarioSystemConfig PlanetaryOceanScenario::getSystemsConfig() const
 {
-    SystemConfig cfg;
+    ScenarioSystemConfig config;
     
     // Planet size and scaling - make planet smaller on screen to emphasize fluid
     double planetRadiusPixels = 70.0;  // 140 pixel diameter
-    cfg.MetersPerPixel = scenarioConfig.planetRadius / planetRadiusPixels;
-    cfg.UniverseSizeMeters = SimulatorConstants::ScreenLength * cfg.MetersPerPixel;
+    config.sharedConfig.MetersPerPixel = scenarioEntityConfig.planetRadius / planetRadiusPixels;
+    config.sharedConfig.UniverseSizeMeters = SimulatorConstants::ScreenLength * config.sharedConfig.MetersPerPixel;
     
     // Time settings
-    cfg.SecondsPerTick = 1.0;
-    cfg.TimeAcceleration = 10.0;
+    config.sharedConfig.SecondsPerTick = 1.0;
+    config.sharedConfig.TimeAcceleration = 10.0;
     
     // Grid settings
-    cfg.GridSize = 100;
-    cfg.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / cfg.GridSize;
+    config.sharedConfig.GridSize = 100;
+    config.sharedConfig.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
     // Physical parameters
-    cfg.GravitationalSoftener = scenarioConfig.planetRadius * 0.01;
-    cfg.CollisionCoeffRestitution = 0.1;
-    cfg.DragCoeff = 0.0;
-    cfg.ParticleDensity = scenarioConfig.fluidRestDensity;
+    config.sharedConfig.GravitationalSoftener = scenarioEntityConfig.planetRadius * 0.01;
+    config.sharedConfig.CollisionCoeffRestitution = 0.1;
+    config.sharedConfig.DragCoeff = 0.0;
+    config.sharedConfig.ParticleDensity = scenarioEntityConfig.fluidRestDensity;
 
-    return cfg;
+    // Configure fluid parameters specifically for planetary scale
+    config.fluidConfig.gravity = 9.81f;                // Standard Earth gravity
+    config.fluidConfig.restDensity = 0.5f;             // Lower density for this scenario
+    config.fluidConfig.stiffness = 10.0f;              // Lower stiffness for planetary scale
+    config.fluidConfig.viscosity = 0.02f;              // Lower viscosity for ocean
+    
+    // Fluid position solver parameters
+    config.fluidConfig.positionSolver.safetyMargin = 0.01f;
+    config.fluidConfig.positionSolver.relaxFactor = 0.95f;
+    config.fluidConfig.positionSolver.maxCorrection = 0.2f;
+    config.fluidConfig.positionSolver.minPositionChange = 1e-4f;
+    
+    // Fluid impulse solver parameters
+    config.fluidConfig.impulseSolver.buoyancyStrength = 0.5f;
+    config.fluidConfig.impulseSolver.fluidForceScale = 200.0f;
+    config.fluidConfig.impulseSolver.depthScale = 0.1f;
+
+    // Grid parameters for planetary scale simulation
+    config.fluidConfig.gridConfig.gridEpsilon = 1e-8f;            // Smaller epsilon for planetary scale
+    config.fluidConfig.gridConfig.defaultSmoothingLength = 5000.0f; // Much larger smoothing length
+    config.fluidConfig.gridConfig.boundaryOffset = 100.0f;          // Larger offset from boundaries
+    
+    // Numerical stability parameters for planetary scale
+    config.fluidConfig.numericalConfig.minDistanceThreshold = 1e-10f;
+    config.fluidConfig.numericalConfig.minDensityThreshold = 1e-8f;
+    
+    return config;
 }
 
 void PlanetaryOceanScenario::createEntities(entt::registry &registry) const
 {
     // Get system configuration
-    SystemConfig sysConfig = getConfig();
-    double const sizeM = sysConfig.UniverseSizeMeters;
+    ScenarioSystemConfig scenarioSystemConfig = getSystemsConfig();
+    SharedSystemConfig sharedConfig = scenarioSystemConfig.sharedConfig;
+    double const sizeM = sharedConfig.UniverseSizeMeters;
     
     // Center coordinates in meters
     double centerX = sizeM * 0.5;
@@ -53,11 +80,11 @@ void PlanetaryOceanScenario::createEntities(entt::registry &registry) const
     auto planet = registry.create();
     registry.emplace<Components::Position>(planet, centerX, centerY);
     registry.emplace<Components::Velocity>(planet, 0.0, 0.0);
-    registry.emplace<Components::Mass>(planet, scenarioConfig.planetMass);
+    registry.emplace<Components::Mass>(planet, scenarioEntityConfig.planetMass);
     registry.emplace<Components::ParticlePhase>(planet, Components::Phase::Solid);
     
     // Planet visual representation
-    double const planetRadius = scenarioConfig.planetRadius;
+    double const planetRadius = scenarioEntityConfig.planetRadius;
     registry.emplace<Components::Shape>(planet, Components::ShapeType::Circle, planetRadius);
     registry.emplace<CircleShape>(planet, planetRadius);
     
@@ -67,7 +94,7 @@ void PlanetaryOceanScenario::createEntities(entt::registry &registry) const
     // 2. Create ocean particles around the planet
     createOceanParticles(registry, planet);
     
-    std::cerr << "Planetary ocean scenario ready with " << scenarioConfig.oceanParticleCount
+    std::cerr << "Planetary ocean scenario ready with " << scenarioEntityConfig.oceanParticleCount
               << " ocean particles." << std::endl;
 }
 
@@ -81,13 +108,13 @@ void PlanetaryOceanScenario::createOceanParticles(
     double centerY = planetPos.y;
     
     // Ocean parameters
-    double const planetRadius = scenarioConfig.planetRadius;
-    double const oceanDepth = scenarioConfig.oceanDepth;
-    double const numLayers = scenarioConfig.oceanLayers;
-    int const numParticles = scenarioConfig.oceanParticleCount;
+    double const planetRadius = scenarioEntityConfig.planetRadius;
+    double const oceanDepth = scenarioEntityConfig.oceanDepth;
+    double const numLayers = scenarioEntityConfig.oceanLayers;
+    int const numParticles = scenarioEntityConfig.oceanParticleCount;
     
     // Use the explicit particle radius from config
-    double particleRadius = scenarioConfig.fluidParticleRadius;
+    double particleRadius = scenarioEntityConfig.fluidParticleRadius;
     
     // Calculate number of particles per layer
     double baseRadius = planetRadius + (oceanDepth / numLayers * 0.5); // Distance to first layer
@@ -125,11 +152,11 @@ void PlanetaryOceanScenario::createOceanParticles(
             registry.emplace<Components::Velocity>(e, 0.0, 0.0);
             
             // Fluid properties
-            registry.emplace<Components::Mass>(e, scenarioConfig.oceanParticleMass);
+            registry.emplace<Components::Mass>(e, scenarioEntityConfig.oceanParticleMass);
             registry.emplace<Components::ParticlePhase>(e, Components::Phase::Liquid);
             registry.emplace<Components::Material>(e, 
-                                                 scenarioConfig.fluidStaticFriction,
-                                                 scenarioConfig.fluidDynamicFriction);
+                                                 scenarioEntityConfig.fluidStaticFriction,
+                                                 scenarioEntityConfig.fluidDynamicFriction);
             
             // Fluid particle shape
             registry.emplace<Components::Shape>(e, Components::ShapeType::Circle, particleRadius);
