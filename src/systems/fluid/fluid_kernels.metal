@@ -7,6 +7,7 @@
 
 #include <metal_stdlib>
 #include <metal_atomic>
+#include "systems/fluid/fluid_kernels.h"
 
 using namespace metal;
 
@@ -61,24 +62,6 @@ constant int GPU_MAX_PER_CELL = 64;
 struct GPUGridCell {
     atomic_int count;
     int indices[GPU_MAX_PER_CELL];
-};
-
-/**
- * @brief Params for fluid sub-steps (already used by other kernels).
- * Also holds dt = sub-step delta-time.
- */
-struct GPUFluidParams {
-    float cellSize;
-    int   gridMinX;
-    int   gridMinY;
-    int   gridDimX;
-    int   gridDimY;
-    float restDensity;
-    float stiffness;
-    float viscosity;
-    float dt;       // sub-step time
-    float halfDt;
-    uint  particleCount;
 };
 
 /**
@@ -559,17 +542,17 @@ kernel void rigidFluidPositionSolver(
     }
 
     // -----------------------------------------------------------------------
-    // Position solver parameters - all magic numbers defined as constants here
+    // Position solver parameters - using configuration passed from CPU
     // -----------------------------------------------------------------------
     // Collision resolution parameters
-    const float SAFETY_MARGIN = 0.001f;          // Extra separation to prevent re-collision
-    const float RELAX_FACTOR = 0.9f;             // Lower factor for more gradual corrections
+    const float SAFETY_MARGIN = params.positionSolver.safetyMargin;    // Extra separation to prevent re-collision
+    const float RELAX_FACTOR = params.positionSolver.relaxFactor;      // Lower factor for more gradual corrections
     
     // Numerical stability thresholds
-    const float MIN_SAFE_DISTANCE = 1e-10f;      // Minimum safe distance to avoid divide-by-zero
-    const float MIN_POSITION_CHANGE = 1e-6f;     // Minimum position change to consider for velocity update
-    const float VELOCITY_DAMPING = 0.3f;         // Much lower damping to prevent bouncing
-    const float MAX_VELOCITY_UPDATE = 1.0f;      // Clamp maximum velocity change
+    const float MIN_SAFE_DISTANCE = params.positionSolver.minSafeDistance; // Minimum safe distance to avoid divide-by-zero
+    const float MIN_POSITION_CHANGE = 1e-6f;                         // Minimum position change to consider for velocity update
+    const float VELOCITY_DAMPING = params.positionSolver.velocityDamping; // Much lower damping to prevent bouncing
+    const float MAX_VELOCITY_UPDATE = params.positionSolver.maxVelocityUpdate; // Clamp maximum velocity change
     
     // Get time step
     float dt = params.dt;
@@ -639,7 +622,7 @@ kernel void rigidFluidPositionSolver(
 
     // Apply position correction
     // Add a safety limit to prevent extreme position corrections
-    const float MAX_CORRECTION = 0.1f; // Maximum correction per frame
+    const float MAX_CORRECTION = params.positionSolver.maxCorrection; // Maximum correction per frame
     float corrMagnitude = length(accumCorr);
     if (corrMagnitude > MAX_CORRECTION) {
         accumCorr = (accumCorr / corrMagnitude) * MAX_CORRECTION;
@@ -725,19 +708,15 @@ kernel void rigidFluidImpulseSolver(
     }
 
     // -----------------------------------------------------------------------
-    // Impulse solver parameters - all magic numbers defined as constants here
+    // Impulse solver parameters - using configuration passed from CPU
     // -----------------------------------------------------------------------
-    // TODO: These are not using the system and scenario configuration. Need to add these.
-    // TODO: Something has gone wrong with my constants. I had to scale up force by 100x, for things
-    // to look right.
-
-    // Physics constants
+    // Physics constants 
     const float GRAVITY = 9.81f;                 // Gravitational acceleration (m/s²)
     const float WATER_DENSITY = 1000.0f;         // Reference density for water (kg/m³)
     
     // Force limits for stability
-    const float MAX_FORCE = 0.15f;               // Maximum force magnitude per particle
-    const float MAX_TORQUE = 0.03f;              // Maximum torque magnitude per particle
+    const float MAX_FORCE = param.impulseSolver.maxForce;
+    const float MAX_TORQUE = param.impulseSolver.maxTorque;
     
     // Force calculation parameters
     const float VISCOSITY_SCALE = 0.05f;          // Scale param.viscosity for more stable results
@@ -759,9 +738,9 @@ kernel void rigidFluidImpulseSolver(
     const float MIN_REL_VELOCITY = 1e-6f;        // Minimum relative velocity magnitude
     
     // Two-way coupling parameters
-    const float FLUID_FORCE_SCALE = 100.0f;       // Scale factor for fluid forces
-    const float FLUID_FORCE_MAX = 50000.0f;         // Maximum force that can be applied to fluid particle
-    const float BUOYANCY_STRENGTH = 0.2f;       // Buoyancy force strength (1.0 = neutral)
+    const float FLUID_FORCE_SCALE = param.impulseSolver.fluidForceScale;
+    const float FLUID_FORCE_MAX = param.impulseSolver.fluidForceMax;
+    const float BUOYANCY_STRENGTH = param.impulseSolver.buoyancyStrength;
 
     // Get time step from parameters
     const float dt = param.dt;

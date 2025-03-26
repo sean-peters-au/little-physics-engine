@@ -27,6 +27,7 @@
 #include "core/profile.hpp"
 #include "entities/entity_components.hpp"
 #include "math/polygon.hpp"
+#include "systems/fluid/fluid_kernels.h"
 
 namespace Systems
 {
@@ -618,6 +619,21 @@ void FluidSystem::multiStepVelocityVerlet(
                     params.dt          = subDt;
                     params.halfDt      = 0.5f * subDt;
                     params.particleCount = static_cast<unsigned int>(paddedCount);
+                    
+                    // Set position solver configuration
+                    params.positionSolver.safetyMargin = getSpecificConfig().positionSolver.safetyMargin;
+                    params.positionSolver.relaxFactor = getSpecificConfig().positionSolver.relaxFactor;
+                    params.positionSolver.maxCorrection = getSpecificConfig().positionSolver.maxCorrection;
+                    params.positionSolver.maxVelocityUpdate = getSpecificConfig().positionSolver.maxVelocityUpdate;
+                    params.positionSolver.minSafeDistance = getSpecificConfig().positionSolver.minSafeDistance;
+                    params.positionSolver.velocityDamping = getSpecificConfig().positionSolver.velocityDamping;
+                    
+                    // Set impulse solver configuration
+                    params.impulseSolver.maxForce = getSpecificConfig().impulseSolver.maxForce;
+                    params.impulseSolver.maxTorque = getSpecificConfig().impulseSolver.maxTorque;
+                    params.impulseSolver.fluidForceScale = getSpecificConfig().impulseSolver.fluidForceScale;
+                    params.impulseSolver.fluidForceMax = getSpecificConfig().impulseSolver.fluidForceMax;
+                    params.impulseSolver.buoyancyStrength = getSpecificConfig().impulseSolver.buoyancyStrength;
 
                     std::memcpy(paramsBuf_->contents(), &params, sizeof(GPUFluidParams));
 
@@ -724,6 +740,21 @@ void FluidSystem::multiStepVelocityVerlet(
         params.dt          = subDt;
         params.halfDt      = 0.5f * subDt;
         params.particleCount = static_cast<unsigned int>(paddedCount);
+        
+        // Set position solver configuration
+        params.positionSolver.safetyMargin = getSpecificConfig().positionSolver.safetyMargin;
+        params.positionSolver.relaxFactor = getSpecificConfig().positionSolver.relaxFactor;
+        params.positionSolver.maxCorrection = getSpecificConfig().positionSolver.maxCorrection;
+        params.positionSolver.maxVelocityUpdate = getSpecificConfig().positionSolver.maxVelocityUpdate;
+        params.positionSolver.minSafeDistance = getSpecificConfig().positionSolver.minSafeDistance;
+        params.positionSolver.velocityDamping = getSpecificConfig().positionSolver.velocityDamping;
+        
+        // Set impulse solver configuration
+        params.impulseSolver.maxForce = getSpecificConfig().impulseSolver.maxForce;
+        params.impulseSolver.maxTorque = getSpecificConfig().impulseSolver.maxTorque;
+        params.impulseSolver.fluidForceScale = getSpecificConfig().impulseSolver.fluidForceScale;
+        params.impulseSolver.fluidForceMax = getSpecificConfig().impulseSolver.fluidForceMax;
+        params.impulseSolver.buoyancyStrength = getSpecificConfig().impulseSolver.buoyancyStrength;
 
         std::memcpy(paramsBuf_->contents(), &params, sizeof(GPUFluidParams));
 

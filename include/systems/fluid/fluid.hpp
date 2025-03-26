@@ -22,6 +22,7 @@
 #include <limits>
 
 #include "systems/i_system.hpp"
+#include "systems/fluid/fluid_kernels.h"
 
 namespace Systems
 {
@@ -62,25 +63,6 @@ struct GPUGridCell
 {
     int count;
     int indices[GPU_MAX_PER_CELL];
-};
-
-/**
- * @struct GPUFluidParams
- * @brief Parameters controlling the SPH and integration steps on the GPU.
- */
-struct GPUFluidParams
-{
-    float cellSize;
-    int   gridMinX;
-    int   gridMinY;
-    int   gridDimX;
-    int   gridDimY;
-    float restDensity;
-    float stiffness;
-    float viscosity;
-    float dt;
-    float halfDt;
-    unsigned int particleCount;
 };
 
 /**
@@ -148,13 +130,34 @@ struct GPURigidBody
  */
 struct FluidConfig
 {
-    float restDensity = 0.5f;    ///< Default density of fluid (kg/m³)
-    float stiffness = 200.0f;     ///< Pressure stiffness coefficient
-    float viscosity = 0.03f;     ///< Viscosity coefficient
-    float dampingFactor = 0.999f; ///< Velocity damping for rigid bodies
-
-    int numSubSteps = 10;        ///< Number of substeps per frame
-    int threadsPerGroup = 256;   ///< Threads per threadgroup for GPU
+    // Base SPH parameters
+    float restDensity = 0.5f;        ///< Default density of fluid (kg/m³)
+    float stiffness = 200.0f;        ///< Pressure stiffness coefficient
+    float viscosity = 0.03f;         ///< Viscosity coefficient
+    
+    // Position solver parameters
+    struct {
+        float safetyMargin = 0.001f;     ///< Separation margin for collision resolution
+        float relaxFactor = 0.9f;        ///< Gradual collision correction factor
+        float maxCorrection = 0.1f;      ///< Maximum position correction per frame
+        float maxVelocityUpdate = 1.0f;  ///< Clamp for max velocity change 
+        float minSafeDistance = 1e-10f;  ///< Minimum safe distance for collision calculations
+        float velocityDamping = 0.3f;    ///< Velocity damping for position-based dynamics
+    } positionSolver;
+    
+    // Impulse solver parameters
+    struct {
+        float maxForce = 0.15f;          ///< Maximum force per particle
+        float maxTorque = 0.03f;         ///< Maximum torque per particle
+        float fluidForceScale = 100.0f;  ///< Scale factor for fluid forces
+        float fluidForceMax = 50000.0f;  ///< Maximum force on fluid
+        float buoyancyStrength = 0.2f;   ///< Buoyancy multiplier
+    } impulseSolver;
+    
+    // General parameters
+    float dampingFactor = 0.999f;    ///< Velocity damping for rigid bodies
+    int numSubSteps = 10;            ///< Number of substeps per frame
+    int threadsPerGroup = 256;       ///< Threads per threadgroup for GPU
 };
 
 /**
