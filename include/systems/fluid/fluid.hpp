@@ -144,6 +144,7 @@ struct FluidConfig
         float maxVelocityUpdate = 1.0f;  ///< Clamp for max velocity change 
         float minSafeDistance = 1e-10f;  ///< Minimum safe distance for collision calculations
         float velocityDamping = 0.3f;    ///< Velocity damping for position-based dynamics
+        float minPositionChange = 1e-6f; ///< Minimum position change to consider for velocity update
     } positionSolver;
     
     // Impulse solver parameters

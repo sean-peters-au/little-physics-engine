@@ -550,8 +550,8 @@ kernel void rigidFluidPositionSolver(
     
     // Numerical stability thresholds
     const float MIN_SAFE_DISTANCE = params.positionSolver.minSafeDistance; // Minimum safe distance to avoid divide-by-zero
-    const float MIN_POSITION_CHANGE = 1e-6f;                         // Minimum position change to consider for velocity update
-    const float VELOCITY_DAMPING = params.positionSolver.velocityDamping; // Much lower damping to prevent bouncing
+    const float MIN_POSITION_CHANGE = params.positionSolver.minPositionChange; // Minimum position change to consider
+    const float VELOCITY_DAMPING = params.positionSolver.velocityDamping; // Damping to prevent bouncing
     const float MAX_VELOCITY_UPDATE = params.positionSolver.maxVelocityUpdate; // Clamp maximum velocity change
     
     // Get time step

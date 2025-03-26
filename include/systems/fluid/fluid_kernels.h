@@ -24,12 +24,18 @@
  */
 struct FluidPositionSolverConfig
 {
+    // Collision response
     float safetyMargin;       // Separation margin for collision resolution
     float relaxFactor;        // Gradual collision correction factor
     float maxCorrection;      // Maximum position correction per frame
+    
+    // Velocity update parameters
     float maxVelocityUpdate;  // Clamp for max velocity change 
     float minSafeDistance;    // Minimum safe distance for collision calculations
-    float velocityDamping;    // Velocity damping factor for position-based dynamics
+    float velocityDamping;    // Velocity damping for position-based dynamics
+    
+    // Additional parameters for stability and scale handling
+    float minPositionChange;  // Minimum position change to consider for velocity update
 };
 
 /**
@@ -73,7 +79,7 @@ struct FluidImpulseSolverConfig
  */
 struct GPUFluidParams
 {
-    // Grid and neighbor search parameters
+    // Grid and neighbor search
     float cellSize;           // Size of grid cells for neighbor search
     int   gridMinX;           // Grid bounds min X
     int   gridMinY;           // Grid bounds min Y
@@ -81,12 +87,12 @@ struct GPUFluidParams
     int   gridDimY;           // Grid dimensions Y
     
     // Core physics parameters
-    float gravity;            // Gravitational constant (m/s²)  
+    float gravity;            // Gravitational acceleration (m/s²)
     float restDensity;        // Target rest density for pressure calculation
     float stiffness;          // Pressure stiffness coefficient
     float viscosity;          // Viscosity coefficient for force calculation
     
-    // Simulation time parameters
+    // Time step information
     float dt;                 // Current sub-step time
     float halfDt;             // Half of sub-step time (for Verlet)
     unsigned int particleCount; // Number of particles in simulation

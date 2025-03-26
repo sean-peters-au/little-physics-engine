@@ -632,6 +632,7 @@ void FluidSystem::multiStepVelocityVerlet(
                     params.positionSolver.maxVelocityUpdate = getSpecificConfig().positionSolver.maxVelocityUpdate;
                     params.positionSolver.minSafeDistance = getSpecificConfig().positionSolver.minSafeDistance;
                     params.positionSolver.velocityDamping = getSpecificConfig().positionSolver.velocityDamping;
+                    params.positionSolver.minPositionChange = getSpecificConfig().positionSolver.minPositionChange;
                     
                     // Set impulse solver configuration
                     params.impulseSolver.maxForce = getSpecificConfig().impulseSolver.maxForce;
@@ -771,6 +772,7 @@ void FluidSystem::multiStepVelocityVerlet(
         params.positionSolver.maxVelocityUpdate = getSpecificConfig().positionSolver.maxVelocityUpdate;
         params.positionSolver.minSafeDistance = getSpecificConfig().positionSolver.minSafeDistance;
         params.positionSolver.velocityDamping = getSpecificConfig().positionSolver.velocityDamping;
+        params.positionSolver.minPositionChange = getSpecificConfig().positionSolver.minPositionChange;
         
         // Set impulse solver configuration
         params.impulseSolver.maxForce = getSpecificConfig().impulseSolver.maxForce;
