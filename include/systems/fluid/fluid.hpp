@@ -131,9 +131,10 @@ struct GPURigidBody
 struct FluidConfig
 {
     // Base SPH parameters
-    float restDensity = 0.5f;        ///< Default density of fluid (kg/m³)
-    float stiffness = 200.0f;        ///< Pressure stiffness coefficient
-    float viscosity = 0.03f;         ///< Viscosity coefficient
+    float gravity = 9.81f;       ///< Gravitational acceleration (m/s²)
+    float restDensity = 0.5f;    ///< Default density of fluid (kg/m³)
+    float stiffness = 200.0f;    ///< Pressure stiffness coefficient
+    float viscosity = 0.03f;     ///< Viscosity coefficient
     
     // Position solver parameters
     struct {
@@ -147,11 +148,33 @@ struct FluidConfig
     
     // Impulse solver parameters
     struct {
+        // Force limits
         float maxForce = 0.15f;          ///< Maximum force per particle
         float maxTorque = 0.03f;         ///< Maximum torque per particle
         float fluidForceScale = 100.0f;  ///< Scale factor for fluid forces
         float fluidForceMax = 50000.0f;  ///< Maximum force on fluid
+        
+        // Physical behavior
         float buoyancyStrength = 0.2f;   ///< Buoyancy multiplier
+        float viscosityScale = 0.05f;    ///< Scale applied to base viscosity
+        
+        // Penetration and depth effects
+        float depthScale = 0.04f;        ///< Penetration depth scaling
+        float depthTransitionRate = 2.0f; ///< How quickly depth effect increases
+        float depthEstimateScale = 10.0f; ///< For hydrostatic pressure estimation
+        
+        // Force composition
+        float pressureForceRatio = 1.0f; ///< Pressure force limit ratio
+        float viscousForceRatio = 0.3f;  ///< Viscous force limit ratio
+        
+        // Rotation damping
+        float angularDampingThreshold = 0.5f; ///< When to apply rotation damping
+        float angularDampingFactor = 0.005f;  ///< Rotation damping strength
+        
+        // Safety thresholds 
+        float maxSafeVelocitySq = 80.0f; ///< Max safe velocity squared
+        float minPenetration = 1e-6f;    ///< Min penetration to consider
+        float minRelVelocity = 1e-6f;    ///< Min relative velocity to consider
     } impulseSolver;
     
     // General parameters

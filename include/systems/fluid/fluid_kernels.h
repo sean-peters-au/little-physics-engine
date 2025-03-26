@@ -38,11 +38,33 @@ struct FluidPositionSolverConfig
  */
 struct FluidImpulseSolverConfig
 {
+    // Force limits
     float maxForce;           // Maximum force per particle
     float maxTorque;          // Maximum torque per particle
     float fluidForceScale;    // Scale factor for fluid forces
     float fluidForceMax;      // Maximum force on fluid
+    
+    // Physical behavior
     float buoyancyStrength;   // Buoyancy multiplier
+    float viscosityScale;     // Scale applied to base viscosity
+    
+    // Penetration and depth effects
+    float depthScale;         // Penetration depth scaling
+    float depthTransitionRate; // How quickly depth effects ramp up
+    float depthEstimateScale; // For hydrostatic pressure estimation
+    
+    // Force composition
+    float pressureForceRatio; // Pressure force limit ratio
+    float viscousForceRatio;  // Viscous force limit ratio
+    
+    // Rotation damping
+    float angularDampingThreshold; // When to apply rotation damping
+    float angularDampingFactor;    // Rotation damping strength
+    
+    // Safety thresholds 
+    float maxSafeVelocitySq;  // Max safe velocity squared
+    float minPenetration;     // Min penetration to consider
+    float minRelVelocity;     // Min relative velocity to consider
 };
 
 /**
@@ -51,14 +73,20 @@ struct FluidImpulseSolverConfig
  */
 struct GPUFluidParams
 {
+    // Grid and neighbor search parameters
     float cellSize;           // Size of grid cells for neighbor search
     int   gridMinX;           // Grid bounds min X
     int   gridMinY;           // Grid bounds min Y
     int   gridDimX;           // Grid dimensions X
     int   gridDimY;           // Grid dimensions Y
+    
+    // Core physics parameters
+    float gravity;            // Gravitational constant (m/s²)  
     float restDensity;        // Target rest density for pressure calculation
     float stiffness;          // Pressure stiffness coefficient
     float viscosity;          // Viscosity coefficient for force calculation
+    
+    // Simulation time parameters
     float dt;                 // Current sub-step time
     float halfDt;             // Half of sub-step time (for Verlet)
     unsigned int particleCount; // Number of particles in simulation

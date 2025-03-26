@@ -613,9 +613,14 @@ void FluidSystem::multiStepVelocityVerlet(
                 {
                     // velocityVerletHalf
                     GPUFluidParams params{};
+                    
+                    // Base SPH parameters
+                    params.gravity     = getSpecificConfig().gravity;
                     params.restDensity = getSpecificConfig().restDensity;
                     params.stiffness   = getSpecificConfig().stiffness;
                     params.viscosity   = getSpecificConfig().viscosity;
+                    
+                    // Time parameters
                     params.dt          = subDt;
                     params.halfDt      = 0.5f * subDt;
                     params.particleCount = static_cast<unsigned int>(paddedCount);
@@ -634,6 +639,17 @@ void FluidSystem::multiStepVelocityVerlet(
                     params.impulseSolver.fluidForceScale = getSpecificConfig().impulseSolver.fluidForceScale;
                     params.impulseSolver.fluidForceMax = getSpecificConfig().impulseSolver.fluidForceMax;
                     params.impulseSolver.buoyancyStrength = getSpecificConfig().impulseSolver.buoyancyStrength;
+                    params.impulseSolver.viscosityScale = getSpecificConfig().impulseSolver.viscosityScale;
+                    params.impulseSolver.depthScale = getSpecificConfig().impulseSolver.depthScale;
+                    params.impulseSolver.depthTransitionRate = getSpecificConfig().impulseSolver.depthTransitionRate;
+                    params.impulseSolver.depthEstimateScale = getSpecificConfig().impulseSolver.depthEstimateScale;
+                    params.impulseSolver.pressureForceRatio = getSpecificConfig().impulseSolver.pressureForceRatio;
+                    params.impulseSolver.viscousForceRatio = getSpecificConfig().impulseSolver.viscousForceRatio;
+                    params.impulseSolver.angularDampingThreshold = getSpecificConfig().impulseSolver.angularDampingThreshold;
+                    params.impulseSolver.angularDampingFactor = getSpecificConfig().impulseSolver.angularDampingFactor;
+                    params.impulseSolver.maxSafeVelocitySq = getSpecificConfig().impulseSolver.maxSafeVelocitySq;
+                    params.impulseSolver.minPenetration = getSpecificConfig().impulseSolver.minPenetration;
+                    params.impulseSolver.minRelVelocity = getSpecificConfig().impulseSolver.minRelVelocity;
 
                     std::memcpy(paramsBuf_->contents(), &params, sizeof(GPUFluidParams));
 
@@ -729,14 +745,21 @@ void FluidSystem::multiStepVelocityVerlet(
         // --------------------------------------------------------------------
         // 4) Fill GPUFluidParams with final neighbor search info
         GPUFluidParams params{};
+        
+        // Grid parameters
         params.cellSize    = cellSize;
         params.gridMinX    = globalMinGx;
         params.gridMinY    = globalMinGy;
         params.gridDimX    = gridDimX;
         params.gridDimY    = gridDimY;
+        
+        // Physics parameters
+        params.gravity     = getSpecificConfig().gravity;
         params.restDensity = getSpecificConfig().restDensity;
         params.stiffness   = getSpecificConfig().stiffness;
         params.viscosity   = getSpecificConfig().viscosity;
+        
+        // Time parameters
         params.dt          = subDt;
         params.halfDt      = 0.5f * subDt;
         params.particleCount = static_cast<unsigned int>(paddedCount);
@@ -755,6 +778,17 @@ void FluidSystem::multiStepVelocityVerlet(
         params.impulseSolver.fluidForceScale = getSpecificConfig().impulseSolver.fluidForceScale;
         params.impulseSolver.fluidForceMax = getSpecificConfig().impulseSolver.fluidForceMax;
         params.impulseSolver.buoyancyStrength = getSpecificConfig().impulseSolver.buoyancyStrength;
+        params.impulseSolver.viscosityScale = getSpecificConfig().impulseSolver.viscosityScale;
+        params.impulseSolver.depthScale = getSpecificConfig().impulseSolver.depthScale;
+        params.impulseSolver.depthTransitionRate = getSpecificConfig().impulseSolver.depthTransitionRate;
+        params.impulseSolver.depthEstimateScale = getSpecificConfig().impulseSolver.depthEstimateScale;
+        params.impulseSolver.pressureForceRatio = getSpecificConfig().impulseSolver.pressureForceRatio;
+        params.impulseSolver.viscousForceRatio = getSpecificConfig().impulseSolver.viscousForceRatio;
+        params.impulseSolver.angularDampingThreshold = getSpecificConfig().impulseSolver.angularDampingThreshold;
+        params.impulseSolver.angularDampingFactor = getSpecificConfig().impulseSolver.angularDampingFactor;
+        params.impulseSolver.maxSafeVelocitySq = getSpecificConfig().impulseSolver.maxSafeVelocitySq;
+        params.impulseSolver.minPenetration = getSpecificConfig().impulseSolver.minPenetration;
+        params.impulseSolver.minRelVelocity = getSpecificConfig().impulseSolver.minRelVelocity;
 
         std::memcpy(paramsBuf_->contents(), &params, sizeof(GPUFluidParams));
 

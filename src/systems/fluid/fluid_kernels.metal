@@ -711,31 +711,31 @@ kernel void rigidFluidImpulseSolver(
     // Impulse solver parameters - using configuration passed from CPU
     // -----------------------------------------------------------------------
     // Physics constants 
-    const float GRAVITY = 9.81f;                 // Gravitational acceleration (m/s²)
-    const float WATER_DENSITY = 1000.0f;         // Reference density for water (kg/m³)
+    const float GRAVITY = param.gravity; // Now configured from CPU
+    const float WATER_DENSITY = param.restDensity; // Use the configured rest density
     
     // Force limits for stability
     const float MAX_FORCE = param.impulseSolver.maxForce;
     const float MAX_TORQUE = param.impulseSolver.maxTorque;
     
     // Force calculation parameters
-    const float VISCOSITY_SCALE = 0.05f;          // Scale param.viscosity for more stable results
-    const float DEPTH_SCALE = 0.04f;             // Scale for penetration depth transition
-    const float DEPTH_TRANSITION_RATE = 2.0f;    // Controls how quickly depth effect increases
-    const float PRESSURE_FORCE_LIMIT_RATIO = 1.00f; // Pressure force as ratio of MAX_FORCE
-    const float VISCOUS_FORCE_LIMIT_RATIO = 0.3f;  // Viscous force as ratio of MAX_FORCE
+    const float VISCOSITY_SCALE = param.impulseSolver.viscosityScale;
+    const float DEPTH_SCALE = param.impulseSolver.depthScale;
+    const float DEPTH_TRANSITION_RATE = param.impulseSolver.depthTransitionRate;
+    const float PRESSURE_FORCE_LIMIT_RATIO = param.impulseSolver.pressureForceRatio;
+    const float VISCOUS_FORCE_LIMIT_RATIO = param.impulseSolver.viscousForceRatio;
     
     // Angular damping
-    const float ANGULAR_DAMPING_THRESHOLD = 0.5f;   // Angular velocity threshold for damping
-    const float ANGULAR_DAMPING_FACTOR = 0.005f;    // Factor for angular velocity damping
+    const float ANGULAR_DAMPING_THRESHOLD = param.impulseSolver.angularDampingThreshold;
+    const float ANGULAR_DAMPING_FACTOR = param.impulseSolver.angularDampingFactor;
     
     // Hydrostatic pressure estimation
-    const float DEPTH_ESTIMATE_SCALE = 10.0f;    // Coordinate scale for depth estimation
+    const float DEPTH_ESTIMATE_SCALE = param.impulseSolver.depthEstimateScale;
     
     // Safety thresholds
-    const float MAX_SAFE_VELOCITY_SQ = 80.0f;    // Square of max velocity magnitude
-    const float MIN_PENETRATION = 1e-6f;         // Minimum penetration to consider collision
-    const float MIN_REL_VELOCITY = 1e-6f;        // Minimum relative velocity magnitude
+    const float MAX_SAFE_VELOCITY_SQ = param.impulseSolver.maxSafeVelocitySq;
+    const float MIN_PENETRATION = param.impulseSolver.minPenetration;
+    const float MIN_REL_VELOCITY = param.impulseSolver.minRelVelocity;
     
     // Two-way coupling parameters
     const float FLUID_FORCE_SCALE = param.impulseSolver.fluidForceScale;
