@@ -25,7 +25,7 @@
 struct FluidGridConfig 
 {
     float gridEpsilon;        // Small offset for grid assignment (default: 1e-6f)
-    float defaultSmoothingLength; // Default smoothing length if not specified (default: 0.05f)
+    float smoothingLength; // Default smoothing length if not specified (default: 0.05f)
     float boundaryOffset;     // Offset from boundary when clamping (default: 0.001f)
 };
 

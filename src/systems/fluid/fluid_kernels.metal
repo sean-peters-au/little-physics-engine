@@ -257,7 +257,7 @@ kernel void computeDensity(
 
     float xi = self.x;
     float yi = self.y;
-    float hi = (self.h <= 0.f) ? p.gridConfig.defaultSmoothingLength : self.h;
+    float hi = (self.h <= 0.f) ? p.gridConfig.smoothingLength : self.h;
     float h2 = hi*hi;
     float poly6 = poly6Coeff2D(hi);
 
@@ -325,7 +325,7 @@ kernel void computeForces(
     float yi = self.y;
     float pi = self.pressure;
     float rhoi = self.density;
-    float hi = (self.h<=0.f) ? pa.gridConfig.defaultSmoothingLength : self.h;
+    float hi = (self.h<=0.f) ? pa.gridConfig.smoothingLength : self.h;
 
     float sumFx = 0.f;
     float sumFy = 0.f;
@@ -359,7 +359,7 @@ kernel void computeForces(
                 if (r2 < pa.numericalConfig.minDistanceThreshold) {
                     continue;
                 }
-                float hj = (nbr.h<=0.f) ? pa.gridConfig.defaultSmoothingLength : nbr.h;
+                float hj = (nbr.h<=0.f) ? pa.gridConfig.smoothingLength : nbr.h;
                 float h_ij = 0.5f*(hi + hj);
                 float h_ij2 = h_ij*h_ij;
                 if (r2 >= h_ij2) {
@@ -593,7 +593,7 @@ kernel void rigidFluidPositionSolver(
                 float pen = (radius - dist) + SAFETY_MARGIN;
                 float2 dir = float2(dx, dy) / dist;
                 float2 corr = dir * pen * RELAX_FACTOR;
-                accumCorr += corr;
+                accumCorr -= corr;
             }
         }
         else if (body.shapeType == Polygon) {
@@ -652,31 +652,9 @@ kernel void rigidFluidPositionSolver(
                 derivedVel = derivedVel * (MAX_VELOCITY_UPDATE / derivedVelMag);
             }
             
-            // Get current velocity direction
-            float2 curVel = float2(p.vx, p.vy);
-            float curVelMag = length(curVel);
-            
-            // For collision response, prioritize slowing particles down over speeding them up
-            // This reduces the bouncing effect while still preventing penetration
-            if (curVelMag > 0.001f) {
-                float2 curVelDir = curVel / curVelMag;
-                float dotProd = dot(curVelDir, derivedVel);
-                
-                // If our velocity is being opposed (going into rigid body)
-                if (dotProd < 0.0f) {
-                    // Apply stronger damping to opposing velocity
-                    p.vx = mix(p.vx, derivedVel.x, VELOCITY_DAMPING * 1.5f);
-                    p.vy = mix(p.vy, derivedVel.y, VELOCITY_DAMPING * 1.5f);
-                } else {
-                    // Otherwise just apply normal damping
-                    p.vx = mix(p.vx, derivedVel.x, VELOCITY_DAMPING);
-                    p.vy = mix(p.vy, derivedVel.y, VELOCITY_DAMPING);
-                }
-            } else {
-                // If almost no velocity, apply minimal damping to avoid artificial energy
-                p.vx = mix(p.vx, derivedVel.x, VELOCITY_DAMPING * 0.5f);
-                p.vy = mix(p.vy, derivedVel.y, VELOCITY_DAMPING * 0.5f);
-            }
+            // Apply consistent damping towards the derived velocity
+            p.vx = mix(p.vx, derivedVel.x, VELOCITY_DAMPING);
+            p.vy = mix(p.vy, derivedVel.y, VELOCITY_DAMPING);
             
             // Update half-step velocity for Verlet integration consistency
             p.vxHalf = p.vx;

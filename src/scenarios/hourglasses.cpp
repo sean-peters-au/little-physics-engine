@@ -97,6 +97,10 @@ ScenarioSystemConfig HourglassesScenario::getSystemsConfig() const
     config.sharedConfig.DragCoeff = 0.0;
     config.sharedConfig.ParticleDensity = 100.0;
 
+    // Disable sleep for hourglass particles
+    config.sleepConfig.linearSleepThreshold = -1;
+    config.sleepConfig.angularSleepThreshold = -1;
+
     return config;
 }
 
@@ -272,7 +276,6 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
                 registry.emplace<CircleShape>(e, r);
                 
                 // SPH-related properties
-                registry.emplace<Components::SmoothingLength>(e, 0.06);
                 registry.emplace<Components::SpeedOfSound>(e, 1000.0);
                 registry.emplace<Components::SPHTemp>(e);
                 
@@ -324,7 +327,6 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
                     registry.emplace<CircleShape>(e, r);
                     
                     // SPH-related properties
-                    registry.emplace<Components::SmoothingLength>(e, 0.06);
                     registry.emplace<Components::SpeedOfSound>(e, 1000.0);
                     registry.emplace<Components::SPHTemp>(e);
                     

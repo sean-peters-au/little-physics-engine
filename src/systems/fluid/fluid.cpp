@@ -261,7 +261,6 @@ std::vector<GPUFluidParticle> FluidSystem::gatherFluidParticles(
         Components::Velocity,
         Components::Mass,
         Components::ParticlePhase,
-        Components::SmoothingLength,
         Components::SpeedOfSound,
         Components::SPHTemp
     >();
@@ -277,8 +276,8 @@ std::vector<GPUFluidParticle> FluidSystem::gatherFluidParticles(
         const auto& pos  = view.get<Components::Position>(e);
         const auto& vel  = view.get<Components::Velocity>(e);
         const auto& mass = view.get<Components::Mass>(e);
-        const auto& sl   = view.get<Components::SmoothingLength>(e);
         const auto& snd  = view.get<Components::SpeedOfSound>(e);
+        const auto& spht = view.get<Components::SPHTemp>(e);
 
         GPUFluidParticle p{};
         p.x = pos.x;
@@ -290,10 +289,10 @@ std::vector<GPUFluidParticle> FluidSystem::gatherFluidParticles(
         p.ax = 0.f;
         p.ay = 0.f;
         p.mass = static_cast<float>(mass.value);
-        p.h    = (sl.value <= 0.0f) ? 0.05f : static_cast<float>(sl.value);
+        p.h    = getSpecificConfig().gridConfig.smoothingLength;
         p.c    = static_cast<float>(snd.value);
-        p.density = 0.f;
-        p.pressure= 0.f;
+        p.density = spht.density;
+        p.pressure= spht.pressure;
 
         cpuParticles.push_back(p);
         entityList.push_back(e);
@@ -654,7 +653,7 @@ void FluidSystem::multiStepVelocityVerlet(
                     
                     // Set grid configuration parameters
                     params.gridConfig.gridEpsilon = getSpecificConfig().gridConfig.gridEpsilon;
-                    params.gridConfig.defaultSmoothingLength = getSpecificConfig().gridConfig.defaultSmoothingLength;
+                    params.gridConfig.smoothingLength = getSpecificConfig().gridConfig.smoothingLength;
                     params.gridConfig.boundaryOffset = getSpecificConfig().gridConfig.boundaryOffset;
                     
                     // Set numerical configuration parameters
@@ -806,7 +805,7 @@ void FluidSystem::multiStepVelocityVerlet(
         
         // Set grid configuration parameters
         params.gridConfig.gridEpsilon = getSpecificConfig().gridConfig.gridEpsilon;
-        params.gridConfig.defaultSmoothingLength = getSpecificConfig().gridConfig.defaultSmoothingLength;
+        params.gridConfig.smoothingLength = getSpecificConfig().gridConfig.smoothingLength;
         params.gridConfig.boundaryOffset = getSpecificConfig().gridConfig.boundaryOffset;
         
         // Set numerical configuration parameters

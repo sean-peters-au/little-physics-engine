@@ -14,15 +14,20 @@
  */
 struct PlanetaryOceanConfig {
     // Planet parameters
-    double planetRadius = 200000.0;    // Planet radius in meters
-    double planetMass = 1.0e20;        // Just enough mass for gravity
+    double planetRadius = 60000.0;    // Planet radius in meters
+    double planetMass = 7.0e24;        // Planet mass
     
     // Ocean parameters
     int oceanParticleCount = 1000;     // Number of ocean particles
     double oceanParticleMass = 1.0e12; // Mass per particle
-    double oceanDepth = 50000.0;       // Depth of ocean (25% of planet radius)
+    double oceanDepth = 10000.0;       // Ocean depth is ~16% of planet radius
     int oceanLayers = 2;               // Number of fluid layers
     double fluidParticleRadius = 2000.0;
+    
+    // Binary system parameters - using equal masses and radii
+    double moonRadius = 60000.0;       // Same radius as planet
+    double moonMass = 2.0e24;          // Same mass as planet
+    double binaryDistance = 200000.0;  // Distance between centers (about 4x planet radius)
     
     // Fluid properties
     double fluidRestDensity = 1000.0;  // Density of water (kg/m³)
@@ -43,9 +48,18 @@ public:
     void createEntities(entt::registry &registry) const override;
     
 private:
-    void createOceanParticles(
+    void createOcean(
         entt::registry &registry,
         entt::entity planetEntity) const;
+        
+    entt::entity createPlanet(
+        entt::registry &registry,
+        double centerX,
+        double centerY) const;
+        
+    entt::entity createMoon(
+        entt::registry &registry,
+        const Components::Position &planetPos) const;
         
     PlanetaryOceanConfig scenarioEntityConfig;
 }; 

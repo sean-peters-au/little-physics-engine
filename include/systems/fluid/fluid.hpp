@@ -181,7 +181,7 @@ struct FluidConfig
     // Grid and particle parameters
     struct {
         float gridEpsilon = 1e-6f;            ///< Small offset for grid assignment
-        float defaultSmoothingLength = 0.05f; ///< Default smoothing length if not specified
+        float smoothingLength = 0.05f; ///< Default smoothing length if not specified
         float boundaryOffset = 0.001f;        ///< Offset from boundary when clamping
     } gridConfig;
     
@@ -194,7 +194,7 @@ struct FluidConfig
     } numericalConfig;
     
     // General parameters
-    float dampingFactor = 0.999f;    ///< Velocity damping for rigid bodies
+    float dampingFactor = 1.0f;    ///< Velocity damping for rigid bodies
     int numSubSteps = 10;            ///< Number of substeps per frame
     int threadsPerGroup = 256;       ///< Threads per threadgroup for GPU
 };

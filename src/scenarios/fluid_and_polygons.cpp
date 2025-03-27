@@ -218,7 +218,6 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
                 registry.emplace<CircleShape>(e, r);
 
                 // SPH-related properties
-                registry.emplace<Components::SmoothingLength>(e, 0.06);
                 registry.emplace<Components::SpeedOfSound>(e, 1000.0);
                 registry.emplace<Components::SPHTemp>(e);
 
