@@ -64,7 +64,6 @@ ScenarioSystemConfig FluidAndPolygonsScenario::getSystemsConfig() const
     config.sharedConfig.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
     config.sharedConfig.GravitationalSoftener = 0.0;
-    config.sharedConfig.CollisionCoeffRestitution = 0.2; // slight bounce for rigid shapes
     config.sharedConfig.DragCoeff = 0.0;
     config.sharedConfig.ParticleDensity = 100.0;
 

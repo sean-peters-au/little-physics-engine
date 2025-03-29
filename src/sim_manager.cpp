@@ -77,6 +77,12 @@ bool SimManager::handleEvents() {
         case sf::Keyboard::Num5:
           selectScenario(SimulatorConstants::SimulationType::HOURGLASSES);
           break;
+        case sf::Keyboard::Num6:
+          selectScenario(SimulatorConstants::SimulationType::PLANETARY_OCEAN);
+          break;
+        case sf::Keyboard::Num7:
+          selectScenario(SimulatorConstants::SimulationType::GALTON_BOARD);
+          break;
         default:
           break;
       }

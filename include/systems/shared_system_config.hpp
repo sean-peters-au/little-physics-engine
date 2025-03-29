@@ -13,7 +13,6 @@ struct SharedSystemConfig {
     double MetersPerPixel;
     double SecondsPerTick;
     double GravitationalSoftener;
-    double CollisionCoeffRestitution;
     double DragCoeff;
     double ParticleDensity;
 

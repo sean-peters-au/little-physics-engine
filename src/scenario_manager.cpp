@@ -14,6 +14,7 @@
 #include "scenarios/simple_fluid.hpp"
 #include "scenarios/hourglasses.hpp"
 #include "scenarios/planetary_ocean.hpp"
+#include "scenarios/galton_board.hpp"
 
 void ScenarioManager::buildScenarioList() {
   scenarioList.clear();
@@ -55,6 +56,9 @@ std::unique_ptr<IScenario> ScenarioManager::createScenario(
 
     case SimulatorConstants::SimulationType::PLANETARY_OCEAN:
       return std::make_unique<PlanetaryOceanScenario>();
+
+    case SimulatorConstants::SimulationType::GALTON_BOARD:
+      return std::make_unique<GaltonBoardScenario>();
 
     default:
       return std::make_unique<RandomPolygonsScenario>();

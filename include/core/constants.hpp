@@ -2,7 +2,6 @@
 
 #include <vector>
 #include <string>
-#include "systems/systems.hpp"
 
 namespace SimulatorConstants {
     enum class SimulationType {
@@ -11,7 +10,8 @@ namespace SimulatorConstants {
         SIMPLE_FLUID,
         FLUID_AND_POLYGONS,
         HOURGLASSES,
-        PLANETARY_OCEAN
+        PLANETARY_OCEAN,
+        GALTON_BOARD
     };
 
     // Fundamental constants (do not change by scenario):

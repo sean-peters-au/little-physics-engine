@@ -27,7 +27,6 @@ ScenarioSystemConfig KeplerianDiskScenario::getSystemsConfig() const {
     config.sharedConfig.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
     config.sharedConfig.GravitationalSoftener = 2e7;
-    config.sharedConfig.CollisionCoeffRestitution = 0.5;
     config.sharedConfig.DragCoeff = 1e-11;
     config.sharedConfig.ParticleDensity = 0.1;
 

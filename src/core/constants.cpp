@@ -28,7 +28,8 @@ namespace SimulatorConstants {
             SimulationType::SIMPLE_FLUID,
             SimulationType::FLUID_AND_POLYGONS,
             SimulationType::HOURGLASSES,
-            SimulationType::PLANETARY_OCEAN
+            SimulationType::PLANETARY_OCEAN,
+            SimulationType::GALTON_BOARD
         };
     }
 
@@ -40,6 +41,7 @@ namespace SimulatorConstants {
             case SimulationType::FLUID_AND_POLYGONS: return "FLUID_AND_POLYGONS";
             case SimulationType::HOURGLASSES:      return "HOURGLASSES";
             case SimulationType::PLANETARY_OCEAN:  return "PLANETARY_OCEAN";
+            case SimulationType::GALTON_BOARD:     return "GALTON_BOARD";
             default: return "UNKNOWN";
         }
     }

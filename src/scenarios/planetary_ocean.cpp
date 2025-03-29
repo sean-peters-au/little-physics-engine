@@ -31,7 +31,6 @@ ScenarioSystemConfig PlanetaryOceanScenario::getSystemsConfig() const
 
     // Physical parameters
     config.sharedConfig.GravitationalSoftener = scenarioEntityConfig.planetRadius * 0.01;
-    config.sharedConfig.CollisionCoeffRestitution = 0.1;
     config.sharedConfig.DragCoeff = 0.0;
     config.sharedConfig.ParticleDensity = scenarioEntityConfig.fluidRestDensity;
 

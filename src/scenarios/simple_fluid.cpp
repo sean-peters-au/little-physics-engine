@@ -70,7 +70,6 @@ ScenarioSystemConfig SimpleFluidScenario::getSystemsConfig() const
     config.sharedConfig.CellSizePixels = static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
     config.sharedConfig.GravitationalSoftener = 0.0;
-    config.sharedConfig.CollisionCoeffRestitution = 0.0; // for fluid, often near inelastic
     config.sharedConfig.DragCoeff = 0.0;
     config.sharedConfig.ParticleDensity = scenarioEntityConfig.fluidRestDensity;  // Using config for rest density
     

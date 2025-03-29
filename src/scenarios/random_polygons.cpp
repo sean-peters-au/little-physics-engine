@@ -81,7 +81,6 @@ ScenarioSystemConfig RandomPolygonsScenario::getSystemsConfig() const {
       static_cast<double>(SimulatorConstants::ScreenLength) / config.sharedConfig.GridSize;
 
   config.sharedConfig.GravitationalSoftener = 0.0;
-  config.sharedConfig.CollisionCoeffRestitution = 0.2;
   config.sharedConfig.DragCoeff = 0.0;
   config.sharedConfig.ParticleDensity = 0.5;
 
