@@ -26,8 +26,8 @@ struct PlanetaryOceanConfig {
     
     // Binary system parameters - using equal masses and radii
     double moonRadius = 60000.0;       // Same radius as planet
-    double moonMass = 2.0e24;          // Same mass as planet
-    double binaryDistance = 200000.0;  // Distance between centers (about 4x planet radius)
+    double moonMass = 3.5e24;          // Same mass as planet
+    double binaryDistance = 350000.0;  // Distance between centers (about 4x planet radius)
     
     // Fluid properties
     double fluidRestDensity = 1000.0;  // Density of water (kg/m³)

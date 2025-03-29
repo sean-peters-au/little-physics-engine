@@ -643,22 +643,24 @@ kernel void rigidFluidPositionSolver(
         float posDeltaMag = length(posDelta);
         
         if (posDeltaMag > MIN_POSITION_CHANGE) {
-            // Derive new velocity from position change
-            float2 derivedVel = posDelta / dt;
+            float2 corrDir = posDelta / posDeltaMag; // Direction of position correction
+            float2 curVel = float2(p.vx, p.vy);
+            float velAlongCorr = dot(curVel, corrDir);
             
-            // Clamp maximum velocity changes
-            float derivedVelMag = length(derivedVel);
-            if (derivedVelMag > MAX_VELOCITY_UPDATE) {
-                derivedVel = derivedVel * (MAX_VELOCITY_UPDATE / derivedVelMag);
+            // If velocity component is opposite to correction direction (i.e., was going into wall)
+            if (velAlongCorr < 0.0f) {
+                // Remove the velocity component pointing into the wall
+                float restitution = 0.0f; // No bounce initially
+                curVel -= (1.0f + restitution) * velAlongCorr * corrDir; 
+                
+                p.vx = curVel.x;
+                p.vy = curVel.y;
+            
+                // Update half-step velocity for Verlet integration consistency
+                p.vxHalf = p.vx;
+                p.vyHalf = p.vy;
             }
-            
-            // Apply consistent damping towards the derived velocity
-            p.vx = mix(p.vx, derivedVel.x, VELOCITY_DAMPING);
-            p.vy = mix(p.vy, derivedVel.y, VELOCITY_DAMPING);
-            
-            // Update half-step velocity for Verlet integration consistency
-            p.vxHalf = p.vx;
-            p.vyHalf = p.vy;
+            // If velocity was already moving away or parallel, do nothing to velocity
         }
     }
 

@@ -23,7 +23,7 @@ ScenarioSystemConfig PlanetaryOceanScenario::getSystemsConfig() const
     config.sharedConfig.UniverseSizeMeters = SimulatorConstants::ScreenLength * config.sharedConfig.MetersPerPixel;
     
     config.sharedConfig.SecondsPerTick = 1.0 / SimulatorConstants::StepsPerSecond; // Use standard timestep
-    config.sharedConfig.TimeAcceleration = 10.0;  // No acceleration until stable
+    config.sharedConfig.TimeAcceleration = 5.0;  // No acceleration until stable
     
     // Grid settings
     config.sharedConfig.GridSize = 100;
@@ -37,16 +37,16 @@ ScenarioSystemConfig PlanetaryOceanScenario::getSystemsConfig() const
 
     // Configure fluid parameters specifically for planetary scale
     config.fluidConfig.gravity = 0.0f;                 // No gravity - we rely on n-body gravitational system
-    config.fluidConfig.restDensity = 1000.0f;            // Much lower density for visible tidal effects
-    config.fluidConfig.stiffness = 1000.0f;              // Lower stiffness makes fluid more deformable
-    config.fluidConfig.viscosity = 0.5f;             // Lower viscosity for more responsive fluid
+    config.fluidConfig.restDensity = 100.0f;
+    config.fluidConfig.stiffness = 1000.0f;
+    config.fluidConfig.viscosity = 0.5f;
     
     // Fluid position solver parameters - properly scaled for planetary radius
     config.fluidConfig.positionSolver.safetyMargin = static_cast<float>(scenarioEntityConfig.fluidParticleRadius); // Match particle radius
     config.fluidConfig.positionSolver.relaxFactor = 0.5f;         // Strong but not too aggressive correction
     config.fluidConfig.positionSolver.maxCorrection = static_cast<float>(scenarioEntityConfig.fluidParticleRadius);      // Allow correction up to particle radius
     config.fluidConfig.dampingFactor = 1.0f;                       // No damping for celestial bodies
-    config.fluidConfig.positionSolver.velocityDamping = 0.05;
+    config.fluidConfig.positionSolver.velocityDamping = 0.00001f;
     
     // Fluid impulse solver parameters
     config.fluidConfig.impulseSolver.buoyancyStrength = 0.0f;      // No buoyancy needed with gravity
