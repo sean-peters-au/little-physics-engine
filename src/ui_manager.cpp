@@ -12,6 +12,9 @@
 #include "ui_manager.hpp"
 #include "entities/sim_components.hpp"
 
+// Include the full definition needed for DebugMode enum and methods
+#include "arch/native/renderer_fluid_dsf.hpp"
+
 UIManager::UIManager()
     : simManager(nullptr)
     , highlightPausePlay(false)
@@ -229,12 +232,24 @@ void UIManager::renderUI(Renderer& renderer,
     panelY += 25;
     {
         debugButton.rect = sf::IntRect(panelX, panelY, 100, 25);
-        // We read the actual debug state from renderer if you have a method or store it locally
-        bool debugOn = renderer.isDebugVisualization();
-        debugButton.label = debugOn ? "Debug: ON" : "Debug: OFF";
+        // Get specific debug state from fluid renderer
+        bool debugActive = renderer.isDebugVisualization();
+        FluidSurfaceRenderer::DebugMode currentFluidMode = FluidSurfaceRenderer::DebugMode::NONE;
+        if (renderer.getFluidSurfaceRenderer()) { // Check if fluid renderer exists
+            currentFluidMode = renderer.getFluidSurfaceRenderer()->getCurrentDebugMode();
+        }
+
+        std::string debugLabel = "Debug: OFF";
+        if (currentFluidMode == FluidSurfaceRenderer::DebugMode::DENSITY_PRE_BLUR) {
+            debugLabel = "Debug: DensPre";
+        } else if (currentFluidMode == FluidSurfaceRenderer::DebugMode::DENSITY_POST_BLUR) {
+            debugLabel = "Debug: DensPost";
+        }
+        
+        debugButton.label = debugLabel;
         debugButton.isSpecialButton = true;
 
-        sf::Color fillColor = debugOn ? sf::Color(0,200,0) : sf::Color(100,100,100);
+        sf::Color fillColor = debugActive ? sf::Color(0,200,0) : sf::Color(100,100,100);
         renderer.drawButton(debugButton, fillColor);
         renderer.renderText(debugButton.label, panelX + 5, panelY + 3);
         panelY += 25;

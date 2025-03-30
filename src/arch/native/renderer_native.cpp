@@ -19,6 +19,7 @@
 #include "math/constants.hpp"
 #include "math/polygon.hpp"
 #include "systems/rigid/contact_manager.hpp"
+#include "arch/native/renderer_fluid_dsf.hpp"
 
 static sf::Color densityGrayscale(const Renderer::PixelProperties &props) {
     // Example color mapper if you want a density-based grayscale
@@ -44,6 +45,12 @@ Renderer::Renderer(int screenWidth, int screenHeight, const SharedSystemConfig& 
     } else {
         std::cerr << "Warning: Shaders not supported on this system.\n";
     }
+    
+    // Initialize fluid surface renderer with screen dimensions
+    fluidSurfaceRenderer = std::make_unique<FluidSurfaceRenderer>(
+        sf::Vector2u(static_cast<unsigned int>(SimulatorConstants::ScreenLength),
+                    static_cast<unsigned int>(SimulatorConstants::ScreenLength)),
+        coordinates);
 }
 
 Renderer::~Renderer() = default;
@@ -105,8 +112,8 @@ Renderer::aggregateParticlesByPixel(const entt::registry &registry)
 }
 
 void Renderer::renderParticles(const entt::registry &registry) {
-    renderSolidParticles(registry);
     renderFluidParticles(registry);
+    renderSolidParticles(registry);
     renderGasParticles(registry);
 }
 
@@ -695,66 +702,95 @@ void Renderer::renderPolygonDebug(const entt::registry &registry) {
 }
 
 void Renderer::renderFluidParticles(const entt::registry &registry) {
-    sf::RenderTexture fluidTexture;
-    if (!fluidTexture.create(window.getSize().x, window.getSize().y)) {
-        return; // Handle error as needed.
+    // Check if there are any liquid particles before doing anything
+    bool hasLiquidParticles = false;
+    auto phaseView = registry.view<Components::ParticlePhase>();
+    for (auto entity : phaseView) {
+        const auto &phase = phaseView.get<Components::ParticlePhase>(entity);
+        if (phase.phase == Components::Phase::Liquid) {
+            hasLiquidParticles = true;
+            break;
+        }
     }
-    // Clear with transparent black instead of opaque black.
-    fluidTexture.clear(sf::Color(0, 0, 0, 0));
-
-    // Configure additive blending for drawing metaball circles.
-    sf::RenderStates additive;
-    additive.blendMode = sf::BlendAdd;
-
-    // Retrieve fluid particles with the appropriate components.
-    auto view = registry.view<Components::Position, Components::Shape, CircleShape, Components::Color, Components::ParticlePhase>();
-    for (auto entity : view) {
-        const auto &phase = view.get<Components::ParticlePhase>(entity);
-        if (phase.phase != Components::Phase::Liquid)
-            continue;
-        
-        const auto &position = view.get<Components::Position>(entity);
-        const auto &shape    = view.get<Components::Shape>(entity);
-        const auto &circle   = view.get<CircleShape>(entity);
-        const auto &color    = view.get<Components::Color>(entity);
-        
-        // Only render circles defined for liquid-phase.
-        if (shape.type != Components::ShapeType::Circle)
-            continue;
-        
-        // Create a larger circle to represent the particle's influence.
-        float pixelRadius = static_cast<float>(coordinates.metersToPixels(circle.radius));
-        float influenceRadius = pixelRadius * 2.f;  // Increase from 4.f to 6.f
-        
-        sf::CircleShape metaball(influenceRadius);
-        // Increase alpha from 70 to 120 for more visibility
-        metaball.setFillColor(sf::Color(color.r, color.g, color.b, 120));
-        metaball.setOrigin(influenceRadius, influenceRadius);
-        
-        float pixelX = static_cast<float>(coordinates.metersToPixels(position.x));
-        float pixelY = static_cast<float>(coordinates.metersToPixels(position.y));
-        metaball.setPosition(pixelX, pixelY);
-        
-        fluidTexture.draw(metaball, additive);
-    }
-    fluidTexture.display();
-
-    // Create an SFML sprite from the offscreen render texture.
-    sf::Sprite fluidSprite(fluidTexture.getTexture());
     
-    // If the shader is available, set uniforms and draw with it.
-    if (fluidShader && fluidShader->isAvailable()) {
-        const sf::Texture &texRef = fluidTexture.getTexture();
-        fluidShader->setUniform("texture", texRef);
-        fluidShader->setUniform("threshold", 0.05f);  // Much lower threshold
-        fluidShader->setUniform("smoothness", 0.2f);  // Wider transition
-        
-        // Use RenderStates to pass the shader
-        sf::RenderStates states;
-        states.shader = fluidShader.get();
-        window.draw(fluidSprite, states);
-    } else {
-        window.draw(fluidSprite);
+    if (!hasLiquidParticles) {
+        return; // No fluid to render
+    }
+
+    bool surfaceRendererSuccess = false;
+
+    // Use the screen-space fluid renderer if available
+    if (fluidSurfaceRenderer) { // No longer need isInitialized check if constructor guarantees texture
+        try {
+            // Update grid and texture (adjust parameters as needed)
+            int gridSize = 80; // Grid resolution
+            float smoothingRadius = 5.0f; // Particle influence for density grid
+            fluidSurfaceRenderer->updateGridAndTexture(registry, gridSize, smoothingRadius);
+            
+            // Render using the shader (adjust parameters as needed)
+            sf::Color surfaceColor(40, 130, 240, 255); // Mostly opaque blue
+            float densityThreshold = 0.10f; // Back to a higher value
+            float edgeSmoothness = 0.02f; // Keep edges relatively sharp
+            fluidSurfaceRenderer->render(window, surfaceColor, densityThreshold, edgeSmoothness);
+            
+            surfaceRendererSuccess = true; // Assume success if no exception
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error in fluid surface rendering: " << e.what() << std::endl;
+        }
+    }
+    
+    // Fallback only if necessary (though screen-space should be more robust)
+    if (!surfaceRendererSuccess) {
+        // --- Keep the original metaball fallback code here --- 
+        sf::RenderTexture fluidTexture;
+        if (!fluidTexture.create(window.getSize().x, window.getSize().y)) {
+            return; // Handle error as needed.
+        }
+        fluidTexture.clear(sf::Color(0, 0, 0, 0));
+        sf::RenderStates additive; additive.blendMode = sf::BlendAdd;
+        auto view = registry.view<Components::Position, Components::Shape, CircleShape, Components::Color, Components::ParticlePhase>();
+        for (auto entity : view) {
+            const auto &phase = view.get<Components::ParticlePhase>(entity);
+            if (phase.phase != Components::Phase::Liquid)
+                continue;
+            
+            const auto &position = view.get<Components::Position>(entity);
+            const auto &shape    = view.get<Components::Shape>(entity);
+            const auto &circle   = view.get<CircleShape>(entity);
+            const auto &color    = view.get<Components::Color>(entity);
+            
+            // Only render circles defined for liquid-phase.
+            if (shape.type != Components::ShapeType::Circle)
+                continue;
+            
+            // Create a larger circle to represent the particle's influence.
+            float pixelRadius = static_cast<float>(coordinates.metersToPixels(circle.radius));
+            float influenceRadius = pixelRadius * 2.f;  // Increase from 4.f to 6.f
+            
+            sf::CircleShape metaball(influenceRadius);
+            // Increase alpha from 70 to 120 for more visibility
+            metaball.setFillColor(sf::Color(color.r, color.g, color.b, 120));
+            metaball.setOrigin(influenceRadius, influenceRadius);
+            
+            float pixelX = static_cast<float>(coordinates.metersToPixels(position.x));
+            float pixelY = static_cast<float>(coordinates.metersToPixels(position.y));
+            metaball.setPosition(pixelX, pixelY);
+            
+            fluidTexture.draw(metaball, additive);
+        }
+        fluidTexture.display();
+        sf::Sprite fluidSprite(fluidTexture.getTexture());
+        // Apply old shader or just draw sprite
+        if (fluidShader && fluidShader->isAvailable()) {
+            fluidShader->setUniform("texture", fluidTexture.getTexture());
+            // Set old uniforms
+            sf::RenderStates states; states.shader = fluidShader.get();
+            window.draw(fluidSprite, states);
+        } else {
+             window.draw(fluidSprite); // Simple fallback
+        }
+        // --- End of fallback code --- 
     }
 }
 
@@ -814,10 +850,20 @@ void Renderer::drawButton(const UIButton& button, sf::Color fillColor, sf::Color
 
 void Renderer::toggleDebugVisualization()
 {
-    debugVisualization = !debugVisualization;
+    if (fluidSurfaceRenderer) {
+        int currentMode = static_cast<int>(fluidSurfaceRenderer->getCurrentDebugMode());
+        int nextMode = (currentMode + 1) % 4; // Cycle through 0, 1, 2, 3
+        fluidSurfaceRenderer->setDebugMode(static_cast<FluidSurfaceRenderer::DebugMode>(nextMode));
+        std::cout << "Set Fluid Debug Mode: " << nextMode << std::endl;
+    }
 }
 
 bool Renderer::isDebugVisualization() const
 {
-    return debugVisualization;
+    return fluidSurfaceRenderer && fluidSurfaceRenderer->getCurrentDebugMode() != FluidSurfaceRenderer::DebugMode::NONE;
+}
+
+// Implementation for the getter added here
+FluidSurfaceRenderer* Renderer::getFluidSurfaceRenderer() const {
+    return fluidSurfaceRenderer.get();
 }

@@ -67,6 +67,9 @@ ScenarioSystemConfig FluidAndPolygonsScenario::getSystemsConfig() const
     config.sharedConfig.DragCoeff = 0.0;
     config.sharedConfig.ParticleDensity = 100.0;
 
+    config.fluidConfig.stiffness = 100.0;
+    config.fluidConfig.viscosity = 0.005;
+
     return config;
 }
 

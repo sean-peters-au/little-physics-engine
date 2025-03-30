@@ -26,6 +26,9 @@
 #include "core/constants.hpp"
 #include "core/coordinates.hpp"
 
+// Forward declaration for the fluid surface renderer class
+class FluidSurfaceRenderer;
+
 /**
  * @brief Hash function for pixel coordinates
  * 
@@ -213,12 +216,12 @@ public:
     void drawButton(const UIButton& button, sf::Color fillColor, sf::Color textColor = sf::Color::White);
 
     /**
-     * @brief Toggles the debug visualization on/off.
+     * @brief Toggles the *fluid* debug visualization mode cycle.
      */
     void toggleDebugVisualization();
 
     /**
-     * @brief Returns whether debug visualization is currently enabled.
+     * @brief Returns whether *any* fluid debug visualization is currently active.
      */
     bool isDebugVisualization() const;
 
@@ -227,6 +230,9 @@ public:
      * @param config The new system configuration
      */
     void updateCoordinates(const SharedSystemConfig& config);
+
+    // Getter for the fluid renderer (Implementation moved to .cpp)
+    FluidSurfaceRenderer* getFluidSurfaceRenderer() const;
 
 private:
     /** The SFML render window */
@@ -242,8 +248,11 @@ private:
     // Added member: fluidShader for fluid metaballs rendering.
     std::unique_ptr<sf::Shader> fluidShader;
 
-    bool debugVisualization = false;
     UIButton debugButton;
+    bool debugVisualization = false;
+    
+    // Add fluid surface renderer
+    std::unique_ptr<class FluidSurfaceRenderer> fluidSurfaceRenderer;
     
     void renderContactDebug(const entt::registry &registry);
     void renderVelocityDebug(const entt::registry &registry);

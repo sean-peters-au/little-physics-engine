@@ -62,6 +62,9 @@ bool SimManager::handleEvents() {
         case sf::Keyboard::R:
           resetSimulator();
           break;
+        case sf::Keyboard::D:
+          renderer.toggleDebugVisualization();
+          break;
         case sf::Keyboard::Num1:
           selectScenario(SimulatorConstants::SimulationType::KEPLERIAN_DISK);
           break;
