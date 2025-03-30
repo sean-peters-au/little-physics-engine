@@ -720,10 +720,10 @@ void Renderer::renderFluidParticles(const entt::registry &registry) {
     bool surfaceRendererSuccess = false;
 
     // Use the screen-space fluid renderer if available
-    if (fluidSurfaceRenderer) { // No longer need isInitialized check if constructor guarantees texture
+    if (fluidSurfaceRenderer) { // No ßlonger need isInitialized check if constructor guarantees texture
         try {
             // Update grid and texture (adjust parameters as needed)
-            int gridSize = 80; // Grid resolution
+            int gridSize = 200; // Grid resolution
             float smoothingRadius = 5.0f; // Particle influence for density grid
             fluidSurfaceRenderer->updateGridAndTexture(registry, gridSize, smoothingRadius);
             
