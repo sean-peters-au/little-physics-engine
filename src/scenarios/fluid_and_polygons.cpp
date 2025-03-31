@@ -149,7 +149,7 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         registry.emplace<Components::Sleep>(ent);
 
         // Build a random polygon
-        double sizePoly = 0.15 + 0.1 * (i % 3); // vary sizes a bit
+        double sizePoly = 0.25 + 0.1 * (i % 3); // vary sizes a bit
         // PolygonShape poly = buildRandomConvexPolygon(generator, sizePoly);
         PolygonShape poly = buildRegularPolygon(5, sizePoly);
         registry.emplace<Components::Shape>(ent, Components::ShapeType::Polygon, sizePoly);
@@ -175,8 +175,8 @@ void FluidAndPolygonsScenario::createEntities(entt::registry &registry) const
         int numFluid = scenarioEntityConfig.fluidParticleCount;
         double x_min = sizeM * 0.05;
         double x_max = sizeM * 0.95;
-        double y_min = sizeM * 0.75;
-        double y_max = sizeM * 0.95;
+        double y_min = sizeM * 0.85;
+        double y_max = sizeM * 0.98;
 
         double regionWidth  = x_max - x_min;
         double regionHeight = y_max - y_min;

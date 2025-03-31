@@ -9,6 +9,7 @@
 #include <ctime>
 #include <iostream>
 #include <vector>
+#include <algorithm>
 
 #include "scenarios/hourglasses.hpp"
 #include "core/constants.hpp"
@@ -206,25 +207,30 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
         double height = scenarioEntityConfig.hourglassHeight;
         double topWidth = scenarioEntityConfig.hourglassTopWidth;
         double neckWidth = scenarioEntityConfig.hourglassNeckWidth;
-        
+        // Calculate particle radius early for margin calculation
+        double r = scenarioEntityConfig.fluidParticleSize / 2.0; 
+
         // Define the top chamber region (with margin to avoid walls)
-        double margin = topWidth * 0.15; // Proportional margin based on hourglass size
+        // double margin = topWidth * 0.15; // Proportional margin based on hourglass size
+        double margin = std::max(topWidth * 0.05, r * 1.1); // Margin based on width and particle size
         double x_min = leftHourglassX - (topWidth/2) + margin;
         double x_max = leftHourglassX + (topWidth/2) - margin;
         double y_min = hourglassY - (height/2) + margin;
         double y_max = hourglassY - 0.1; // Only fill top half, leave space from neck
-        
+
         double regionWidth = x_max - x_min;
         double regionHeight = y_max - y_min;
-        
+
         // Calculate better distribution based on aspect ratio
         double aspectRatio = regionWidth / regionHeight;
         int nRows = static_cast<int>(std::sqrt(numFluid / aspectRatio));
         if (nRows < 1) nRows = 1;
         int nCols = (numFluid + nRows - 1) / nRows; // Ceiling division
-        
+
         double dx = regionWidth / (nCols + 1);
         double dy = regionHeight / (nRows + 1);
+        dx *= 1.1; // Increase spacing slightly
+        dy *= 1.1; // Increase spacing slightly
 
         // Calculate the slope of the trapezoidal sides (m in y = mx + b)
         double halfTopWidth = (topWidth / 2) - margin;  // Account for margin
@@ -258,8 +264,10 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
             double rowDx = rowWidth / (colsInRow + 1);
             
             for (int col = 0; col < colsInRow && count < numFluid; col++) {
-                double jitterX = jitterDist(generator) * rowDx * 0.3; // Reduced jitter
-                double jitterY = jitterDist(generator) * dy * 0.3; // Reduced jitter
+                // double jitterX = jitterDist(generator) * rowDx * 0.3; // Reduced jitter
+                // double jitterY = jitterDist(generator) * dy * 0.3; // Reduced jitter
+                double jitterX = jitterDist(generator) * rowDx * 0.1; // Further reduced jitter scaling
+                double jitterY = jitterDist(generator) * dy * 0.1;   // Further reduced jitter scaling
                 double x = rowXmin + (col + 1) * rowDx + jitterX;
                 double adjustedY = y + jitterY;
                 
@@ -296,8 +304,10 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
             // Use the top 1/3 of the chamber for the remaining particles
             double fillY_min = y_min;
             double fillY_max = y_min + regionHeight * 0.33;
-            double fillWidth = (leftHourglassX + halfTopWidth - margin) - (leftHourglassX - halfTopWidth + margin);
-            
+            // Recalculate fillWidth based on the possibly updated margin
+            double fillHalfTopWidth = (topWidth / 2) - margin; 
+            double fillWidth = (leftHourglassX + fillHalfTopWidth) - (leftHourglassX - fillHalfTopWidth);
+
             // Simple grid distribution for remaining particles
             int fillCols = static_cast<int>(sqrt(remaining));
             int fillRows = (remaining + fillCols - 1) / fillCols;
@@ -307,12 +317,14 @@ void HourglassesScenario::createEntities(entt::registry &registry) const
             
             for (int row = 0; row < fillRows && count < numFluid; row++) {
                 for (int col = 0; col < fillCols && count < numFluid; col++) {
-                    double x = leftHourglassX - halfTopWidth + margin + (col + 1) * fillDx;
+                    double x = leftHourglassX - fillHalfTopWidth + (col + 1) * fillDx;
                     double y = fillY_min + (row + 1) * fillDy;
                     
                     // Add small jitter to prevent perfect grid alignment
-                    double jitterX = jitterDist(generator) * fillDx * 0.2;
-                    double jitterY = jitterDist(generator) * fillDy * 0.2;
+                    // double jitterX = jitterDist(generator) * fillDx * 0.2;
+                    // double jitterY = jitterDist(generator) * fillDy * 0.2;
+                    double jitterX = jitterDist(generator) * fillDx * 0.1; // Reduced jitter scaling
+                    double jitterY = jitterDist(generator) * fillDy * 0.1; // Reduced jitter scaling
                     
                     auto e = registry.create();
                     registry.emplace<Components::Position>(e, x + jitterX, y + jitterY);
