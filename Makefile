@@ -36,7 +36,6 @@ METALLIB := xcrun -sdk macosx metallib
 BUILD_DIR := build
 SRC_DIR := src
 INC_DIR := include
-TEST_DIR := tests
 ASSETS_DIR := assets
 
 # Base source files (excluding arch-specific code)
@@ -120,24 +119,6 @@ $(BUILD_DIR)/arch/wasm/%.o: $(SRC_DIR)/arch/wasm/%.cpp
 -include $(WASM_DEPS)
 
 # ---------------------------------------------------------------------------------
-# Test targets
-# ---------------------------------------------------------------------------------
-
-TEST_SRCS := $(shell find $(TEST_DIR) -name '*.cpp')
-TEST_OBJS := $(TEST_SRCS:$(TEST_DIR)/%.cpp=$(BUILD_DIR)/tests/%.o)
-TEST_TARGET := $(BUILD_DIR)/test_runner
-
-test: $(TEST_TARGET)
-	./$(TEST_TARGET)
-
-$(TEST_TARGET): $(OBJS) $(TEST_OBJS)
-	$(CXX) $^ -o $@ $(LDFLAGS) -lgtest -lgtest_main -pthread
-
-$(BUILD_DIR)/tests/%.o: $(TEST_DIR)/%.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-# ---------------------------------------------------------------------------------
 # Utility targets
 # ---------------------------------------------------------------------------------
 
@@ -146,7 +127,6 @@ directories:
 	@mkdir -p $(BUILD_DIR)/systems
 	@mkdir -p $(BUILD_DIR)/core
 	@mkdir -p $(BUILD_DIR)/rendering
-	@mkdir -p $(BUILD_DIR)/tests
 	@mkdir -p $(BUILD_DIR)/arch/native
 	@mkdir -p $(BUILD_DIR)/arch/wasm
 	@mkdir -p $(ASSETS_DIR)/fonts

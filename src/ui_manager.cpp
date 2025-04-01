@@ -62,9 +62,9 @@ void UIManager::handleClick(int x, int y, bool paused)
     }
     for (auto& btn : colorSchemeButtons) {
         if (btn.rect.contains({x, y})) {
-            if (btn.label == "Default") simManager->setColorScheme(PresentationManager::ColorScheme::DEFAULT);
-            else if (btn.label == "Sleep") simManager->setColorScheme(PresentationManager::ColorScheme::SLEEP);
-            else if (btn.label == "Temperature") simManager->setColorScheme(PresentationManager::ColorScheme::TEMPERATURE);
+            if (btn.label == "Default") simManager->setColorScheme(ColorScheme::DEFAULT);
+            else if (btn.label == "Sleep") simManager->setColorScheme(ColorScheme::SLEEP);
+            else if (btn.label == "Temperature") simManager->setColorScheme(ColorScheme::TEMPERATURE);
             return;
         }
     }
@@ -132,7 +132,7 @@ void UIManager::renderUI(PresentationManager& presentationManager,
         }
         for (auto& sp : speeds)
         {
-            PresentationManager::UIButton btn;
+            UIButton btn;
             btn.rect = sf::IntRect(panelX, panelY, 50, 20);
             btn.label = sp.second;
             btn.speedMultiplier = sp.first;
@@ -154,15 +154,15 @@ void UIManager::renderUI(PresentationManager& presentationManager,
     presentationManager.renderText("Color Scheme:", panelX, panelY);
     panelY += 25;
     {
-        std::vector<std::pair<PresentationManager::ColorScheme, std::string>> schemes = {
-            {PresentationManager::ColorScheme::DEFAULT, "Default"},
-            {PresentationManager::ColorScheme::SLEEP, "Sleep"},
-            {PresentationManager::ColorScheme::TEMPERATURE, "Temperature"}
+        std::vector<std::pair<ColorScheme, std::string>> schemes = {
+            {ColorScheme::DEFAULT, "Default"},
+            {ColorScheme::SLEEP, "Sleep"},
+            {ColorScheme::TEMPERATURE, "Temperature"}
         };
 
         for (auto& scheme : schemes)
         {
-            PresentationManager::UIButton btn;
+            UIButton btn;
             btn.rect = sf::IntRect(panelX, panelY, 100, 25);
             btn.label = scheme.second;
             btn.isSpecialButton = true;
@@ -201,7 +201,7 @@ void UIManager::renderUI(PresentationManager& presentationManager,
     panelY += 25;
     for (auto& sc : scenarioList)
     {
-        PresentationManager::UIButton btn;
+        UIButton btn;
         btn.rect = sf::IntRect(panelX, panelY, 120, 20);
         btn.label = sc.second;
         btn.isSpecialButton = false;

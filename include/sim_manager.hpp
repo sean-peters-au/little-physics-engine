@@ -11,6 +11,7 @@
 #include "scenario_manager.hpp"
 #include "sim.hpp"
 #include "ui_manager.hpp"
+#include "renderer_types.hpp"
 
 /**
  * @class SimManager
@@ -68,7 +69,7 @@ class SimManager {
    * @brief Changes the color scheme via the PresentationManager.
    * @param scheme The desired color scheme.
    */
-  void setColorScheme(PresentationManager::ColorScheme scheme);
+  void setColorScheme(ColorScheme scheme);
 
   /**
    * @brief Handles user selection of a new scenario.

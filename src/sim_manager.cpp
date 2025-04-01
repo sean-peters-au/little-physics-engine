@@ -13,6 +13,7 @@
 #include "entities/sim_components.hpp"
 #include "core/constants.hpp"
 #include "core/profile.hpp"
+#include "renderer_types.hpp"
 
 SimManager::SimManager()
     : presentationManager(SimulatorConstants::ScreenLength + 200, SimulatorConstants::ScreenLength, SharedSystemConfig()),
@@ -143,7 +144,7 @@ void SimManager::setTimeScale(double multiplier) {
   }
 }
 
-void SimManager::setColorScheme(PresentationManager::ColorScheme scheme) {
+void SimManager::setColorScheme(ColorScheme scheme) {
   presentationManager.setColorScheme(scheme);
 }
 

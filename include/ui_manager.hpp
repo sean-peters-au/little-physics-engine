@@ -13,6 +13,7 @@
 #include "presentation_manager.hpp"
 #include "core/constants.hpp"
 #include "entities/sim_components.hpp"
+#include "renderer_types.hpp"
 
 // Forward declaration
 class SimManager;
@@ -71,15 +72,14 @@ private:
     bool highlightReset;
     SimulatorConstants::SimulationType highlightedScenario;
 
-    // Store button definitions for layout and hit testing
-    // Using PresentationManager::UIButton now
-    std::vector<PresentationManager::UIButton> scenarioButtons;
-    std::vector<PresentationManager::UIButton> speedButtons;
-    std::vector<PresentationManager::UIButton> colorSchemeButtons;
-    PresentationManager::UIButton pausePlayButton;
-    PresentationManager::UIButton resetButton;
-    PresentationManager::UIButton nextFrameButton;
-    PresentationManager::UIButton debugButton;
+    // Use UIButton directly (defined in renderer_types.hpp)
+    std::vector<UIButton> scenarioButtons;
+    std::vector<UIButton> speedButtons;
+    std::vector<UIButton> colorSchemeButtons;
+    UIButton pausePlayButton;
+    UIButton resetButton;
+    UIButton nextFrameButton;
+    UIButton debugButton;
 
     /**
      * @brief Internal helper to reset highlight states, re-check them given (mouseX, mouseY).
