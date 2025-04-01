@@ -1,8 +1,8 @@
 /**
- * @file main_native.cpp
- * @brief Main entry point for the native platform.
+ * @fileoverview main_native.cpp
+ * @brief Main entry point for the native (non-WASM) application.
  *
- * This file creates a SimManager instance, initializes it, and runs the main loop.
+ * Initializes the SimManager singleton and runs the main simulation loop.
  */
 
 #define NS_PRIVATE_IMPLEMENTATION
@@ -21,14 +21,9 @@
 #include "sim_manager.hpp"
 
 int main() {
-    // Profile the entire application run
     PROFILE_SCOPE("main");
 
-    // Get the SimManager singleton instance
-    SimManager& simManager = SimManager::getInstance();
-
-    // Run the simulation loop via the singleton
-    simManager.run();
+    SimManager::getInstance().run();
 
     return 0;
 }

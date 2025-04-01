@@ -1,12 +1,10 @@
 /**
- * @file presentation_manager.hpp
- * @brief Manages rendering and UI display using SFML.
+ * @fileoverview presentation_manager.hpp
+ * @brief Manages the application window, event polling, and rendering orchestration.
  *
- * Takes over responsibilities from the old Renderer class, focusing on:
- * - Window management
- * - Rendering orchestration (delegating to sub-renderers in the future)
- * - UI drawing primitives (buttons, text)
- * - Debug visualizations
+ * Owns the SFML window and delegates rendering tasks to specific sub-renderers
+ * (Solid, Fluid, Gas, UI). Handles the main event loop and passes relevant UI
+ * events to the EventManager.
  */
 
 #pragma once
@@ -37,6 +35,10 @@ class EventManager;
 // Include the new types header
 #include "renderer_types.hpp"
 
+/**
+ * @class PresentationManager
+ * @brief Singleton responsible for window, events, and rendering pipeline.
+ */
 class PresentationManager {
 public:
     // --- Remove moved type definitions ---
@@ -55,19 +57,30 @@ public:
     static PresentationManager& getInstance();
 
     // --- Core Methods ---
+    /** @brief Initializes the SFML window, loads fonts, creates sub-renderers. */
     bool init();
+    /** @brief Polls SFML events and dispatches them (window close, EventManager). */
     void handleEvents();
+    /** @brief Clears the render target (window). */
     void clear();
+    /** @brief Displays the rendered frame on the window. */
     void present();
+    /** @brief Provides access to the SFML window object. */
     sf::RenderWindow& getWindow() { return window; }
+    /** @brief Provides access to the loaded font object. */
     const sf::Font& getFont() const { return font; }
+    /** @brief Checks if the manager has been successfully initialized. */
     bool isInitialized() const { return initialized; }
+    /** @brief Checks if the main application window is still open. */
     bool isWindowOpen() const { return window.isOpen(); }
+    /** @brief Updates coordinate conversion parameters for itself and sub-renderers. */
     void updateCoordinates(const SharedSystemConfig& config);
 
     // --- Rendering Orchestration ---
+    /** @brief Orchestrates the rendering of a single frame (particles, UI, FPS). */
     void renderFrame(float fps);
 
+    /** @brief Calculates UI layout based on current state and draws it via UIRenderer. */
     void renderUI();
 
     // --- UI Drawing Primitives (REMOVED from public interface) ---
@@ -75,18 +88,25 @@ public:
     // void drawButton(const UIButton& button, sf::Color fillColor, sf::Color textColor = sf::Color::White);
 
     // --- Add Getter for UIRenderer ---
+    /** @brief Provides access to the UIRenderer instance. */
     UIRenderer& getUIRenderer();
 
     // --- State Management ---
-    // Use ColorScheme from renderer_types.hpp
+    /** @brief Sets the current color scheme for rendering. */
     void setColorScheme(ColorScheme scheme);
+    /** @brief Gets the current rendering color scheme. */
     ColorScheme getColorScheme() const;
+    /** @brief Toggles debug visualization modes (solid, fluid). */
     void toggleDebugVisualization();
+    /** @brief Checks if any debug visualization mode is currently active. */
     bool isDebugVisualization() const;
 
     // --- Static Color Mappers --- (Keep these accessible, use types from renderer_types.hpp)
+    /** @brief Static Color Mapper for default color mapping. */
     static sf::Color defaultColorMapper(const PixelProperties& props);
+    /** @brief Static Color Mapper for sleep color mapping. */
     static sf::Color sleepColorMapper(const PixelProperties& props);
+    /** @brief Static Color Mapper for temperature color mapping. */
     static sf::Color temperatureColorMapper(const PixelProperties& props);
 
 private:
