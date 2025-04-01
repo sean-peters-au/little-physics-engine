@@ -10,7 +10,7 @@
 #include <utility>
 #include <SFML/Graphics.hpp>
 
-#include "arch/native/renderer_native.hpp"
+#include "presentation_manager.hpp"
 #include "core/constants.hpp"
 #include "entities/sim_components.hpp"
 
@@ -19,7 +19,8 @@ class SimManager;
 
 /**
  * @class UIManager
- * @brief Handles user interface interactions (mouse, highlights, clicks), and delegates logic to SimManager.
+ * @brief Handles user interface state and interaction logic.
+ *        Delegates drawing to PresentationManager.
  */
 class UIManager
 {
@@ -51,15 +52,16 @@ public:
     void handleClick(int x, int y, bool paused);
 
     /**
-     * @brief Renders the UI via the provided renderer, including scenario buttons, pause/reset, etc.
+     * @brief Renders the UI via the PresentationManager.
+     *        Determines button states/colors and calls drawing primitives.
      */
-    void renderUI(Renderer& renderer,
+    void renderUI(PresentationManager& presentationManager, // Changed type
                   const entt::registry& registry,
                   bool paused,
                   SimulatorConstants::SimulationType currentScenario);
 
 private:
-    SimManager* simManager;
+    SimManager* simManager; // Still needs SimManager for callbacks
 
     // Scenario list from scenario manager
     std::vector<std::pair<SimulatorConstants::SimulationType, std::string>> scenarioList;
@@ -69,15 +71,15 @@ private:
     bool highlightReset;
     SimulatorConstants::SimulationType highlightedScenario;
 
-    // Track scenario, speed, color scheme buttons, etc. for rendering
-    // (We re-use the same approach as the old renderer had: store them in UI)
-    std::vector<Renderer::UIButton> scenarioButtons;
-    std::vector<Renderer::UIButton> speedButtons;
-    std::vector<Renderer::UIButton> colorSchemeButtons;
-    Renderer::UIButton pausePlayButton;
-    Renderer::UIButton resetButton;
-    Renderer::UIButton nextFrameButton;
-    Renderer::UIButton debugButton;
+    // Store button definitions for layout and hit testing
+    // Using PresentationManager::UIButton now
+    std::vector<PresentationManager::UIButton> scenarioButtons;
+    std::vector<PresentationManager::UIButton> speedButtons;
+    std::vector<PresentationManager::UIButton> colorSchemeButtons;
+    PresentationManager::UIButton pausePlayButton;
+    PresentationManager::UIButton resetButton;
+    PresentationManager::UIButton nextFrameButton;
+    PresentationManager::UIButton debugButton;
 
     /**
      * @brief Internal helper to reset highlight states, re-check them given (mouseX, mouseY).

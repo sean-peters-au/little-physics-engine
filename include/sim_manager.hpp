@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "arch/native/renderer_native.hpp"
+#include "presentation_manager.hpp"
 #include "scenario_manager.hpp"
 #include "sim.hpp"
 #include "ui_manager.hpp"
@@ -65,10 +65,10 @@ class SimManager {
   void setTimeScale(double multiplier);
 
   /**
-   * @brief Changes the color scheme for the renderer.
+   * @brief Changes the color scheme via the PresentationManager.
    * @param scheme The desired color scheme.
    */
-  void setColorScheme(Renderer::ColorScheme scheme);
+  void setColorScheme(PresentationManager::ColorScheme scheme);
 
   /**
    * @brief Handles user selection of a new scenario.
@@ -76,7 +76,7 @@ class SimManager {
    */
   void selectScenario(SimulatorConstants::SimulationType scenario);
 
-  Renderer renderer;
+  PresentationManager presentationManager;
   ECSSimulator simulator;
   ScenarioManager scenarioManager;
   UIManager uiManager;

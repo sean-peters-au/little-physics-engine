@@ -10,6 +10,7 @@
 #include "core/constants.hpp"
 #include "sim_manager.hpp"
 #include "ui_manager.hpp"
+#include "presentation_manager.hpp"
 #include "entities/sim_components.hpp"
 
 // Include the full definition needed for DebugMode enum and methods
@@ -41,80 +42,42 @@ void UIManager::updateHighlights(sf::RenderWindow& window)
 
 void UIManager::handleClick(int x, int y, bool paused)
 {
-    // Click checks
-    // Pause/Play
-    if (pausePlayButton.rect.contains({x, y}))
-    {
-        simManager->togglePause();
-        return;
-    }
+    if (!simManager) return; // Safety check
 
-    // Reset
-    if (resetButton.rect.contains({x, y}))
-    {
-        simManager->resetSimulator();
-        return;
+    if (pausePlayButton.rect.contains({x, y})) {
+        simManager->togglePause(); return;
     }
-
-    // Scenario selection
-    for (auto& btn : scenarioButtons)
-    {
-        if (btn.rect.contains({x, y}))
-        {
-            simManager->selectScenario(btn.scenario);
+    if (resetButton.rect.contains({x, y})) {
+        simManager->resetSimulator(); return;
+    }
+    for (auto& btn : scenarioButtons) {
+        if (btn.rect.contains({x, y})) {
+            simManager->selectScenario(btn.scenario); return;
+        }
+    }
+    for (auto& btn : speedButtons) {
+        if (btn.rect.contains({x, y})) {
+            simManager->setTimeScale(btn.speedMultiplier); return;
+        }
+    }
+    for (auto& btn : colorSchemeButtons) {
+        if (btn.rect.contains({x, y})) {
+            if (btn.label == "Default") simManager->setColorScheme(PresentationManager::ColorScheme::DEFAULT);
+            else if (btn.label == "Sleep") simManager->setColorScheme(PresentationManager::ColorScheme::SLEEP);
+            else if (btn.label == "Temperature") simManager->setColorScheme(PresentationManager::ColorScheme::TEMPERATURE);
             return;
         }
     }
-
-    // Speed buttons
-    for (auto& btn : speedButtons)
-    {
-        if (btn.rect.contains({x, y}))
-        {
-            simManager->setTimeScale(btn.speedMultiplier);
-            return;
-        }
+    if (paused && nextFrameButton.rect.contains({x, y})) {
+        simManager->stepOnce(); return;
     }
-
-    // Color scheme buttons
-    for (auto& btn : colorSchemeButtons)
-    {
-        if (btn.rect.contains({x, y}))
-        {
-            if (btn.label == "Default")
-            {
-                simManager->setColorScheme(Renderer::ColorScheme::DEFAULT);
-            }
-            else if (btn.label == "Sleep")
-            {
-                simManager->setColorScheme(Renderer::ColorScheme::SLEEP);
-            }
-            else if (btn.label == "Temperature")
-            {
-                simManager->setColorScheme(Renderer::ColorScheme::TEMPERATURE);
-            }
-            return;
-        }
-    }
-
-    // Next Frame button
-    if (paused &&
-        nextFrameButton.rect.contains({x, y}))
-    {
-        simManager->stepOnce();
-        return;
-    }
-
-    // Debug toggle
-    if (debugButton.rect.contains({x, y}))
-    {
-        Renderer& renderer = simManager->renderer;
-        renderer.toggleDebugVisualization();
+    if (debugButton.rect.contains({x, y})) {
+        simManager->presentationManager.toggleDebugVisualization();
         return;
     }
 }
 
-void UIManager::renderUI(Renderer& renderer,
+void UIManager::renderUI(PresentationManager& presentationManager,
                          const entt::registry& registry,
                          bool paused,
                          SimulatorConstants::SimulationType currentScenario)
@@ -123,45 +86,37 @@ void UIManager::renderUI(Renderer& renderer,
     speedButtons.clear();
     colorSchemeButtons.clear();
 
-    // We'll place the UI to the right of the simulation area
     int const panelX = static_cast<int>(SimulatorConstants::ScreenLength) + 10;
     int panelY = 10;
 
-    // 1) Pause/Play
     std::string pauseLabel = paused ? "Play" : "Pause";
     pausePlayButton.rect = sf::IntRect(panelX, panelY, 60, 20);
     pausePlayButton.label = pauseLabel;
     pausePlayButton.isSpecialButton = true;
     pausePlayButton.scenario = currentScenario;
 
-    renderer.drawButton(pausePlayButton, highlightPausePlay ? sf::Color(200,200,0) : sf::Color(100,100,100));
-    renderer.renderText(pauseLabel, panelX + 5, panelY + 5);
+    presentationManager.drawButton(pausePlayButton, highlightPausePlay ? sf::Color(200,200,0) : sf::Color(100,100,100));
     panelY += 25;
 
-    // 2) Next Frame
     nextFrameButton.rect = sf::IntRect(panelX, panelY, 80, 20);
     nextFrameButton.label = "Next Frame";
     nextFrameButton.isSpecialButton = true;
     nextFrameButton.scenario = currentScenario;
 
-    renderer.drawButton(nextFrameButton,
-        paused ? sf::Color(100,100,100) : sf::Color(50,50,50),
-        paused ? sf::Color::White : sf::Color(150,150,150)
-    );
+    presentationManager.drawButton(nextFrameButton,
+                                 paused ? sf::Color(100,100,100) : sf::Color(50,50,50),
+                                 paused ? sf::Color::White : sf::Color(150,150,150));
     panelY += 25;
 
-    // 3) Reset
     resetButton.rect = sf::IntRect(panelX, panelY, 60, 20);
     resetButton.label = "Reset";
     resetButton.isSpecialButton = true;
     resetButton.scenario = currentScenario;
 
-    renderer.drawButton(resetButton, highlightReset ? sf::Color(200,200,0) : sf::Color(100,100,100));
-    renderer.renderText("Reset", panelX + 5, panelY + 5);
+    presentationManager.drawButton(resetButton, highlightReset ? sf::Color(200,200,0) : sf::Color(100,100,100));
     panelY += 25;
 
-    // 4) Speed
-    renderer.renderText("Playback Speed:", panelX, panelY);
+    presentationManager.renderText("Playback Speed:", panelX, panelY);
     panelY += 25;
     {
         std::vector<std::pair<double, std::string>> speeds = {
@@ -177,7 +132,7 @@ void UIManager::renderUI(Renderer& renderer,
         }
         for (auto& sp : speeds)
         {
-            Renderer::UIButton btn;
+            PresentationManager::UIButton btn;
             btn.rect = sf::IntRect(panelX, panelY, 50, 20);
             btn.label = sp.second;
             btn.speedMultiplier = sp.first;
@@ -189,79 +144,64 @@ void UIManager::renderUI(Renderer& renderer,
             {
                 fillColor = sf::Color(0,200,0);
             }
-            renderer.drawButton(btn, fillColor);
-            renderer.renderText(btn.label, panelX + 5, panelY + 3);
+            presentationManager.drawButton(btn, fillColor);
             speedButtons.push_back(btn);
             panelY += 25;
         }
     }
     panelY += 20;
 
-    // 5) Color scheme
-    renderer.renderText("Color Scheme:", panelX, panelY);
+    presentationManager.renderText("Color Scheme:", panelX, panelY);
     panelY += 25;
     {
-        std::vector<std::pair<Renderer::ColorScheme, std::string>> schemes = {
-            {Renderer::ColorScheme::DEFAULT, "Default"},
-            {Renderer::ColorScheme::SLEEP, "Sleep"},
-            {Renderer::ColorScheme::TEMPERATURE, "Temperature"}
+        std::vector<std::pair<PresentationManager::ColorScheme, std::string>> schemes = {
+            {PresentationManager::ColorScheme::DEFAULT, "Default"},
+            {PresentationManager::ColorScheme::SLEEP, "Sleep"},
+            {PresentationManager::ColorScheme::TEMPERATURE, "Temperature"}
         };
 
         for (auto& scheme : schemes)
         {
-            Renderer::UIButton btn;
+            PresentationManager::UIButton btn;
             btn.rect = sf::IntRect(panelX, panelY, 100, 25);
             btn.label = scheme.second;
             btn.isSpecialButton = true;
 
             sf::Color fillColor = sf::Color(100,100,100);
-            if (renderer.getColorScheme() == scheme.first)
+            if (presentationManager.getColorScheme() == scheme.first)
             {
                 fillColor = sf::Color(0,200,0);
             }
-            renderer.drawButton(btn, fillColor);
-            renderer.renderText(btn.label, panelX + 5, panelY + 3);
+            presentationManager.drawButton(btn, fillColor);
             colorSchemeButtons.push_back(btn);
             panelY += 25;
         }
     }
     panelY += 20;
 
-    // 6) Debug
-    renderer.renderText("Debug View:", panelX, panelY);
+    presentationManager.renderText("Debug View:", panelX, panelY);
     panelY += 25;
     {
         debugButton.rect = sf::IntRect(panelX, panelY, 100, 25);
-        // Get specific debug state from fluid renderer
-        bool debugActive = renderer.isDebugVisualization();
-        FluidSurfaceRenderer::DebugMode currentFluidMode = FluidSurfaceRenderer::DebugMode::NONE;
-        if (renderer.getFluidSurfaceRenderer()) { // Check if fluid renderer exists
-            currentFluidMode = renderer.getFluidSurfaceRenderer()->getCurrentDebugMode();
-        }
+        bool debugActive = presentationManager.isDebugVisualization();
 
         std::string debugLabel = "Debug: OFF";
-        if (currentFluidMode == FluidSurfaceRenderer::DebugMode::DENSITY_PRE_BLUR) {
-            debugLabel = "Debug: DensPre";
-        } else if (currentFluidMode == FluidSurfaceRenderer::DebugMode::DENSITY_POST_BLUR) {
-            debugLabel = "Debug: DensPost";
-        }
+        if (debugActive) debugLabel = "Debug: ON";
         
         debugButton.label = debugLabel;
         debugButton.isSpecialButton = true;
 
         sf::Color fillColor = debugActive ? sf::Color(0,200,0) : sf::Color(100,100,100);
-        renderer.drawButton(debugButton, fillColor);
-        renderer.renderText(debugButton.label, panelX + 5, panelY + 3);
+        presentationManager.drawButton(debugButton, fillColor);
         panelY += 25;
     }
     panelY += 20;
 
-    // 7) Scenarios
-    renderer.renderText("Scenarios:", panelX, panelY);
+    presentationManager.renderText("Scenarios:", panelX, panelY);
     panelY += 25;
     for (auto& sc : scenarioList)
     {
-        Renderer::UIButton btn;
+        PresentationManager::UIButton btn;
         btn.rect = sf::IntRect(panelX, panelY, 120, 20);
         btn.label = sc.second;
         btn.isSpecialButton = false;
@@ -279,8 +219,7 @@ void UIManager::renderUI(Renderer& renderer,
             fillColor = sf::Color(200,200,0);
         }
 
-        renderer.drawButton(btn, fillColor);
-        renderer.renderText(btn.label, panelX + 5, panelY + 5);
+        presentationManager.drawButton(btn, fillColor);
 
         scenarioButtons.push_back(btn);
         panelY += 25;
@@ -289,23 +228,10 @@ void UIManager::renderUI(Renderer& renderer,
 
 void UIManager::computeHighlights(int mouseX, int mouseY)
 {
-    highlightPausePlay = false;
-    highlightReset = false;
+    highlightPausePlay = pausePlayButton.rect.contains({mouseX, mouseY});
+    highlightReset = resetButton.rect.contains({mouseX, mouseY});
+
     highlightedScenario = static_cast<SimulatorConstants::SimulationType>(-1);
-
-    // Pause/Play
-    if (pausePlayButton.rect.contains({mouseX, mouseY}))
-    {
-        highlightPausePlay = true;
-    }
-
-    // Reset
-    if (resetButton.rect.contains({mouseX, mouseY}))
-    {
-        highlightReset = true;
-    }
-
-    // Scenarios
     for (auto& btn : scenarioButtons)
     {
         if (btn.rect.contains({mouseX, mouseY}))

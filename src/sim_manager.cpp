@@ -9,12 +9,13 @@
 #include <SFML/Window/Event.hpp>
 
 #include "sim_manager.hpp"
+#include "presentation_manager.hpp"
 #include "entities/sim_components.hpp"
 #include "core/constants.hpp"
 #include "core/profile.hpp"
 
 SimManager::SimManager()
-    : renderer(SimulatorConstants::ScreenLength + 200, SimulatorConstants::ScreenLength, SharedSystemConfig()),
+    : presentationManager(SimulatorConstants::ScreenLength + 200, SimulatorConstants::ScreenLength, SharedSystemConfig()),
       simulator(),
       scenarioManager(),
       uiManager(),
@@ -25,8 +26,8 @@ SimManager::SimManager()
 }
 
 bool SimManager::init() {
-  if (!renderer.init()) {
-    std::cerr << "Renderer initialization failed." << std::endl;
+  if (!presentationManager.init()) {
+    std::cerr << "PresentationManager initialization failed." << std::endl;
     return false;
   }
 
@@ -40,7 +41,7 @@ bool SimManager::init() {
 }
 
 bool SimManager::handleEvents() {
-  sf::RenderWindow& window = renderer.getWindow();
+  sf::RenderWindow& window = presentationManager.getWindow();
 
   sf::Event event;
   while (window.pollEvent(event)) {
@@ -63,7 +64,7 @@ bool SimManager::handleEvents() {
           resetSimulator();
           break;
         case sf::Keyboard::D:
-          renderer.toggleDebugVisualization();
+          presentationManager.toggleDebugVisualization();
           break;
         case sf::Keyboard::Num1:
           selectScenario(SimulatorConstants::SimulationType::KEPLERIAN_DISK);
@@ -107,11 +108,17 @@ void SimManager::tick() {
 }
 
 void SimManager::render(float fps) {
-  renderer.clear();
-  renderer.renderParticles(simulator.getRegistry());
-  renderer.renderFPS(fps);
-  uiManager.renderUI(renderer, simulator.getRegistry(), paused, scenarioManager.getCurrentScenario());
-  renderer.present();
+  presentationManager.clear();
+
+  presentationManager.renderSolidParticles(simulator.getRegistry());
+  presentationManager.renderFluidParticles(simulator.getRegistry());
+  presentationManager.renderGasParticles(simulator.getRegistry());
+
+  presentationManager.renderFPS(fps);
+
+  uiManager.renderUI(presentationManager, simulator.getRegistry(), paused, scenarioManager.getCurrentScenario());
+
+  presentationManager.present();
 }
 
 void SimManager::togglePause() {
@@ -136,8 +143,8 @@ void SimManager::setTimeScale(double multiplier) {
   }
 }
 
-void SimManager::setColorScheme(Renderer::ColorScheme scheme) {
-  renderer.setColorScheme(scheme);
+void SimManager::setColorScheme(PresentationManager::ColorScheme scheme) {
+  presentationManager.setColorScheme(scheme);
 }
 
 void SimManager::selectScenario(SimulatorConstants::SimulationType scenario) {
@@ -147,7 +154,7 @@ void SimManager::selectScenario(SimulatorConstants::SimulationType scenario) {
   ScenarioSystemConfig config = scenarioPtr->getSystemsConfig();
 
   simulator.applyConfig(config);
-  renderer.updateCoordinates(config.sharedConfig);
+  presentationManager.updateCoordinates(config.sharedConfig);
   simulator.loadScenario(std::move(scenarioPtr));
   simulator.reset();
 
