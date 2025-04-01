@@ -24,6 +24,12 @@
 #include "systems/rotation.hpp"
 #include "systems/sleep.hpp"
 
+// Singleton instance getter implementation
+ECSSimulator& ECSSimulator::getInstance() {
+    static ECSSimulator instance; // Meyers' Singleton
+    return instance;
+}
+
 ECSSimulator::ECSSimulator() = default;
 
 ECSSimulator::~ECSSimulator() = default;

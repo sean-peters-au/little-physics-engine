@@ -21,8 +21,8 @@ FluidRenderer::~FluidRenderer() = default;
 
 void FluidRenderer::render(sf::RenderTarget& target, const entt::registry& registry)
 {
-    // Add verbose logging
-    std::cout << "FluidRenderer::render called." << std::endl;
+    // Remove verbose logging
+    // std::cout << "FluidRenderer::render called." << std::endl;
 
     // Check if there are any liquid particles before doing potentially expensive work
     bool hasLiquidParticles = false;
@@ -34,28 +34,28 @@ void FluidRenderer::render(sf::RenderTarget& target, const entt::registry& regis
         }
     }
     if (!hasLiquidParticles) {
-        std::cout << "FluidRenderer: No liquid particles found." << std::endl;
+        // std::cout << "FluidRenderer: No liquid particles found." << std::endl;
         return;
     }
-    std::cout << "FluidRenderer: Liquid particles found." << std::endl;
+    // std::cout << "FluidRenderer: Liquid particles found." << std::endl;
 
     // Attempt to use the FluidSurfaceRenderer first
     bool surfaceRendered = false;
     if (surfaceRenderer) {
-        std::cout << "FluidRenderer: surfaceRenderer pointer is valid." << std::endl;
+        // std::cout << "FluidRenderer: surfaceRenderer pointer is valid." << std::endl;
         // Directly try to update and render. FluidSurfaceRenderer::render
         // should internally check if it has valid resources (texture, shader).
         try {
             // Default parameters, can be made configurable
             int gridSize = 200;
             float smoothingRadius = 5.0f;
-            std::cout << "FluidRenderer: Calling updateGridAndTexture..." << std::endl;
+            // std::cout << "FluidRenderer: Calling updateGridAndTexture..." << std::endl;
             surfaceRenderer->updateGridAndTexture(registry, gridSize, smoothingRadius);
 
             sf::Color surfaceColor(40, 130, 240, 255);
             float densityThreshold = 0.10f;
             float edgeSmoothness = 0.02f;
-             std::cout << "FluidRenderer: Calling surfaceRenderer->render..." << std::endl;
+            // std::cout << "FluidRenderer: Calling surfaceRenderer->render..." << std::endl;
             surfaceRenderer->render(target, surfaceColor, densityThreshold, edgeSmoothness);
 
             // Handle debug visualization drawing if needed (assuming FSR handles it)
@@ -68,7 +68,7 @@ void FluidRenderer::render(sf::RenderTarget& target, const entt::registry& regis
             }
             */
             surfaceRendered = true;
-            std::cout << "FluidRenderer: surfaceRenderer->render finished successfully." << std::endl;
+            // std::cout << "FluidRenderer: surfaceRenderer->render finished successfully." << std::endl;
         } catch (const std::exception& e) {
             std::cerr << "Error during FluidSurfaceRenderer execution: " << e.what() << std::endl;
             // Fallback might be attempted below
@@ -95,9 +95,9 @@ void FluidRenderer::toggleDebugVisualization() {
         int numModes = 3; // Assuming NONE, PRE_BLUR, POST_BLUR
         int nextMode = (currentMode + 1) % numModes;
         surfaceRenderer->setDebugMode(static_cast<FluidSurfaceRenderer::DebugMode>(nextMode));
-        std::cout << "FluidRenderer set debug mode: " << nextMode << std::endl;
+        // std::cout << "FluidRenderer set debug mode: " << nextMode << std::endl;
     } else {
-         std::cout << "FluidRenderer: Cannot toggle debug, surface renderer not available." << std::endl;
+         // std::cout << "FluidRenderer: Cannot toggle debug, surface renderer not available." << std::endl;
     }
 }
 

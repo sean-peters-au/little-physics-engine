@@ -18,6 +18,7 @@
 #include <vector>
 #include <memory>
 #include <SFML/Graphics.hpp>
+#include <SFML/Window/Event.hpp>
 
 // Required component and system headers
 #include "entities/entity_components.hpp"
@@ -30,6 +31,8 @@
 class SolidRenderer;
 class FluidRenderer;
 class GasRenderer;
+class UIRenderer;
+class EventManager;
 
 // Include the new types header
 #include "renderer_types.hpp"
@@ -42,19 +45,18 @@ public:
     // struct UIButton { ... };
     // enum class ColorScheme { ... };
 
-    // --- Constructor / Destructor ---
-    PresentationManager(int screenWidth, int screenHeight,
-                        const SharedSystemConfig& config = SharedSystemConfig());
-    ~PresentationManager();
-
-    // Prevent copying/moving
+    // Delete copy/move constructors and assignment operators
     PresentationManager(const PresentationManager&) = delete;
     PresentationManager& operator=(const PresentationManager&) = delete;
     PresentationManager(PresentationManager&&) = delete;
     PresentationManager& operator=(PresentationManager&&) = delete;
 
+    /** @brief Get the singleton instance. */
+    static PresentationManager& getInstance();
+
     // --- Core Methods ---
     bool init();
+    void handleEvents();
     void clear();
     void present();
     sf::RenderWindow& getWindow() { return window; }
@@ -64,15 +66,16 @@ public:
     void updateCoordinates(const SharedSystemConfig& config);
 
     // --- Rendering Orchestration ---
-    void renderSolidParticles(const entt::registry& registry);
-    void renderFluidParticles(const entt::registry& registry);
-    void renderGasParticles(const entt::registry& registry);
-    void renderFPS(float fps);
+    void renderFrame(float fps);
 
-    // --- UI Drawing Primitives ---
-    // Use types defined in renderer_types.hpp
-    void renderText(const std::string& text, int x, int y, sf::Color color = sf::Color::White);
-    void drawButton(const UIButton& button, sf::Color fillColor, sf::Color textColor = sf::Color::White);
+    void renderUI();
+
+    // --- UI Drawing Primitives (REMOVED from public interface) ---
+    // void renderText(const std::string& text, int x, int y, sf::Color color = sf::Color::White);
+    // void drawButton(const UIButton& button, sf::Color fillColor, sf::Color textColor = sf::Color::White);
+
+    // --- Add Getter for UIRenderer ---
+    UIRenderer& getUIRenderer();
 
     // --- State Management ---
     // Use ColorScheme from renderer_types.hpp
@@ -87,6 +90,13 @@ public:
     static sf::Color temperatureColorMapper(const PixelProperties& props);
 
 private:
+    // --- Make constructor private ---
+    PresentationManager(int screenWidth, int screenHeight, const SharedSystemConfig& config = SharedSystemConfig());
+    ~PresentationManager(); // Default destructor ok
+
+    // --- Static instance for singleton ---
+    // (Initialization details handled in .cpp)
+
     // --- Member Variables ---
     sf::RenderWindow window;
     sf::Font font;
@@ -100,10 +110,11 @@ private:
     // bool fluidDebugEnabled = false; // FluidRenderer manages its own internal state
     // bool gasDebugEnabled = false;
 
-    // Sub-Renderers (using forward-declared types is fine for unique_ptr)
+    // Sub-Renderers
     std::unique_ptr<SolidRenderer> solidRenderer;
     std::unique_ptr<FluidRenderer> fluidRenderer;
     std::unique_ptr<GasRenderer> gasRenderer;
+    std::unique_ptr<UIRenderer> uiRenderer;
 
     // --- Helper Methods (Removed from here) ---
     // void renderContactDebug(const entt::registry &registry); // Moved
@@ -112,4 +123,14 @@ private:
     // void renderPolygonDebug(const entt::registry &registry); // Moved
     // std::unordered_map<std::pair<int,int>, PixelProperties, PixelCoordHash>
     // aggregateParticlesByPixel(const entt::registry& registry); // Moved/Replaced
+
+    // 6. Add internal rendering helpers
+    void renderSolidParticlesInternal(const entt::registry& registry);
+    void renderFluidParticlesInternal(const entt::registry& registry);
+    void renderGasParticlesInternal(const entt::registry& registry);
+    void renderFPSInternal(float fps);
+
+    // 7. Store UI Layout data
+    std::vector<UIButton> currentButtonLayout;
+    ButtonID highlightedButtonID = ButtonID::UNKNOWN;
 }; 

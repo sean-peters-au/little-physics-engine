@@ -18,8 +18,14 @@
  */
 class ECSSimulator {
  public:
-  ECSSimulator();
-  ~ECSSimulator();
+  // Delete copy/move constructors and assignment operators
+  ECSSimulator(const ECSSimulator&) = delete;
+  ECSSimulator& operator=(const ECSSimulator&) = delete;
+  ECSSimulator(ECSSimulator&&) = delete;
+  ECSSimulator& operator=(ECSSimulator&&) = delete;
+
+  /** @brief Get the singleton instance. */
+  static ECSSimulator& getInstance();
 
   /**
    * @brief Loads a new scenario object that can create ECS entities.
@@ -71,6 +77,11 @@ class ECSSimulator {
   IScenario& getCurrentScenario() const;
 
  private:
+  // Make constructor private
+  ECSSimulator();
+  // Destructor can remain default or be private if needed, public is fine too
+  ~ECSSimulator();
+
   entt::registry registry;
   std::unique_ptr<IScenario> scenarioPtr;
   std::vector<std::unique_ptr<Systems::ISystem>> systems;

@@ -72,13 +72,33 @@ struct PixelProperties {
 /** Function type for mapping pixel properties to an sf::Color. */
 using ColorMapper = std::function<sf::Color(const PixelProperties&)>;
 
+// Add an enum for button identification
+enum class ButtonID {
+    UNKNOWN,
+    PAUSE_PLAY,
+    NEXT_FRAME,
+    RESET,
+    DEBUG_TOGGLE,
+    // Speed buttons (can use multiplier directly, or add IDs)
+    SPEED_0_25X,
+    SPEED_0_5X,
+    SPEED_1X,
+    // Color scheme buttons
+    COLOR_DEFAULT,
+    COLOR_SLEEP,
+    COLOR_TEMP,
+    // Scenario buttons (can use scenario type directly, or add IDs)
+    SCENARIO_BUTTON // Use scenario type stored in UIButton instead?
+};
+
 /** @brief UI button definition (Moved from PresentationManager) */
 struct UIButton {
+    ButtonID id = ButtonID::UNKNOWN; // Added ID
     sf::IntRect rect;
     std::string label;
     bool isSpecialButton;
-    SimulatorConstants::SimulationType scenario;
-    double speedMultiplier;
+    SimulatorConstants::SimulationType scenario; // Keep for scenario buttons
+    double speedMultiplier; // Keep for speed buttons
 
     UIButton()
         : rect()

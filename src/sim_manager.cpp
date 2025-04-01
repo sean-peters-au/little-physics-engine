@@ -14,129 +14,101 @@
 #include "core/constants.hpp"
 #include "core/profile.hpp"
 #include "renderer_types.hpp"
+#include "scenario_manager.hpp"
 
-SimManager::SimManager()
-    : presentationManager(SimulatorConstants::ScreenLength + 200, SimulatorConstants::ScreenLength, SharedSystemConfig()),
-      simulator(),
-      scenarioManager(),
-      uiManager(),
-      running(true),
-      paused(false),
-      stepFrame(false) {
-  uiManager.setSimManager(this);
+// Singleton instance getter implementation
+SimManager& SimManager::getInstance() {
+    static SimManager instance;
+    return instance;
 }
 
+// Private Constructor Implementation
+SimManager::SimManager()
+    // Get instances of other singletons
+    : presentationManagerInstance(PresentationManager::getInstance()),
+      simulatorInstance(ECSSimulator::getInstance()),
+      // scenarioManager initialized normally
+      scenarioManager(),
+      running(true),
+      paused(false),
+      stepFrame(false)
+{
+  // No setup needed from UIManager anymore
+}
+
+// Run method containing the main loop
+void SimManager::run() {
+    if (!init()) {
+        return; // Initialization failed
+    }
+
+    sf::Clock clock; // For FPS calculation
+    running = true;
+
+    while (presentationManagerInstance.isWindowOpen()) { // Check window state via PresentationManager
+        // --- Event Handling (now done by PresentationManager) ---
+        presentationManagerInstance.handleEvents();
+        if (!presentationManagerInstance.isWindowOpen()) { // Re-check after handling events
+            running = false; // Ensure loop terminates if window closed by event
+            break;
+        }
+
+        // --- Simulation Tick --- 
+        tick(); // Use internal tick method
+
+        // --- Rendering --- 
+        float fps = 1.f / clock.restart().asSeconds();
+        render(fps); // Use internal render method
+    }
+
+    // Optional: Add cleanup here if needed
+}
+
+// init, handleEvents, tick, render implementations need to use the singleton instances
 bool SimManager::init() {
-  if (!presentationManager.init()) {
+  // Use singleton instance
+  if (!presentationManagerInstance.init()) {
     std::cerr << "PresentationManager initialization failed." << std::endl;
     return false;
   }
 
   scenarioManager.buildScenarioList();
+  // Default scenario
   scenarioManager.setInitialScenario(SimulatorConstants::SimulationType::KEPLERIAN_DISK);
 
+  // Use method to select scenario which uses singleton instances internally
   selectScenario(scenarioManager.getCurrentScenario());
 
-  uiManager.setScenarioList(scenarioManager.getScenarioList());
   return true;
-}
-
-bool SimManager::handleEvents() {
-  sf::RenderWindow& window = presentationManager.getWindow();
-
-  sf::Event event;
-  while (window.pollEvent(event)) {
-    if (event.type == sf::Event::Closed) {
-      running = false;
-    } else if (event.type == sf::Event::KeyPressed) {
-      switch (event.key.code) {
-        case sf::Keyboard::Escape:
-          running = false;
-          break;
-        case sf::Keyboard::P:
-          togglePause();
-          break;
-        case sf::Keyboard::Space:
-          if (paused) {
-            stepFrame = true;
-          }
-          break;
-        case sf::Keyboard::R:
-          resetSimulator();
-          break;
-        case sf::Keyboard::D:
-          presentationManager.toggleDebugVisualization();
-          break;
-        case sf::Keyboard::Num1:
-          selectScenario(SimulatorConstants::SimulationType::KEPLERIAN_DISK);
-          break;
-        case sf::Keyboard::Num2:
-          selectScenario(SimulatorConstants::SimulationType::RANDOM_POLYGONS);
-          break;
-        case sf::Keyboard::Num3:
-          selectScenario(SimulatorConstants::SimulationType::SIMPLE_FLUID);
-          break;
-        case sf::Keyboard::Num4:
-          selectScenario(SimulatorConstants::SimulationType::FLUID_AND_POLYGONS);
-          break;
-        case sf::Keyboard::Num5:
-          selectScenario(SimulatorConstants::SimulationType::HOURGLASSES);
-          break;
-        case sf::Keyboard::Num6:
-          selectScenario(SimulatorConstants::SimulationType::PLANETARY_OCEAN);
-          break;
-        case sf::Keyboard::Num7:
-          selectScenario(SimulatorConstants::SimulationType::GALTON_BOARD);
-          break;
-        default:
-          break;
-      }
-    } else if (event.type == sf::Event::MouseButtonPressed &&
-               event.mouseButton.button == sf::Mouse::Left) {
-      uiManager.handleClick(event.mouseButton.x, event.mouseButton.y, paused);
-    }
-  }
-
-  uiManager.updateHighlights(window);
-  return running;
 }
 
 void SimManager::tick() {
   if (!paused || stepFrame) {
-    simulator.tick();
+    // Use ECSSimulator singleton instance
+    simulatorInstance.tick();
     stepFrame = false;
   }
 }
 
 void SimManager::render(float fps) {
-  presentationManager.clear();
-
-  presentationManager.renderSolidParticles(simulator.getRegistry());
-  presentationManager.renderFluidParticles(simulator.getRegistry());
-  presentationManager.renderGasParticles(simulator.getRegistry());
-
-  presentationManager.renderFPS(fps);
-
-  uiManager.renderUI(presentationManager, simulator.getRegistry(), paused, scenarioManager.getCurrentScenario());
-
-  presentationManager.present();
+  // Delegate frame rendering entirely to PresentationManager
+  presentationManagerInstance.renderFrame(fps);
 }
 
-void SimManager::togglePause() {
-  paused = !paused;
-}
+// togglePause, resetSimulator, stepOnce remain mostly the same (modify internal state)
+void SimManager::togglePause() { paused = !paused; }
 
 void SimManager::resetSimulator() {
-  simulator.reset();
+  // Use ECSSimulator singleton instance
+  simulatorInstance.reset();
   paused = false;
 }
 
-void SimManager::stepOnce() {
-  stepFrame = true;
-}
+void SimManager::stepOnce() { stepFrame = true; }
 
+// setTimeScale uses ECSSimulator singleton instance
 void SimManager::setTimeScale(double multiplier) {
-  auto& registry = simulator.getRegistry();
+  auto& registry = simulatorInstance.getRegistry(); // Use instance
   auto view = registry.view<Components::SimulatorState>();
   if (!view.empty()) {
     auto& st = registry.get<Components::SimulatorState>(view.front());
@@ -144,20 +116,31 @@ void SimManager::setTimeScale(double multiplier) {
   }
 }
 
+// setColorScheme uses PresentationManager singleton instance
 void SimManager::setColorScheme(ColorScheme scheme) {
-  presentationManager.setColorScheme(scheme);
+  presentationManagerInstance.setColorScheme(scheme); // Use instance
 }
 
+// selectScenario uses singleton instances
 void SimManager::selectScenario(SimulatorConstants::SimulationType scenario) {
   scenarioManager.setInitialScenario(scenario);
-
   auto scenarioPtr = scenarioManager.createScenario(scenario);
   ScenarioSystemConfig config = scenarioPtr->getSystemsConfig();
 
-  simulator.applyConfig(config);
-  presentationManager.updateCoordinates(config.sharedConfig);
-  simulator.loadScenario(std::move(scenarioPtr));
-  simulator.reset();
+  // Use instances
+  simulatorInstance.applyConfig(config);
+  presentationManagerInstance.updateCoordinates(config.sharedConfig);
+  simulatorInstance.loadScenario(std::move(scenarioPtr));
+  simulatorInstance.reset();
 
   paused = false;
+}
+
+// Add Getter Implementations
+SimulatorConstants::SimulationType SimManager::getCurrentScenarioType() const {
+    return scenarioManager.getCurrentScenario(); // Delegate to ScenarioManager
+}
+
+const std::vector<std::pair<SimulatorConstants::SimulationType, std::string>>& SimManager::getScenarioList() const {
+    return scenarioManager.getScenarioList(); // Delegate to ScenarioManager
 }

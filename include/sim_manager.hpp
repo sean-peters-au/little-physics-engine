@@ -10,28 +10,32 @@
 #include "presentation_manager.hpp"
 #include "scenario_manager.hpp"
 #include "sim.hpp"
-#include "ui_manager.hpp"
 #include "renderer_types.hpp"
 
 /**
  * @class SimManager
  * @brief Orchestrates the main loop, owns subsystems, and manages scenario selection.
+ *        Implemented as a Singleton.
  */
 class SimManager {
  public:
-  SimManager();
+  // Delete copy/move constructors and assignment operators
+  SimManager(const SimManager&) = delete;
+  SimManager& operator=(const SimManager&) = delete;
+  SimManager(SimManager&&) = delete;
+  SimManager& operator=(SimManager&&) = delete;
+
+  /** @brief Get the singleton instance. */
+  static SimManager& getInstance();
+
+  // Run the main simulation loop
+  void run(); // Add a run method if not present
 
   /**
    * @brief Initializes subsystems like the renderer, simulator, and scenario manager.
    * @return true on success, false otherwise.
    */
   bool init();
-
-  /**
-   * @brief Processes window and UI events for the current frame.
-   * @return false if the application should quit, true otherwise.
-   */
-  bool handleEvents();
 
   /**
    * @brief Steps the simulation (unless paused).
@@ -77,12 +81,39 @@ class SimManager {
    */
   void selectScenario(SimulatorConstants::SimulationType scenario);
 
-  PresentationManager presentationManager;
-  ECSSimulator simulator;
-  ScenarioManager scenarioManager;
-  UIManager uiManager;
+  // Add getters needed by PresentationManager::renderUI
+  bool isPaused() const { return paused; }
+  SimulatorConstants::SimulationType getCurrentScenarioType() const;
+  const std::vector<std::pair<SimulatorConstants::SimulationType, std::string>>& getScenarioList() const;
+  void resetPause() { paused = false; } // Add helper needed by EventManager
+
+  // Public members might become private if accessed via getInstance()
+  // PresentationManager presentationManager; // Now accessed via getInstance()
+  // ECSSimulator simulator; // Now accessed via getInstance()
+  // ScenarioManager scenarioManager;
+  // UIManager uiManager;
+
+  // bool running; // Internal state for run() loop
+  // bool paused;
+  // bool stepFrame;
+
+ private:
+  // Make constructor private
+  SimManager();
+  // Destructor can remain default
+  ~SimManager() = default;
+
+  // Members needed for singleton operation
+  PresentationManager& presentationManagerInstance;
+  ECSSimulator& simulatorInstance;
+  ScenarioManager scenarioManager; // Keep as member?
 
   bool running;
   bool paused;
   bool stepFrame;
+
+  // Potentially move main loop logic here if handleEvents, tick, render become private
+
+  // Private helpers (if tick/render moved from public)
+  bool handleEvents(); // Keep private for now, called by run()
 };

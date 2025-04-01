@@ -7,6 +7,7 @@
 #include "renderers/solid_renderer.hpp"  // Include sub-renderers
 #include "renderers/fluid_renderer.hpp"
 #include "renderers/gas_renderer.hpp"
+#include "renderers/ui_renderer.hpp" // Include UIRenderer header
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -22,6 +23,11 @@
 // Remove headers only needed by moved methods if not used elsewhere here
 // #include "systems/rigid/contact_manager.hpp"
 // #include "arch/native/renderer_fluid_dsf.hpp"
+
+// EventManager and SimManager
+#include "event_manager.hpp" // Include EventManager for calling processEvent
+#include "sim.hpp" // Include for ECSSimulator access (registry)
+#include "sim_manager.hpp" // Include for SimManager access (paused state, current scenario)
 
 // --- PixelProperties Method Implementation (Remove - defined in renderer_types.hpp) ---
 /*
@@ -53,7 +59,20 @@ sf::Color PresentationManager::temperatureColorMapper(const PixelProperties& pro
     return {r, 0, b};
 }
 
-// --- Constructor / Destructor ---
+// Singleton instance getter implementation
+PresentationManager& PresentationManager::getInstance() {
+    // Initialize with default screen dimensions and config
+    // NOTE: This assumes a fixed initial size. If size needs to be dynamic,
+    // a separate initialization method for the singleton might be needed.
+    static PresentationManager instance(
+        SimulatorConstants::ScreenLength + 200, // width
+        SimulatorConstants::ScreenLength,      // height
+        SharedSystemConfig()                  // default config
+    );
+    return instance;
+}
+
+// Constructor implementation (now private)
 PresentationManager::PresentationManager(int screenWidth, int screenHeight, const SharedSystemConfig& config)
     : initialized(false)
     , screenWidth(screenWidth)
@@ -63,19 +82,24 @@ PresentationManager::PresentationManager(int screenWidth, int screenHeight, cons
     , solidRenderer(std::make_unique<SolidRenderer>(coordinates))
     , fluidRenderer(std::make_unique<FluidRenderer>(coordinates, sf::Vector2u(SimulatorConstants::ScreenLength, SimulatorConstants::ScreenLength)))
     , gasRenderer(std::make_unique<GasRenderer>(coordinates))
+    // uiRenderer is initialized after font is loaded in init()
 {
-    // Font loading remains here as PresentationManager provides it
+    // Font loading moved to init()
 }
 
+// Destructor implementation (can be default)
 PresentationManager::~PresentationManager() = default;
 
 // --- Core Methods Implementation ---
 bool PresentationManager::init() {
-    window.create(sf::VideoMode(screenWidth, screenHeight), "N-Body Simulator"); // Simplified title
+    window.create(sf::VideoMode(screenWidth, screenHeight), "N-Body Simulator");
     if (!font.loadFromFile("assets/fonts/arial.ttf")) {
         std::cerr << "Failed to load font assets/fonts/arial.ttf" << std::endl;
         return false;
     }
+    // Initialize UIRenderer *after* font is loaded
+    uiRenderer = std::make_unique<UIRenderer>(font);
+
     initialized = true;
     // Initialize sub-renderers if they need it (e.g., load shaders)
     // if (solidRenderer) solidRenderer->init(); // If needed
@@ -100,57 +124,214 @@ void PresentationManager::updateCoordinates(const SharedSystemConfig& config) {
     // if (gasRenderer) gasRenderer->onCoordinateUpdate();
 }
 
-// --- Rendering Orchestration ---
-void PresentationManager::renderSolidParticles(const entt::registry &registry) {
+// --- Rendering Orchestration Implementation ---
+void PresentationManager::renderFrame(float fps) {
+    // Get necessary state from other singletons
+    ECSSimulator& simulator = ECSSimulator::getInstance();
+    // SimManager& simManager = SimManager::getInstance(); // Remove unused variable
+    const entt::registry& registry = simulator.getRegistry();
+
+    clear();
+
+    // Call internal render helpers
+    renderSolidParticlesInternal(registry);
+    renderFluidParticlesInternal(registry);
+    renderGasParticlesInternal(registry);
+    renderFPSInternal(fps);
+
+    renderUI();
+
+    present();
+}
+
+// Implement internal rendering methods (just delegate)
+void PresentationManager::renderSolidParticlesInternal(const entt::registry &registry) {
     if (solidRenderer) {
-        solidRenderer->setDebugRendering(solidDebugEnabled); // Pass debug state
+        solidRenderer->setDebugRendering(solidDebugEnabled);
         solidRenderer->render(window, registry, currentColorScheme);
     }
 }
-
-void PresentationManager::renderFluidParticles(const entt::registry &registry) {
+void PresentationManager::renderFluidParticlesInternal(const entt::registry &registry) {
     if (fluidRenderer) {
-        // Fluid renderer manages its own debug state via toggleDebugVisualization
         fluidRenderer->render(window, registry);
     }
 }
-
-void PresentationManager::renderGasParticles(const entt::registry &registry) {
+void PresentationManager::renderGasParticlesInternal(const entt::registry &registry) {
     if (gasRenderer) {
         gasRenderer->render(window, registry);
     }
 }
-
-void PresentationManager::renderFPS(float fps) {
+void PresentationManager::renderFPSInternal(float fps) {
+    if (!uiRenderer) return;
     std::stringstream ss;
     ss << std::fixed << std::setprecision(1) << fps << " FPS";
-    renderText(ss.str(), 10, 10, sf::Color::White);
+    // Fix: Call renderText on uiRenderer instance
+    uiRenderer->renderText(window, ss.str(), 10, 10, sf::Color::White);
 }
 
-// --- UI Drawing Primitives Implementation (Keep here for now) ---
-void PresentationManager::renderText(const std::string &text, int x, int y, sf::Color color) {
-    sf::Text sfText;
-    sfText.setFont(font); // Use member font
-    sfText.setString(text);
-    sfText.setCharacterSize(12);
-    sfText.setFillColor(color);
-    sfText.setPosition(static_cast<float>(x), static_cast<float>(y));
-    window.draw(sfText);
-}
+// --- UI Layout Calculation & Drawing ---
+void PresentationManager::renderUI() {
+    if (!uiRenderer) return; // Need UIRenderer to draw
 
-void PresentationManager::drawButton(const UIButton& button, sf::Color fillColor, sf::Color textColor) {
-    sf::RectangleShape shape(sf::Vector2f(static_cast<float>(button.rect.width),
-                                          static_cast<float>(button.rect.height)));
-    shape.setPosition(static_cast<float>(button.rect.left),
-                      static_cast<float>(button.rect.top));
-    shape.setFillColor(fillColor);
-    shape.setOutlineColor(sf::Color::White);
-    shape.setOutlineThickness(1.f);
-    window.draw(shape);
+    SimManager& simManager = SimManager::getInstance(); // Needed for state
+    ECSSimulator& simulator = ECSSimulator::getInstance();
 
-    if (!button.label.empty()) {
-        renderText(button.label, button.rect.left + 5, button.rect.top + 3, textColor);
+    // Get state needed for UI
+    bool paused = simManager.isPaused(); // Add isPaused() getter to SimManager
+    SimulatorConstants::SimulationType currentScenario = simManager.getCurrentScenarioType(); // Add getter to SimManager
+    const auto& scenarioList = simManager.getScenarioList(); // Add getter to SimManager
+    const entt::registry& registry = simulator.getRegistry();
+
+    // Get current highlight state from EventManager
+    highlightedButtonID = EventManager::getInstance().getHighlightedButtonID(); // Add getter to EventManager
+
+    currentButtonLayout.clear(); // Clear previous layout
+
+    int const panelX = static_cast<int>(SimulatorConstants::ScreenLength) + 10;
+    int panelY = 10;
+
+    // --- Calculate and Draw Buttons (Logic moved from UIManager::renderUI) ---
+
+    // 1) Pause/Play
+    {
+        UIButton btn;
+        btn.rect = sf::IntRect(panelX, panelY, 60, 20);
+        btn.label = paused ? "Play" : "Pause";
+        btn.isSpecialButton = true;
+        btn.id = ButtonID::PAUSE_PLAY;
+        sf::Color color = (highlightedButtonID == btn.id) ? sf::Color(200,200,0) : sf::Color(100,100,100);
+        uiRenderer->drawButton(window, btn, color);
+        currentButtonLayout.push_back(btn);
+        panelY += 25;
     }
+
+    // 2) Next Frame
+    {
+        UIButton btn;
+        btn.rect = sf::IntRect(panelX, panelY, 80, 20);
+        btn.label = "Next Frame";
+        btn.isSpecialButton = true;
+        btn.id = ButtonID::NEXT_FRAME;
+        sf::Color bgColor = paused ? sf::Color(100,100,100) : sf::Color(50,50,50);
+        sf::Color fgColor = paused ? sf::Color::White : sf::Color(150,150,150);
+        // No highlight state for disabled button?
+        uiRenderer->drawButton(window, btn, bgColor, fgColor);
+        currentButtonLayout.push_back(btn);
+        panelY += 25;
+    }
+
+    // 3) Reset
+    {
+        UIButton btn;
+        btn.rect = sf::IntRect(panelX, panelY, 60, 20);
+        btn.label = "Reset";
+        btn.isSpecialButton = true;
+        btn.id = ButtonID::RESET;
+        sf::Color color = (highlightedButtonID == btn.id) ? sf::Color(200,200,0) : sf::Color(100,100,100);
+        uiRenderer->drawButton(window, btn, color);
+        currentButtonLayout.push_back(btn);
+        panelY += 25;
+    }
+
+    // 4) Speed Controls
+    uiRenderer->renderText(window, "Playback Speed:", panelX, panelY, sf::Color::White);
+    panelY += 25;
+    {
+        std::vector<std::pair<double, std::string>> speeds = {{0.25, "0.25x"}, {0.5, "0.5x"}, {1.0, "1x"}};
+        const Components::SimulatorState* simState = nullptr;
+        auto stView = registry.view<Components::SimulatorState>();
+        if (!stView.empty()) simState = &registry.get<Components::SimulatorState>(stView.front());
+
+        for (const auto& sp : speeds) {
+            UIButton btn;
+            btn.rect = sf::IntRect(panelX, panelY, 50, 20);
+            btn.label = sp.second;
+            btn.speedMultiplier = sp.first;
+            btn.isSpecialButton = true;
+            if (sp.first == 0.25) btn.id = ButtonID::SPEED_0_25X;
+            else if (sp.first == 0.5) btn.id = ButtonID::SPEED_0_5X;
+            else btn.id = ButtonID::SPEED_1X;
+
+            sf::Color color = (highlightedButtonID == btn.id) ? sf::Color(200,200,0) : sf::Color(100,100,100);
+            if (simState && (std::fabs(simState->timeScale - sp.first) < 0.01)) {
+                color = sf::Color(0,200,0); // Active color overrides highlight
+            }
+            uiRenderer->drawButton(window, btn, color);
+            currentButtonLayout.push_back(btn);
+            panelY += 25;
+        }
+    }
+    panelY += 20;
+
+    // 5) Color Scheme
+    uiRenderer->renderText(window, "Color Scheme:", panelX, panelY, sf::Color::White);
+    panelY += 25;
+    {
+        std::vector<std::pair<ColorScheme, std::string>> schemes = {
+            {ColorScheme::DEFAULT, "Default"}, {ColorScheme::SLEEP, "Sleep"}, {ColorScheme::TEMPERATURE, "Temperature"}
+        };
+        ColorScheme activeScheme = getColorScheme();
+        for (const auto& scheme : schemes) {
+            UIButton btn;
+            btn.rect = sf::IntRect(panelX, panelY, 100, 25);
+            btn.label = scheme.second;
+            btn.isSpecialButton = true;
+            if (scheme.first == ColorScheme::DEFAULT) btn.id = ButtonID::COLOR_DEFAULT;
+            else if (scheme.first == ColorScheme::SLEEP) btn.id = ButtonID::COLOR_SLEEP;
+            else btn.id = ButtonID::COLOR_TEMP;
+
+            sf::Color color = (highlightedButtonID == btn.id) ? sf::Color(200,200,0) : sf::Color(100,100,100);
+            if (activeScheme == scheme.first) {
+                color = sf::Color(0,200,0); // Active color overrides highlight
+            }
+            uiRenderer->drawButton(window, btn, color);
+            currentButtonLayout.push_back(btn);
+            panelY += 25;
+        }
+    }
+    panelY += 20;
+
+    // 6) Debug Toggle
+    uiRenderer->renderText(window, "Debug View:", panelX, panelY, sf::Color::White);
+    panelY += 25;
+    {
+        UIButton btn;
+        btn.rect = sf::IntRect(panelX, panelY, 100, 25);
+        btn.isSpecialButton = true;
+        btn.id = ButtonID::DEBUG_TOGGLE;
+        bool debugActive = isDebugVisualization();
+        btn.label = debugActive ? "Debug: ON" : "Debug: OFF";
+        sf::Color color = (highlightedButtonID == btn.id) ? sf::Color(200,200,0) : sf::Color(100,100,100);
+        if (debugActive) color = sf::Color(0,200,0);
+        uiRenderer->drawButton(window, btn, color);
+        currentButtonLayout.push_back(btn);
+        panelY += 25;
+    }
+    panelY += 20;
+
+    // 7) Scenarios
+    uiRenderer->renderText(window, "Scenarios:", panelX, panelY, sf::Color::White);
+    panelY += 25;
+    for (const auto& sc : scenarioList) {
+        UIButton btn;
+        btn.rect = sf::IntRect(panelX, panelY, 120, 20);
+        btn.label = sc.second;
+        btn.isSpecialButton = false;
+        btn.scenario = sc.first;
+        btn.id = ButtonID::SCENARIO_BUTTON;
+
+        bool isCurrent = (sc.first == currentScenario);
+        sf::Color color = (highlightedButtonID == btn.id && !isCurrent) ? sf::Color(200,200,0) : sf::Color(100,100,100);
+        if (isCurrent) {
+            color = sf::Color(0,200,0);
+        }
+        uiRenderer->drawButton(window, btn, color);
+        currentButtonLayout.push_back(btn);
+        panelY += 25;
+    }
+
+    // Pass the calculated layout to EventManager for next frame's hit detection
+    EventManager::getInstance().updateLayout(currentButtonLayout);
 }
 
 // --- State Management Implementation ---
@@ -189,42 +370,34 @@ bool PresentationManager::isDebugVisualization() const {
     return solidDebugEnabled || fluidDebugActive;
 }
 
-// --- Helper Methods (Remove - Moved to sub-renderers) ---
-// Remove the definitions of:
-// - renderParticles
-// - renderContactDebug
-// - renderVelocityDebug
-// - renderAngularDebug
-// - renderPolygonDebug
-// - aggregateParticlesByPixel
+// --- Event Handling Implementation ---
+void PresentationManager::handleEvents() {
+    sf::Event event;
+    while (window.pollEvent(event)) {
+        // Handle window close directly
+        if (event.type == sf::Event::Closed) {
+            window.close();
+            return; // Stop processing events if window closed
+        }
 
-// Remove the definition for renderParticles
-/*
-void PresentationManager::renderParticles(const entt::registry &registry) { ... }
-*/
+        // Pass other events to EventManager
+        EventManager::getInstance().processEvent(event);
 
-// Remove the definition for renderContactDebug
-/*
-void PresentationManager::renderContactDebug(const entt::registry &registry) { ... }
-*/
+        // EventManager now handles mouse move highlights internally,
+        // but we might need its result for rendering. Let's assume EventManager
+        // updates highlightedButtonID internally, and renderUI reads it.
+    }
 
-// Remove the definition for renderVelocityDebug
-/*
-void PresentationManager::renderVelocityDebug(const entt::registry &registry) { ... }
-*/
+    // Update highlight state AFTER processing all events for the frame
+    // This replaces UIManager::updateHighlights
+    sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+    EventManager::getInstance().handleMouseMoved(mousePos.x, mousePos.y);
+}
 
-// Remove the definition for renderAngularDebug
-/*
-void PresentationManager::renderAngularDebug(const entt::registry &registry) { ... }
-*/
-
-// Remove the definition for renderPolygonDebug
-/*
-void PresentationManager::renderPolygonDebug(const entt::registry &registry) { ... }
-*/
-
-// Remove the definition for aggregateParticlesByPixel
-/*
-std::unordered_map<std::pair<int,int>, PresentationManager::PixelProperties, PixelCoordHash>
-PresentationManager::aggregateParticlesByPixel(const entt::registry &registry) { ... }
-*/ 
+// --- Add Getter Implementation ---
+UIRenderer& PresentationManager::getUIRenderer() {
+    if (!uiRenderer) {
+        throw std::runtime_error("UIRenderer not initialized!");
+    }
+    return *uiRenderer;
+} 

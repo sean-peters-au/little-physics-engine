@@ -15,67 +15,20 @@
 
 #include <chrono>
 #include <SFML/System.hpp>
+#include <iostream>
 
 #include "core/profile.hpp"
 #include "sim_manager.hpp"
 
-int main(int /*unused*/, char** /*unused*/)
-{
-    SimManager simManager;
-    if (!simManager.init())
-    {
-        return 1;
-    }
+int main() {
+    // Profile the entire application run
+    PROFILE_SCOPE("main");
 
-    // Desired FPS
-    const int fps = 120;
-    const int frameDelay = 1000 / fps; // in milliseconds
+    // Get the SimManager singleton instance
+    SimManager& simManager = SimManager::getInstance();
 
-    sf::Clock frameClock;
-    float avgFPS = 0.0F;
-    float fpsTimer = 0.0F;
-    int frameCount = 0;
-
-    bool running = true;
-
-    // For periodic profiler stats
-    auto lastStats = std::chrono::steady_clock::now();
-
-    while (running)
-    {
-        running = simManager.handleEvents();
-
-        simManager.tick();
-
-        // Measure frame time for FPS
-        float dt = frameClock.restart().asMilliseconds();
-        fpsTimer += dt;
-        frameCount++;
-        if (fpsTimer >= 1000.0F)
-        {
-            avgFPS = static_cast<float>(frameCount) / (fpsTimer / 1000.0F);
-            frameCount = 0;
-            fpsTimer = 0.0F;
-        }
-
-        simManager.render(avgFPS);
-
-        // Simple frame limiting
-        if (frameDelay > dt)
-        {
-            sf::sleep(sf::milliseconds(static_cast<int>(frameDelay - dt)));
-        }
-
-        // Print & reset profiler stats every 10s
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - lastStats).count();
-        if (elapsed >= 10)
-        {
-            Profiling::Profiler::printStats();
-            Profiling::Profiler::reset();
-            lastStats = now;
-        }
-    }
+    // Run the simulation loop via the singleton
+    simManager.run();
 
     return 0;
 }
