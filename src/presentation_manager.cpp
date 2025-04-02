@@ -108,8 +108,8 @@ void PresentationManager::renderFrame(float fps) {
     ECSSimulator& simulator = ECSSimulator::getInstance();
     const entt::registry& registry = simulator.getRegistry();
     clear();
-    renderSolidParticlesInternal(registry);
     renderFluidParticlesInternal(registry);
+    renderSolidParticlesInternal(registry);
     renderGasParticlesInternal(registry);
     renderFPSInternal(fps);
     renderUI();

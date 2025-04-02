@@ -66,7 +66,7 @@ bool SimManager::init() {
   return true;
 }
 
-// Tick simulation (private helper)
+// Tick simulation
 void SimManager::tick() {
   if (!paused || stepFrame) {
     simulatorInstance.tick();
@@ -74,7 +74,7 @@ void SimManager::tick() {
   }
 }
 
-// Render frame (private helper)
+// Render frame
 void SimManager::render(float fps) {
   presentationManagerInstance.renderFrame(fps);
 }
