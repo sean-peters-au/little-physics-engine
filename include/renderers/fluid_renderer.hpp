@@ -68,6 +68,7 @@ private:
     // Compute Pipelines
     MTL::ComputePipelineState* densityKernelPSO_ = nullptr;
     MTL::ComputePipelineState* blurKernelPSO_ = nullptr;
+    MTL::ComputePipelineState* normalizeDensityPSO_ = nullptr;
 
     // Render Pipeline & State
     MTL::RenderPipelineState* screenShaderPSO_ = nullptr;
@@ -83,6 +84,7 @@ private:
     MTL::Texture* densityTexture_ = nullptr; // Raw density output
     MTL::Texture* blurredTexture_ = nullptr; // Blurred density output
     MTL::Texture* finalFluidTexture_ = nullptr; // Output texture for CPU readback (Managed/Shared)
+    MTL::Texture* normalizedDensityTexture_ = nullptr;
     uint2 currentGridSize_ = {0, 0};
 
     // Fallback shader (if needed, moved from PresentationManager?)

@@ -48,22 +48,19 @@ kernel void calculateDensityGrid(
     float2 cellCenterPos = params.gridOrigin + (float2(gid) + 0.5f) * params.cellSize;
 
     float density = 0.0f;
-    float h_default = params.defaultSmoothingRadius;
-    float h_default_sq = h_default * h_default;
+    // Calculate h_relative based on new smoothingRadius parameter and cellSize
+    float h_relative = params.smoothingRadius * params.cellSize;
+    float hSq = h_relative * h_relative;
 
     // Iterate through all particles
     for (uint i = 0; i < params.particleCount; ++i) {
         float2 particlePos = particles[i].position;
-        // --- DEBUG: Force using default H --- 
-        // float h = particles[i].smoothingRadius > 0.0f ? particles[i].smoothingRadius : h_default;
-        float hSq = h_default_sq; // Always use default h^2 for now
-        // ------------------------------------
-
         float2 diff = cellCenterPos - particlePos;
         float distSq = dot(diff, diff);
 
         // Accumulate density contribution using SPH kernel
-        density += kernelPoly6(distSq, hSq); // Pass the currently used hSq
+        // Always use the hSq calculated from params.smoothingRadius * params.cellSize
+        density += kernelPoly6(distSq, hSq);
     }
 
     // Write the calculated density to the output texture
@@ -106,6 +103,31 @@ kernel void boxBlur(
     outputTexture.write(blurredValue, gid);
 }
 
+// --- Kernel: Normalize Density --- 
+/**
+ * @brief Normalizes the input density texture based on the found maximum.
+ * Writes normalized values (0-1 range) to the output texture.
+ */
+kernel void normalizeDensity(
+    texture2d<float, access::read> inputTexture [[texture(0)]], // Blurred density
+    texture2d<float, access::write> outputTexture [[texture(1)]], // Normalized output (R8Unorm -> sample as float)
+    constant GPURenderParams& params [[buffer(0)]], // Read max density from params
+    uint2 gid [[thread_position_in_grid]])
+{
+    uint width = inputTexture.get_width();
+    uint height = inputTexture.get_height();
+    if (gid.x >= width || gid.y >= height) return;
+
+    float density = inputTexture.read(gid).r;
+    // Read maxDensity from params struct now
+    float maxD = params.maxDensity; // Assumes maxDensity field exists in GPURenderParams
+
+    float normalizedDensity = (maxD > 1e-6f) ? saturate(density / maxD) : 0.0f;
+
+    // Write normalized value
+    outputTexture.write(normalizedDensity, gid); 
+}
+
 // --- Vertex Shader for Fullscreen Quad ---
 /**
  * @brief Input vertex structure for the fullscreen quad.
@@ -142,21 +164,19 @@ vertex ScreenVertex screenQuadVertexShader(
  */
 fragment float4 fluidScreenSpaceFragmentShader(
     ScreenVertex in [[stage_in]],
-    texture2d<float, access::sample> blurredTexture [[texture(0)]], // Use blurred texture
+    // Texture format is R8Unorm in C++, but sampled as float
+    texture2d<float, access::sample> normalizedDensityTexture [[texture(0)]],
     constant FluidFragmentParams& params [[buffer(0)]] 
 )
 {
-    constexpr sampler sam(filter::linear, address::clamp_to_edge); // Use linear sampler again
-    // Read the blurred density value
-    float blurredDensity = blurredTexture.sample(sam, in.texCoord).r;
+    constexpr sampler sam(filter::linear, address::clamp_to_edge); 
+    // Sample the normalized density value (will be float 0.0-1.0)
+    float normalizedDensity = normalizedDensityTexture.sample(sam, in.texCoord).r;
     
-    // Scale the density before thresholding, because raw values are very small
-    float scaledDensity = blurredDensity * 100000000.0f; // Keep the large multiplier for now
-
-    // Apply thresholding and smoothing using scaled density
+    // Apply thresholding and smoothing using normalized density
     float alpha = smoothstep(params.threshold - params.smoothness,
                            params.threshold + params.smoothness,
-                           scaledDensity);
+                           normalizedDensity);
 
     // Return final color (premultiplied alpha)
     float4 finalColor = params.baseColor;

@@ -50,6 +50,8 @@ struct GPURenderParams {
 
     // Kernel Parameters
     float defaultSmoothingRadius; // Fallback h if particle h is invalid
+    float smoothingRadius;      // Relative smoothing radius (like CPU's parameter)
+    float maxDensity;           // Max density found (for normalization kernel)
     // Add other params like density scaling factors if needed
 };
 
