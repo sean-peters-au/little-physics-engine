@@ -4,8 +4,8 @@
  */
 
 #include <iostream>
-#include <SFML/System/Clock.hpp> // For sf::Clock
-#include <SFML/Window/Event.hpp> // For sf::Event
+#include <SFML/System/Clock.hpp>
+#include <SFML/Window/Event.hpp>
 
 #include "sim_manager.hpp"
 #include "presentation_manager.hpp"
@@ -14,7 +14,7 @@
 #include "core/profile.hpp"
 #include "renderer_types.hpp"
 #include "scenario_manager.hpp"
-#include "sim.hpp" // For ECSSimulator
+#include "sim.hpp"
 
 // Singleton instance getter
 SimManager& SimManager::getInstance() {

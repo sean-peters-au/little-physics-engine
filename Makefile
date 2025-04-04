@@ -59,7 +59,9 @@ print-debug:
 
 # Define variables for native build
 NATIVE_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/native/*.cpp)
-NATIVE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/native/%.o,$(BASE_SRCS)) \
+NATIVE_OBJS := $(filter-out $(BUILD_DIR)/native/renderers/fluid_renderer.o, \
+               $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/native/%.o,$(BASE_SRCS))) \
+               $(BUILD_DIR)/renderers/fluid_renderer.o \
                $(patsubst $(SRC_DIR)/arch/native/%.cpp,$(BUILD_DIR)/arch/native/%.o,$(NATIVE_ARCH_SRCS))
 NATIVE_SRCS := $(BASE_SRCS) $(NATIVE_ARCH_SRCS)
 NATIVE_DEPS := $(NATIVE_OBJS:.o=.d)  # Add dependency files
@@ -71,10 +73,24 @@ WASM_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/wasm/%.o,$(BASE_SRCS)) \
 WASM_SRCS := $(BASE_SRCS) $(WASM_ARCH_SRCS)
 WASM_DEPS := $(WASM_OBJS:.o=.d)  # Add dependency files
 
+# Compile fluid_renderer.cpp as Objective-C++ for native build
+$(BUILD_DIR)/renderers/fluid_renderer.o: $(SRC_DIR)/renderers/fluid_renderer.cpp
+	@echo "Compiling Objective-C++ $<"
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -x objective-c++ -MMD -MP -MF $(@:.o=.d) -c $< -o $@
+
+# General rule for native C++ files (ensure it doesn't conflict)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+	# Prevent this rule from matching fluid_renderer.cpp again
+	$(if $(filter $(SRC_DIR)/renderers/fluid_renderer.cpp,$<), , \
+		@echo "Compiling native C++ $<" ; \
+		@mkdir -p $(@D) ; \
+		$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@ )
+
 native: CXX := clang++
 native: CXXFLAGS += $(NATIVE_CXXFLAGS) -Xpreprocessor -fopenmp -I$(LIBOMP_PREFIX)/include $(METAL_INCLUDE) $(METAL_CPP_INCLUDE)
-native: LDFLAGS := -L/opt/homebrew/lib -L$(LIBOMP_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system -lomp -framework Metal -framework Cocoa -framework MetalKit
-native: directories copy_assets $(NATIVE_OBJS) $(BUILD_DIR)/fluid_kernels.metallib
+native: LDFLAGS := -L/opt/homebrew/lib -L$(LIBOMP_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system -lomp -framework Metal -framework Cocoa -framework MetalKit -framework QuartzCore
+native: directories copy_assets $(NATIVE_OBJS) $(BUILD_DIR)/fluid_kernels.metallib $(BUILD_DIR)/fluid_renderer_kernels.metallib
 	@echo "Building native target with objects: $(NATIVE_OBJS)"
 	$(CXX) $(CXXFLAGS) $(NATIVE_OBJS) -o $(BUILD_DIR)/simulator_native $(LDFLAGS)
 
@@ -127,6 +143,7 @@ directories:
 	@mkdir -p $(BUILD_DIR)/systems
 	@mkdir -p $(BUILD_DIR)/core
 	@mkdir -p $(BUILD_DIR)/rendering
+	@mkdir -p $(BUILD_DIR)/renderers
 	@mkdir -p $(BUILD_DIR)/arch/native
 	@mkdir -p $(BUILD_DIR)/arch/wasm
 	@mkdir -p $(ASSETS_DIR)/fonts
@@ -200,13 +217,21 @@ serve: wasm
 	fi
 
 # ---------------------------------------------------------------------------------
-# Build rule for Metal shader file
+# Build rule for Metal shader files
 # ---------------------------------------------------------------------------------
 
+# Rule for PHYSICS kernels
 $(BUILD_DIR)/fluid_kernels.metallib: $(SRC_DIR)/systems/fluid/fluid_kernels.metal | directories
-	@echo "Compiling Metal shader $<"
+	@echo "Compiling PHYSICS Metal shader $<"
 	$(METAL) -c $< -I./include -o $(BUILD_DIR)/fluid_kernels.air
 	$(METALLIB) $(BUILD_DIR)/fluid_kernels.air -o $@
 	@rm $(BUILD_DIR)/fluid_kernels.air
+
+# Rule for RENDERING kernels (New - Line ~207)
+$(BUILD_DIR)/fluid_renderer_kernels.metallib: $(SRC_DIR)/renderers/fluid_renderer_kernels.metal | directories
+	@echo "Compiling RENDERING Metal shader $<"
+	$(METAL) -c $< -I./include -o $(BUILD_DIR)/fluid_renderer_kernels.air
+	$(METALLIB) $(BUILD_DIR)/fluid_renderer_kernels.air -o $@
+	@rm $(BUILD_DIR)/fluid_renderer_kernels.air
 
 .PHONY: all native wasm clean rebuild test directories copy_assets lint lint-fix compile_commands serve

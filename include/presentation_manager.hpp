@@ -136,6 +136,11 @@ private:
     std::unique_ptr<GasRenderer> gasRenderer;
     std::unique_ptr<UIRenderer> uiRenderer;
 
+    // --- Members for Metal Fluid Compositing ---
+    sf::Texture metalFluidTexture;
+    sf::Sprite metalFluidSprite;
+    std::vector<uint8_t> fluidTextureBuffer;
+
     // --- Helper Methods (Removed from here) ---
     // void renderContactDebug(const entt::registry &registry); // Moved
     // void renderVelocityDebug(const entt::registry &registry); // Moved

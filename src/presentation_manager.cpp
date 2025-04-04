@@ -19,6 +19,8 @@
 #include <cmath>
 #include <stdexcept> // For std::runtime_error
 #include <SFML/Window/Mouse.hpp> // For sf::Mouse
+#include <SFML/Graphics/Texture.hpp>
+#include <SFML/Graphics/Sprite.hpp>
 
 // Required components/utils
 #include "entities/entity_components.hpp"
@@ -63,6 +65,9 @@ PresentationManager::PresentationManager(int screenWidth, int screenHeight, cons
     , solidRenderer(std::make_unique<SolidRenderer>(coordinates))
     , fluidRenderer(std::make_unique<FluidRenderer>(coordinates, sf::Vector2u(SimulatorConstants::ScreenLength, SimulatorConstants::ScreenLength)))
     , gasRenderer(std::make_unique<GasRenderer>(coordinates))
+    , metalFluidTexture()
+    , metalFluidSprite()
+    , fluidTextureBuffer()
 {}
 
 // Destructor
@@ -107,13 +112,52 @@ void PresentationManager::handleEvents() {
 void PresentationManager::renderFrame(float fps) {
     ECSSimulator& simulator = ECSSimulator::getInstance();
     const entt::registry& registry = simulator.getRegistry();
-    clear();
-    renderFluidParticlesInternal(registry);
+
+    // 1. Render Fluid Simulation to offscreen Metal texture
+    if (fluidRenderer) {
+        fluidRenderer->render(registry); // No window needed
+    }
+
+    // 2. Clear SFML window
+    clear(); // window.clear(sf::Color::Black);
+
+    // 3. Render SFML-based elements
     renderSolidParticlesInternal(registry);
     renderGasParticlesInternal(registry);
+
+    // 4. Read back Metal texture and draw it as an SFML sprite
+    if (fluidRenderer) {
+        sf::Vector2u textureSize;
+        if (fluidRenderer->readFluidTexture(fluidTextureBuffer, textureSize)) {
+            // Ensure sf::Texture exists and has the right size
+            if (metalFluidTexture.getSize() != textureSize) {
+                if (!metalFluidTexture.create(textureSize.x, textureSize.y)) {
+                    std::cerr << "Error: Failed to create sf::Texture for fluid." << std::endl;
+                } else {
+                    std::cout << "Debug: Created/Resized sf::Texture for fluid: " << textureSize.x << "x" << textureSize.y << std::endl;
+                }
+            }
+            // Update the texture with the new pixel data
+            if (metalFluidTexture.getSize() == textureSize && !fluidTextureBuffer.empty()) {
+                metalFluidTexture.update(fluidTextureBuffer.data());
+                metalFluidSprite.setTexture(metalFluidTexture, true); // Update sprite texture
+                // Draw the sprite (covers the whole simulation area if texture matches screenDim)
+                window.draw(metalFluidSprite);
+                 std::cout << "Debug: Drew fluid sprite." << std::endl;
+            } else {
+                 std::cout << "Debug: Skipped drawing fluid sprite (texture size mismatch or empty buffer)." << std::endl;
+            }
+        } else {
+             std::cout << "Debug: Failed to read fluid texture." << std::endl;
+        }
+    }
+
+    // 5. Render UI on top
     renderFPSInternal(fps);
     renderUI();
-    present();
+
+    // 6. Present final frame
+    present(); // window.display();
 }
 
 // Delegate solid particle rendering
@@ -122,10 +166,6 @@ void PresentationManager::renderSolidParticlesInternal(const entt::registry &reg
         solidRenderer->setDebugRendering(solidDebugEnabled);
         solidRenderer->render(window, registry, currentColorScheme);
     }
-}
-// Delegate fluid particle rendering
-void PresentationManager::renderFluidParticlesInternal(const entt::registry &registry) {
-    if (fluidRenderer) { fluidRenderer->render(window, registry); }
 }
 // Delegate gas particle rendering
 void PresentationManager::renderGasParticlesInternal(const entt::registry &registry) {
