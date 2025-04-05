@@ -88,6 +88,9 @@ private:
     MTL::Texture* normalizedDensityTexture_ = nullptr;
     uint2 currentGridSize_ = {0, 0};
 
+    // --- Add state flag ---
+    bool particlesRenderedLastFrame_ = false;
+
     // Fallback shader (if needed, moved from PresentationManager?)
     // std::unique_ptr<sf::Shader> metaballShader_;
 }; 

@@ -332,6 +332,9 @@ void FluidRenderer::ensureResources(int particleCount) {
 // --- Main Render Method ---
 void FluidRenderer::render(const entt::registry& registry)
 {
+    // Reset flag at the beginning
+    particlesRenderedLastFrame_ = false; 
+
     if (!device_ || !commandQueue_ || !metalLibrary_ || !densityKernelPSO_ || !blurKernelPSO_ || !screenShaderPSO_ || !depthState_) {
         return; // Ensure Metal is initialized
     }
@@ -357,7 +360,8 @@ void FluidRenderer::render(const entt::registry& registry)
 
     int particleCount = static_cast<int>(cpuParticles.size());
     if (particleCount == 0) { 
-        // TODO: Optionally clear the finalFluidTexture_ here if desired
+        // No particles, ensure flag is false and return
+        particlesRenderedLastFrame_ = false; 
         return; 
     }
 
@@ -501,11 +505,19 @@ void FluidRenderer::render(const entt::registry& registry)
 
     // --- Commit ---
     cmdBuffer->commit(); 
+
+    // If we reached here, we rendered particles
+    particlesRenderedLastFrame_ = true; 
 }
 
 // --- Read Texture Data --- // Updated for finalFluidTexture_
 bool FluidRenderer::readFluidTexture(std::vector<uint8_t>& outBuffer, sf::Vector2u& outSize)
 {
+    // Check if anything was rendered last frame
+    if (!particlesRenderedLastFrame_) {
+        return false; // Indicate nothing to read
+    }
+
     if (!finalFluidTexture_) {
         std::cerr << "Error [readFluidTexture]: finalFluidTexture_ is null." << std::endl;
         return false;
