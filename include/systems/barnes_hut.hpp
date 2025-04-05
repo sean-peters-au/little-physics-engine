@@ -16,6 +16,7 @@
 
 #include <entt/entt.hpp>
 #include <memory>
+#include <vector>
 
 #include "systems/i_system.hpp"
 #include "entities/entity_components.hpp"
@@ -78,6 +79,12 @@ private:
      * @brief Node in the Barnes-Hut quadtree
      */
     struct QuadTreeNode {
+        // Default constructor to reset state
+        QuadTreeNode() : registry(nullptr), totalMass(0.0), centerOfMassX(0.0), centerOfMassY(0.0),
+                         boundaryX(0.0), boundaryY(0.0), boundarySize(0.0),
+                         isLeaf(true), allSmall(true), singleParticle(entt::null),
+                         nw(nullptr), ne(nullptr), sw(nullptr), se(nullptr) {}
+
         const entt::registry* registry = nullptr;
         double totalMass = 0.0;
         double centerOfMassX = 0.0;
@@ -90,12 +97,13 @@ private:
         bool isLeaf = true;
         bool allSmall = true;  ///< Whether all masses in this node are below the small-mass threshold
 
-        entt::entity singleParticle;  ///< If leaf with exactly one particle
+        entt::entity singleParticle = entt::null;  ///< If leaf with exactly one particle
 
-        std::unique_ptr<QuadTreeNode> nw;
-        std::unique_ptr<QuadTreeNode> ne;
-        std::unique_ptr<QuadTreeNode> sw;
-        std::unique_ptr<QuadTreeNode> se;
+        // Change from unique_ptr to raw pointers
+        QuadTreeNode* nw = nullptr;
+        QuadTreeNode* ne = nullptr;
+        QuadTreeNode* sw = nullptr;
+        QuadTreeNode* se = nullptr;
 
         /**
          * @brief Checks whether a point (x, y) is within this node's bounding square
@@ -125,8 +133,9 @@ private:
 
     /**
      * @brief Builds the quadtree from all applicable particles
+     * @return Raw pointer to the root node (owned by the pool)
      */
-    std::unique_ptr<QuadTreeNode> buildTree(const entt::registry& registry);
+    QuadTreeNode* buildTree(const entt::registry& registry);
 
     /**
      * @brief Inserts a single particle into the quadtree
@@ -150,6 +159,17 @@ private:
                         Components::Velocity& vel,
                         const Components::Mass& mass,
                         const Components::SimulatorState& state);
+
+    /**
+     * @brief Helper to get a node from the pool, resizing if necessary.
+     * @return Pointer to an initialized node.
+     */
+    QuadTreeNode* allocateNode();
+
+    // Node Pool members
+    std::vector<QuadTreeNode> nodePool_;
+    size_t nextNodeIndex_ = 0;
+    static constexpr size_t INITIAL_POOL_SIZE = 1024; // Or some reasonable starting size
 };
 
 }  // namespace Systems

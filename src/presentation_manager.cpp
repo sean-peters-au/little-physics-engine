@@ -387,8 +387,5 @@ void PresentationManager::renderMetalFluidInternal(const entt::registry& registr
             // Remove draw log
         } 
         // Remove skip log
-    } else {
-        // Keep failure log
-         std::cout << "Debug: Failed to read fluid texture." << std::endl;
     }
 } 

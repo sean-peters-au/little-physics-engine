@@ -27,12 +27,51 @@ namespace Systems {
 using Clock = std::chrono::high_resolution_clock;
 using TimePoint = std::chrono::time_point<Clock>;
 
+// Define a threshold to skip the system if all masses are below this
+// const double MASS_SKIP_THRESHOLD = 1.0e5; // Example: 100,000 kg // REMOVE HARDCODED VALUE
+
 BarnesHutSystem::BarnesHutSystem() {
-    // No special setup; rely on default config
+    nodePool_.resize(INITIAL_POOL_SIZE); // Pre-allocate initial pool size
+}
+
+// Define the allocateNode helper function
+BarnesHutSystem::QuadTreeNode* BarnesHutSystem::allocateNode() {
+    if (nextNodeIndex_ >= nodePool_.size()) {
+        // Pool exhausted, double its size (or use a different growth strategy)
+        size_t oldSize = nodePool_.size();
+        nodePool_.resize(oldSize * 2);
+        std::cout << "[BarnesHut] Resized node pool from " << oldSize << " to " << nodePool_.size() << std::endl;
+    }
+    QuadTreeNode* node = &nodePool_[nextNodeIndex_++];
+    // Reset the node's state (using default constructor logic)
+    *node = QuadTreeNode();
+    return node;
 }
 
 void BarnesHutSystem::update(entt::registry& registry) {
     PROFILE_SCOPE("BarnesHutSystem");
+
+    // --- Early exit check: Skip if all masses are insignificant --- 
+    // Only perform this check if the small mass threshold is enabled (positive)
+    if (specificConfig.smallMassThreshold > 0.0) {
+        bool shouldSkip = true; // Assume we should skip initially
+        auto massCheckView = registry.view<Components::Mass>(entt::exclude<Components::Boundary>);
+        
+        // Iterate through relevant entities to check masses
+        for (auto entity : massCheckView) {
+            const auto& mass = massCheckView.get<Components::Mass>(entity);
+            // Use the threshold from the config
+            if (mass.value >= specificConfig.smallMassThreshold) { 
+                shouldSkip = false; // Found a significant mass, don't skip
+                break; // No need to check further
+            }
+        }
+        if (shouldSkip) {
+            // std::cout << "[BarnesHut] Skipping update: All masses below threshold." << std::endl;
+            return; // Exit early
+        }
+    }
+    // --- End of early exit check ---
 
     // Fetch the simulation state (time scaling, etc.)
     auto stateView = registry.view<Components::SimulatorState>();
@@ -44,6 +83,7 @@ void BarnesHutSystem::update(entt::registry& registry) {
 
     // Build the quadtree
     auto root = buildTree(registry);
+    if (!root) return; // Handle allocation failure or empty tree
     auto afterBuild = Clock::now();  // Potentially used for profiling
 
     // Prepare to iterate all non-boundary bodies that we want to apply forces to
@@ -56,13 +96,18 @@ void BarnesHutSystem::update(entt::registry& registry) {
         auto& vel = bodyView.get<Components::Velocity>(entity);
         auto& mass = bodyView.get<Components::Mass>(entity);
 
-        calculateForce(root.get(), entity, pos, vel, mass, simState);
+        calculateForce(root, entity, pos, vel, mass, simState);
     }
 }
 
-std::unique_ptr<BarnesHutSystem::QuadTreeNode> BarnesHutSystem::buildTree(const entt::registry& registry) {
-    // Create the root node
-    auto root = std::make_unique<QuadTreeNode>();
+BarnesHutSystem::QuadTreeNode* BarnesHutSystem::buildTree(const entt::registry& registry) {
+    // Reset pool index for this build
+    nextNodeIndex_ = 0;
+
+    // Create the root node using the pool
+    auto root = allocateNode();
+    if (!root) return nullptr;
+
     root->registry = &registry;
     root->boundaryX = 0.0;
     root->boundaryY = 0.0;
@@ -80,7 +125,7 @@ std::unique_ptr<BarnesHutSystem::QuadTreeNode> BarnesHutSystem::buildTree(const 
         if (pos.x >= 0.0 && pos.x < sysConfig.UniverseSizeMeters &&
             pos.y >= 0.0 && pos.y < sysConfig.UniverseSizeMeters)
         {
-            insertParticle(root.get(), entity, pos, mass);
+            insertParticle(root, entity, pos, mass);
         }
     }
 
@@ -142,10 +187,10 @@ void BarnesHutSystem::insertParticle(QuadTreeNode* node,
         int quadrant = node->getQuadrant(pos.x, pos.y);
         QuadTreeNode* child = nullptr;
         switch (quadrant) {
-            case 0: child = node->nw.get(); break;
-            case 1: child = node->ne.get(); break;
-            case 2: child = node->sw.get(); break;
-            case 3: child = node->se.get(); break;
+            case 0: child = node->nw; break;
+            case 1: child = node->ne; break;
+            case 2: child = node->sw; break;
+            case 3: child = node->se; break;
         }
         if (child) {
             insertParticle(child, entity, pos, mass);
@@ -160,29 +205,38 @@ void BarnesHutSystem::subdivide(QuadTreeNode* node) {
     double x = node->boundaryX;
     double y = node->boundaryY;
 
-    node->nw = std::make_unique<QuadTreeNode>();
-    node->nw->registry = node->registry;
-    node->nw->boundaryX = x;
-    node->nw->boundaryY = y;
-    node->nw->boundarySize = halfSize;
+    // Use allocateNode instead of std::make_unique
+    node->nw = allocateNode();
+    if (node->nw) { // Check for allocation success
+        node->nw->registry = node->registry;
+        node->nw->boundaryX = x;
+        node->nw->boundaryY = y;
+        node->nw->boundarySize = halfSize;
+    }
 
-    node->ne = std::make_unique<QuadTreeNode>();
-    node->ne->registry = node->registry;
-    node->ne->boundaryX = x + halfSize;
-    node->ne->boundaryY = y;
-    node->ne->boundarySize = halfSize;
+    node->ne = allocateNode();
+    if (node->ne) {
+        node->ne->registry = node->registry;
+        node->ne->boundaryX = x + halfSize;
+        node->ne->boundaryY = y;
+        node->ne->boundarySize = halfSize;
+    }
 
-    node->sw = std::make_unique<QuadTreeNode>();
-    node->sw->registry = node->registry;
-    node->sw->boundaryX = x;
-    node->sw->boundaryY = y + halfSize;
-    node->sw->boundarySize = halfSize;
+    node->sw = allocateNode();
+    if (node->sw) {
+        node->sw->registry = node->registry;
+        node->sw->boundaryX = x;
+        node->sw->boundaryY = y + halfSize;
+        node->sw->boundarySize = halfSize;
+    }
 
-    node->se = std::make_unique<QuadTreeNode>();
-    node->se->registry = node->registry;
-    node->se->boundaryX = x + halfSize;
-    node->se->boundaryY = y + halfSize;
-    node->se->boundarySize = halfSize;
+    node->se = allocateNode();
+    if (node->se) {
+        node->se->registry = node->registry;
+        node->se->boundaryX = x + halfSize;
+        node->se->boundaryY = y + halfSize;
+        node->se->boundarySize = halfSize;
+    }
 }
 
 void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
@@ -234,10 +288,10 @@ void BarnesHutSystem::calculateForce(const QuadTreeNode* node,
         vel.y += accY * dt;
     } else {
         // Otherwise, recurse into children
-        calculateForce(node->nw.get(), entity, pos, vel, mass, state);
-        calculateForce(node->ne.get(), entity, pos, vel, mass, state);
-        calculateForce(node->sw.get(), entity, pos, vel, mass, state);
-        calculateForce(node->se.get(), entity, pos, vel, mass, state);
+        calculateForce(node->nw, entity, pos, vel, mass, state);
+        calculateForce(node->ne, entity, pos, vel, mass, state);
+        calculateForce(node->sw, entity, pos, vel, mass, state);
+        calculateForce(node->se, entity, pos, vel, mass, state);
     }
 }
 
