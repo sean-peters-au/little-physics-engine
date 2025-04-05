@@ -16,23 +16,11 @@ void MovementSystem::update(entt::registry &registry) {
     // Time step in real seconds (with all time scaling)
     double const dt = sysConfig.SecondsPerTick * sysConfig.TimeAcceleration;
 
-    // View of entities with Position and Velocity
-    auto view = registry.view<Components::Position, Components::Velocity>();
+    // View of entities with Position and Velocity, excluding Boundaries and ParticlePhase
+    auto view = registry.view<Components::Position, Components::Velocity>(entt::exclude<Components::Boundary, Components::ParticlePhase>);
 
     for (auto [entity, pos, vel] : view.each()) {
-        // Skip boundaries
-        if (registry.any_of<Components::Boundary>(entity)) {
-            continue; // Don't move boundaries
-        }
-        
-        // Hack: Only move solids; skip if ParticlePhase exists and is not Solid
-        if (registry.any_of<Components::ParticlePhase>(entity)) {
-            if (registry.get<Components::ParticlePhase>(entity).phase == Components::Phase::Liquid) {
-                continue; // Skip fluids (or any non-solid phase)
-            }
-        }
-
-        // Update position for solids
+        // Update position for solids (or any remaining entities)
         pos.x += vel.x * dt;
         pos.y += vel.y * dt;
 

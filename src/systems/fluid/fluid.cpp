@@ -947,8 +947,10 @@ void FluidSystem::multiStepVelocityVerlet(
             cmdBuf->commit();
             cmdBuf->waitUntilCompleted();
         }
+    }
 
-        // Update the ECS velocities for rigid bodies after fluid impulses
+    // Update the ECS velocities for rigid bodies ONCE after ALL sub-steps
+    if (rigidCount > 0) {
         writeBackRigidBodies(registry, rigidEntities, rigidBuf_, rigidCount);
     }
 }
