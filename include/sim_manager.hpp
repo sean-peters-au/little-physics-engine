@@ -8,11 +8,13 @@
 
 #include <memory>
 #include <SFML/System/Time.hpp>
+#include <SFML/System/Clock.hpp>
 
 #include "presentation_manager.hpp"
 #include "scenario_manager.hpp"
 #include "sim.hpp"
 #include "renderer_types.hpp"
+#include "core/constants.hpp"
 
 /**
  * @class SimManager
@@ -85,8 +87,7 @@ class SimManager {
 
   // Private helper methods called by run()
   void tick();
-  void render(float fps);
-  bool handleEvents(); // Event polling, may be removed fully later
+  void render(float actualFPS, float actualTPS);
 
   // Singleton references
   PresentationManager& presentationManagerInstance;
@@ -101,4 +102,19 @@ class SimManager {
   // Timer for profiler printing
   sf::Time timeSinceLastProfilerPrint;
   const sf::Time profilerPrintInterval = sf::seconds(10.f);
+
+  // --- Members for decoupled loop and stats ---
+  // Target rates
+  const float targetTPS = static_cast<float>(SimulatorConstants::StepsPerSecond);
+  const float targetFPS = 60.0f;  // Target frames per second (can adjust later)
+
+  // Timing for stats calculation
+  sf::Clock statsClock;
+  sf::Time statsAccumulator;
+  const sf::Time statsUpdateInterval = sf::seconds(0.5f);
+  unsigned int frameCount = 0;
+  unsigned int tickCount = 0;
+  float actualFPS = 0.0f;
+  float actualTPS = 0.0f;
+  // --- End members ---
 };

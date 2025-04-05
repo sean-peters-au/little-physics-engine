@@ -77,8 +77,8 @@ public:
     void updateCoordinates(const SharedSystemConfig& config);
 
     // --- Rendering Orchestration ---
-    /** @brief Orchestrates the rendering of a single frame (particles, UI, FPS). */
-    void renderFrame(float fps);
+    /** @brief Orchestrates the rendering of a single frame (particles, UI, Stats). */
+    void renderFrame(float actualFPS, float actualTPS);
 
     /** @brief Calculates UI layout based on current state and draws it via UIRenderer. */
     void renderUI();
@@ -152,9 +152,10 @@ private:
     // 6. Add internal rendering helpers
     void renderSolidParticlesInternal(const entt::registry& registry);
     void renderGasParticlesInternal(const entt::registry& registry);
-    void renderFPSInternal(float fps);
+    /** @brief Renders FPS, TPS, and Time Acceleration stats. */
+    void renderStatsInternal(float actualFPS, float actualTPS);
     /** @brief Handles reading Metal texture and drawing it via SFML sprite. */
-    void renderFluidInternal(const entt::registry& registry);
+    void renderMetalFluidInternal(const entt::registry& registry);
 
     // 7. Store UI Layout data
     std::vector<UIButton> currentButtonLayout;

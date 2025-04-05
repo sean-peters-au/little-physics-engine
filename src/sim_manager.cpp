@@ -30,9 +30,7 @@ SimManager::SimManager()
       scenarioManager(),
       running(true),
       paused(false),
-      stepFrame(false),
-      timeSinceLastProfilerPrint(sf::Time::Zero),
-      profilerPrintInterval(sf::seconds(10.f))
+      stepFrame(false)
 {
 }
 
@@ -42,28 +40,75 @@ void SimManager::run() {
         return;
     }
 
-    sf::Clock clock;
+    sf::Clock frameClock; // Used for delta time calculation
+    // Initialize timers/accumulators
     timeSinceLastProfilerPrint = sf::Time::Zero;
-    running = true;
+    statsAccumulator = sf::Time::Zero;
+    sf::Time simulationAccumulator = sf::Time::Zero; // Accumulator for simulation ticks
+    const sf::Time fixedTickDt = sf::seconds(1.f / targetTPS); // Fixed time step duration
 
+    frameCount = 0;
+    tickCount = 0;
+    statsClock.restart(); // Start clock for stats interval
+
+    running = true;
     while (presentationManagerInstance.isWindowOpen()) {
+        // --- Time Management ---
+        sf::Time dt = frameClock.restart(); // Real time elapsed since last frame
+        simulationAccumulator += dt;
+        statsAccumulator += dt;
+        timeSinceLastProfilerPrint += dt;
+
+        // --- Event Handling ---
         presentationManagerInstance.handleEvents();
         if (!presentationManagerInstance.isWindowOpen()) {
             running = false;
             break;
         }
 
-        sf::Time dt = clock.restart();
+        // --- Simulation Ticks (Fixed Timestep Loop) ---
+        const int MAX_TICKS_PER_FRAME = 5; // Limit ticks to prevent spiral
+        int ticksThisFrame = 0; 
+        while (simulationAccumulator >= fixedTickDt && ticksThisFrame < MAX_TICKS_PER_FRAME) { // Add tick limit
+            if (!paused || stepFrame) { 
+                tick(); 
+                tickCount++;
+                ticksThisFrame++;
+                stepFrame = false; 
+            } else {
+                break; 
+            }
+            simulationAccumulator -= fixedTickDt;
+        }
+        // Optional: If accumulator is still large after max ticks, log a warning or clamp it?
+        // if (simulationAccumulator >= fixedTickDt) { 
+        //    std::cout << "Warning: Simulation lagging behind real time!" << std::endl;
+        //    simulationAccumulator = sf::Time::Zero; // Example: Discard remaining time to prevent future spiral
+        // }
 
-        tick();
-        
-        render(dt.asSeconds() > 0 ? 1.f / dt.asSeconds() : 0);
+        // --- Rendering --- 
+        // We pass actualFPS and actualTPS, which are updated periodically below
+        render(actualFPS, actualTPS); // Render the current state
+        frameCount++;
 
-        timeSinceLastProfilerPrint += dt;
+        // --- Stats Calculation (Periodic) ---
+        if (statsAccumulator >= statsUpdateInterval) {
+            float elapsedSeconds = statsAccumulator.asSeconds();
+            actualFPS = (elapsedSeconds > 0) ? static_cast<float>(frameCount) / elapsedSeconds : 0.0f;
+            actualTPS = (elapsedSeconds > 0) ? static_cast<float>(tickCount) / elapsedSeconds : 0.0f;
+
+            // Reset for next interval
+            frameCount = 0;
+            tickCount = 0;
+            statsAccumulator = sf::Time::Zero; // Reset interval timer
+            // statsClock.restart(); // Not strictly needed if using accumulator
+        }
+
+        // --- Profiler Print Logic (Periodic) --- 
         if (timeSinceLastProfilerPrint >= profilerPrintInterval) {
             Profiling::Profiler::printStats();
             Profiling::Profiler::reset();
-            timeSinceLastProfilerPrint = sf::Time::Zero;
+            timeSinceLastProfilerPrint = sf::Time::Zero; // Reset profiler timer
         }
     }
 }
@@ -91,8 +136,8 @@ void SimManager::tick() {
 }
 
 // Render frame
-void SimManager::render(float fps) {
-  presentationManagerInstance.renderFrame(fps);
+void SimManager::render(float currentActualFPS, float currentActualTPS) {
+  presentationManagerInstance.renderFrame(currentActualFPS, currentActualTPS);
 }
 
 // Toggle pause state

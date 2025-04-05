@@ -110,7 +110,7 @@ void PresentationManager::handleEvents() {
 }
 
 // Render a complete frame
-void PresentationManager::renderFrame(float fps) {
+void PresentationManager::renderFrame(float actualFPS, float actualTPS) {
     PROFILE_SCOPE("PresentationManager::renderFrame");
     ECSSimulator& simulator = ECSSimulator::getInstance();
     const entt::registry& registry = simulator.getRegistry();
@@ -124,12 +124,14 @@ void PresentationManager::renderFrame(float fps) {
     clear(); 
 
     // Render SFML-based elements
-    renderFluidInternal(registry);
     renderSolidParticlesInternal(registry);
     renderGasParticlesInternal(registry);
 
-    // Render FPS and UI
-    renderFPSInternal(fps);
+    // Render the Metal fluid result via internal helper
+    renderMetalFluidInternal(registry);
+
+    // Render UI & Stats on top
+    renderStatsInternal(actualFPS, actualTPS);
     renderUI();
 
     // Present final frame
@@ -149,12 +151,36 @@ void PresentationManager::renderGasParticlesInternal(const entt::registry &regis
     PROFILE_SCOPE("PresentationManager::renderGasParticlesInternal");
     if (gasRenderer) { gasRenderer->render(window, registry); }
 }
-// Render FPS using UIRenderer
-void PresentationManager::renderFPSInternal(float fps) {
+
+// Rename and update stats rendering
+void PresentationManager::renderStatsInternal(float actualFPS, float actualTPS) {
     if (!uiRenderer) return;
-    std::stringstream ss;
-    ss << std::fixed << std::setprecision(1) << fps << " FPS";
-    uiRenderer->renderText(window, ss.str(), 10, 10, sf::Color::White);
+
+    // Get desired time scale
+    ECSSimulator& simulator = ECSSimulator::getInstance();
+    const entt::registry& registry = simulator.getRegistry();
+    double desiredTimeScale = 1.0; // Default
+    auto stView = registry.view<Components::SimulatorState>();
+    if (!stView.empty()) {
+        desiredTimeScale = registry.get<Components::SimulatorState>(stView.front()).timeScale;
+    }
+
+    // Calculate achieved time scale (normalized by target TPS)
+    const float targetTPS = static_cast<float>(SimulatorConstants::StepsPerSecond); // Use constant
+    double achievedTimeScale = (targetTPS > 0) ? (actualTPS / targetTPS) * desiredTimeScale : 0.0;
+
+
+    std::stringstream ssFPS, ssTPS, ssAcc;
+    ssFPS << std::fixed << std::setprecision(1) << actualFPS << " FPS";
+    ssTPS << std::fixed << std::setprecision(1) << actualTPS << " TPS";
+    ssAcc << "Acc: " << std::fixed << std::setprecision(2) << achievedTimeScale
+          << "x (Tgt: " << desiredTimeScale << "x)";
+
+    // Position the stats
+    int yPos = 10;
+    uiRenderer->renderText(window, ssFPS.str(), 10, yPos, sf::Color::White); yPos += 15;
+    uiRenderer->renderText(window, ssTPS.str(), 10, yPos, sf::Color::White); yPos += 15;
+    uiRenderer->renderText(window, ssAcc.str(), 10, yPos, sf::Color::White);
 }
 
 // Calculate UI layout and tell UIRenderer to draw it
@@ -337,9 +363,9 @@ UIRenderer& PresentationManager::getUIRenderer() {
 /**
  * @brief Reads the fluid texture from FluidRenderer and draws it.
  */
-void PresentationManager::renderFluidInternal(const entt::registry& registry)
+void PresentationManager::renderMetalFluidInternal(const entt::registry& registry)
 {
-    PROFILE_SCOPE("PresentationManager::renderFluidInternal");
+    PROFILE_SCOPE("PresentationManager::renderMetalFluidInternal");
     if (!fluidRenderer) return;
 
     sf::Vector2u textureSize;
