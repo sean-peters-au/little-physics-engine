@@ -37,19 +37,22 @@ void BasicGravitySystem::update(entt::registry& registry) {
         entt::exclude<Components::Boundary>
     );
 
-    // If any particles are high mass, assume a planetary scenario and do not apply gravity
+    // Check for planetary mass ONLY if the threshold is positive
     bool applyGravity = true;
-    for (auto [entity, phase, vel, mass] : view.each()) {
-        if (mass.value > specificConfig.planetaryMassThreshold) {
-            applyGravity = false;
-            break;  // No need to check more once we know we have a planetary body
+    if (specificConfig.planetaryMassThreshold > 0.0) {
+        for (auto entity : view) { // Use simpler view iteration for check
+            if (view.get<Components::Mass>(entity).value >= specificConfig.planetaryMassThreshold) {
+                applyGravity = false;
+                break;  // Found a planetary body, stop checking
+            }
         }
     }
 
+    // If gravity should be applied, iterate ONCE to apply it.
     if (applyGravity) {
-        // Update velocities for entities not tagged as a Boundary
-        for (auto [entity, phase, vel, mass] : view.each()) {
+        for (auto [entity, phase, vel, mass] : view.each()) { // Iterate again, this time getting components
             vel.y += gravity * dt;
+            // No need to check mass again here
         }
     }
 }
