@@ -69,9 +69,9 @@ kernel void calculateDensityGrid(
     densityGrid.write(density, gid);
 }
 
-// --- Kernel: Box Blur (Simple) ---
+// --- Kernel: Box Blur (5x5) ---
 /**
- * @brief Applies a simple 3x3 box blur to the input texture.
+ * @brief Applies a simple 5x5 box blur to the input texture.
  * Each thread calculates the blurred value for one pixel.
  */
 kernel void boxBlur(
@@ -86,13 +86,13 @@ kernel void boxBlur(
 
     float sum = 0.0f;
     int count = 0;
-    int currentWidth = (int)width;   // Cast to int for comparison
-    int currentHeight = (int)height; // Cast to int for comparison
+    int currentWidth = (int)width;   
+    int currentHeight = (int)height; 
 
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
+    // Change loops from -1..1 to -2..2 for 5x5 area
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
             int2 sampleCoord = int2(gid) + int2(dx, dy);
-            // Use casted width/height for comparison
             if (sampleCoord.x >= 0 && sampleCoord.x < currentWidth && sampleCoord.y >= 0 && sampleCoord.y < currentHeight) {
                 sum += inputTexture.read(uint2(sampleCoord)).x;
                 count++;
@@ -119,10 +119,10 @@ kernel void normalizeDensity(
     if (gid.x >= width || gid.y >= height) return;
 
     float density = inputTexture.read(gid).r;
-    // Read maxDensity from params struct now
-    float maxD = params.maxDensity; // Assumes maxDensity field exists in GPURenderParams
+    float maxD = params.maxDensity; 
 
-    float normalizedDensity = (maxD > 1e-6f) ? saturate(density / maxD) : 0.0f;
+    // Use a very small threshold to ensure normalization happens if maxD > 0
+    float normalizedDensity = (maxD > 1e-12f) ? saturate(density / maxD) : 0.0f;
 
     // Write normalized value
     outputTexture.write(normalizedDensity, gid); 
@@ -164,16 +164,18 @@ vertex ScreenVertex screenQuadVertexShader(
  */
 fragment float4 fluidScreenSpaceFragmentShader(
     ScreenVertex in [[stage_in]],
-    // Texture format is R8Unorm in C++, but sampled as float
     texture2d<float, access::sample> normalizedDensityTexture [[texture(0)]],
     constant FluidFragmentParams& params [[buffer(0)]] 
 )
 {
     constexpr sampler sam(filter::linear, address::clamp_to_edge); 
-    // Sample the normalized density value (will be float 0.0-1.0)
+    // Sample the normalized density value (0.0-1.0)
     float normalizedDensity = normalizedDensityTexture.sample(sam, in.texCoord).r;
     
-    // Apply thresholding and smoothing using normalized density
+    // Remove DEBUG visualization
+    // return float4(normalizedDensity, normalizedDensity, normalizedDensity, 1.0f);
+
+    // Restore original logic (thresholding)
     float alpha = smoothstep(params.threshold - params.smoothness,
                            params.threshold + params.smoothness,
                            normalizedDensity);

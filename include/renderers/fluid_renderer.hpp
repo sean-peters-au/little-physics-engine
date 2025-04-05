@@ -82,7 +82,8 @@ private:
 
     // Textures
     MTL::Texture* densityTexture_ = nullptr; // Raw density output
-    MTL::Texture* blurredTexture_ = nullptr; // Blurred density output
+    MTL::Texture* blurredTexture_ = nullptr; // Will hold result of PASS 1
+    MTL::Texture* tempBlurTexture_ = nullptr; // Will hold result of PASS 2 (read by CPU)
     MTL::Texture* finalFluidTexture_ = nullptr; // Output texture for CPU readback (Managed/Shared)
     MTL::Texture* normalizedDensityTexture_ = nullptr;
     uint2 currentGridSize_ = {0, 0};

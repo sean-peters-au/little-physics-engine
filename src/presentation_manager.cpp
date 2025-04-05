@@ -140,9 +140,24 @@ void PresentationManager::renderFrame(float fps) {
             // Update the texture with the new pixel data
             if (metalFluidTexture.getSize() == textureSize && !fluidTextureBuffer.empty()) {
                 metalFluidTexture.update(fluidTextureBuffer.data());
-                metalFluidSprite.setTexture(metalFluidTexture, true); // Update sprite texture
-                // Draw the sprite (covers the whole simulation area if texture matches screenDim)
+                metalFluidSprite.setTexture(metalFluidTexture, true); 
+                
+                // --- Explicitly set view before drawing sprite ---
+                // Create a view that maps 1:1 to the window pixels
+                sf::View defaultView = window.getDefaultView(); 
+                // Or manually: sf::View defaultView(sf::FloatRect(0.f, 0.f, static_cast<float>(window.getSize().x), static_cast<float>(window.getSize().y)));
+                window.setView(defaultView);
+                // --------------------------------------------------
+
+                // Log sprite properties
+                std::cout << "Debug: Drawing fluid sprite. Pos: (" << metalFluidSprite.getPosition().x << "," << metalFluidSprite.getPosition().y 
+                          << "), Scale: (" << metalFluidSprite.getScale().x << "," << metalFluidSprite.getScale().y 
+                          << "), TexSize: (" << metalFluidSprite.getTexture()->getSize().x << "," << metalFluidSprite.getTexture()->getSize().y 
+                          << ")" << std::endl;
+
                 window.draw(metalFluidSprite);
+                // Restore the original view if other things depend on it?
+                // window.setView(originalView); // Need to store originalView earlier
                  std::cout << "Debug: Drew fluid sprite." << std::endl;
             } else {
                  std::cout << "Debug: Skipped drawing fluid sprite (texture size mismatch or empty buffer)." << std::endl;
