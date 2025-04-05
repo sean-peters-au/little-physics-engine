@@ -123,12 +123,10 @@ void PresentationManager::renderFrame(float actualFPS, float actualTPS) {
     // Clear SFML window
     clear(); 
 
-    // Render SFML-based elements
+    // Render particles
+    renderMetalFluidInternal(registry);
     renderSolidParticlesInternal(registry);
     renderGasParticlesInternal(registry);
-
-    // Render the Metal fluid result via internal helper
-    renderMetalFluidInternal(registry);
 
     // Render UI & Stats on top
     renderStatsInternal(actualFPS, actualTPS);

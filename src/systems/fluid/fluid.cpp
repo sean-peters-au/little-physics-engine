@@ -242,7 +242,6 @@ void FluidSystem::initBuffersIfNeeded(
         {
             gridBuf_->release();
         }
-        std::cout << "[FluidSystem] Resizing gridBuf_ to " << gridSize << " cells" << std::endl;
         gridBuf_ = device_->newBuffer(
             sizeof(GPUGridCell) * gridSize,
             MTL::ResourceStorageModeShared
