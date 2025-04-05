@@ -151,9 +151,10 @@ private:
 
     // 6. Add internal rendering helpers
     void renderSolidParticlesInternal(const entt::registry& registry);
-    void renderFluidParticlesInternal(const entt::registry& registry);
     void renderGasParticlesInternal(const entt::registry& registry);
     void renderFPSInternal(float fps);
+    /** @brief Handles reading Metal texture and drawing it via SFML sprite. */
+    void renderFluidInternal(const entt::registry& registry);
 
     // 7. Store UI Layout data
     std::vector<UIButton> currentButtonLayout;

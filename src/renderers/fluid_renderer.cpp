@@ -388,26 +388,13 @@ void FluidRenderer::render(const entt::registry& registry)
     // maxDensity set later
     memcpy(paramsBuffer_->contents(), &params, sizeof(GPURenderParams));
 
-    // --- DEBUG Log ---
-    // Log params.gridSize to confirm it matches screenDimensions
-    std::cout << "Debug [Compute Params]: ... gridSize=(" << params.gridSize.x << "," << params.gridSize.y << ") ..." << std::endl;
-    if (!cpuParticles.empty()) {
-        std::cout << "Debug [Particle 0]: pos=(" << cpuParticles[0].position.x << "," << cpuParticles[0].position.y 
-                  << "), h=" << cpuParticles[0].smoothingRadius << std::endl;
-    }
-    if (cpuParticles.size() > 100) { // Log another particle if available
-         std::cout << "Debug [Particle 100]: pos=(" << cpuParticles[100].position.x << "," << cpuParticles[100].position.y 
-                   << "), h=" << cpuParticles[100].smoothingRadius << std::endl;
-    }
-    // -----------------------------------------------
-
     // --- Execute Compute & Render --- 
     MTL::CommandBuffer* cmdBuffer = commandQueue_->commandBuffer();
     
-    // --- Compute Pass: Density & Blur --- // Back to 2-pass blur
+    // --- Compute Pass: Density & Blur ---
     MTL::ComputeCommandEncoder* compEnc = cmdBuffer->computeCommandEncoder();
     
-    // 1. Density Kernel (Input: particles, Output: densityTexture_)
+    // 1. Density Kernel
     compEnc->setComputePipelineState(densityKernelPSO_);
     compEnc->setTexture(densityTexture_, 0);
     compEnc->setBuffer(particleBuffer_, 0, 0);
@@ -415,135 +402,85 @@ void FluidRenderer::render(const entt::registry& registry)
     MTL::Size densityGridDim = MTL::Size(currentGridSize_.x, currentGridSize_.y, 1);
     MTL::Size densityTgSize = MTL::Size(densityKernelPSO_->threadExecutionWidth(), densityKernelPSO_->maxTotalThreadsPerThreadgroup() / densityKernelPSO_->threadExecutionWidth(), 1);
     compEnc->dispatchThreads(densityGridDim, densityTgSize);
-    std::cout << "Debug: Density kernel dispatched." << std::endl;
 
     // --- 2-Pass Blur ---
     MTL::Size blurGridDim = MTL::Size(currentGridSize_.x, currentGridSize_.y, 1);
     MTL::Size blurTgSize = MTL::Size(blurKernelPSO_->threadExecutionWidth(), blurKernelPSO_->maxTotalThreadsPerThreadgroup() / blurKernelPSO_->threadExecutionWidth(), 1);
     compEnc->setComputePipelineState(blurKernelPSO_);
-
-    // Pass 1: Input densityTexture_, Output blurredTexture_
+    // Pass 1
     compEnc->setTexture(densityTexture_, 0);   
     compEnc->setTexture(blurredTexture_, 1);  
     compEnc->dispatchThreads(blurGridDim, blurTgSize);
-    std::cout << "Debug: Blur kernel pass 1 dispatched." << std::endl;
     compEnc->memoryBarrier(MTL::BarrierScopeTextures);
-
-    // Pass 2: Input blurredTexture_, Output tempBlurTexture_
+    // Pass 2
     compEnc->setTexture(blurredTexture_, 0);  
-    compEnc->setTexture(tempBlurTexture_, 1); // Final blurred result is in tempBlurTexture_
+    compEnc->setTexture(tempBlurTexture_, 1); 
     compEnc->dispatchThreads(blurGridDim, blurTgSize);
-    std::cout << "Debug: Blur kernel pass 2 dispatched." << std::endl;
-    // Remove Passes 3 & 4
-    /*
-    compEnc->memoryBarrier(MTL::BarrierScopeTextures);
-    // Pass 3: Input tempBlurTexture_, Output blurredTexture_
-    ...
-    compEnc->memoryBarrier(MTL::BarrierScopeTextures);
-    // Pass 4: Input blurredTexture_, Output tempBlurTexture_
-    ...
-    */
-    // ---------------------
-
-    // End encoding for density/blur
+    
     compEnc->endEncoding(); 
-    std::cout << "Debug: Density & Blur encoding finished." << std::endl;
 
-    // --- Find Max Density on CPU (Still reads tempBlurTexture_) ---
+    // --- Find Max Density on CPU ---
     cmdBuffer->commit(); 
     cmdBuffer->waitUntilCompleted();
-    std::cout << "Debug: Density & Blur command buffer completed." << std::endl;
-
     float maxDensityFound = 0.0f;
-    // Read back tempBlurTexture_
     if (tempBlurTexture_ && tempBlurTexture_->storageMode() == MTL::StorageModeManaged) {
         const size_t width = tempBlurTexture_->width();
         const size_t height = tempBlurTexture_->height();
-        // ... (Rest of CPU readback logic is the same, just uses tempBlurTexture_) ...
         std::vector<float> cpuTextureData(width * height); 
         MTL::CommandBuffer* syncCmdBuffer = commandQueue_->commandBuffer();
         MTL::BlitCommandEncoder* blitEncoder = syncCmdBuffer->blitCommandEncoder();
-        blitEncoder->synchronizeResource(tempBlurTexture_); // Sync temp texture
+        blitEncoder->synchronizeResource(tempBlurTexture_);
         blitEncoder->endEncoding();
         syncCmdBuffer->commit();
         syncCmdBuffer->waitUntilCompleted();
-        std::cout << "Debug: Synchronized tempBlurTexture." << std::endl;
         MTL::Region region = MTL::Region::Make2D(0, 0, width, height);
         tempBlurTexture_->getBytes(cpuTextureData.data(), width * sizeof(float), region, 0);
-        std::cout << "Debug: Read tempBlurTexture to CPU." << std::endl;
         for(float val : cpuTextureData) {
             maxDensityFound = std::max(maxDensityFound, val);
         }
-        std::cout << "Debug: Found max density on CPU: " << maxDensityFound << std::endl;
     } else {
         std::cerr << "Warning: Cannot find max density, tempBlurTexture_ is null or not Managed." << std::endl;
     }
-    // ... (Update paramsBuffer with maxDensityFound) ...
-
+    
     // --- Update Params Buffer with Max Density ---
     params.maxDensity = maxDensityFound;
-    // Copy the updated params (including maxDensity) back to the buffer
     memcpy(paramsBuffer_->contents(), &params, sizeof(GPURenderParams));
-    // If paramsBuffer_ is Managed, mark range modified
     if (paramsBuffer_->storageMode() == MTL::StorageModeManaged) {
         paramsBuffer_->didModifyRange(NS::Range(0, sizeof(GPURenderParams)));
     }
-    std::cout << "Debug: Updated params buffer with maxDensity=" << params.maxDensity << std::endl;
 
     // --- Compute Pass: Normalization & Render Pass ---
     cmdBuffer = commandQueue_->commandBuffer(); 
     compEnc = cmdBuffer->computeCommandEncoder(); 
 
-    // Dispatch Normalize Density Kernel (Input is tempBlurTexture_ now)
+    // Dispatch Normalize Density Kernel
     compEnc->setComputePipelineState(normalizeDensityPSO_);
-    compEnc->setTexture(tempBlurTexture_, 0); // Input: final blurred result
-    compEnc->setTexture(normalizedDensityTexture_, 1); // Output: normalized
+    compEnc->setTexture(tempBlurTexture_, 0); 
+    compEnc->setTexture(normalizedDensityTexture_, 1); 
     compEnc->setBuffer(paramsBuffer_, 0, 0); 
     MTL::Size normGridDim = MTL::Size(currentGridSize_.x, currentGridSize_.y, 1); 
     MTL::Size normTgSize = MTL::Size(normalizeDensityPSO_->threadExecutionWidth(), normalizeDensityPSO_->maxTotalThreadsPerThreadgroup() / normalizeDensityPSO_->threadExecutionWidth(), 1);
     compEnc->dispatchThreads(normGridDim, normTgSize);
-    std::cout << "Debug: Normalize density kernel dispatched." << std::endl;
 
-    // End compute encoding for normalization
     compEnc->endEncoding(); 
-    std::cout << "Debug: Normalization encoding finished." << std::endl;
 
-    // --- Render Pass to Offscreen Texture (uses normalized texture) ---
-    // Create Render Pass Descriptor targeting finalFluidTexture_
+    // --- Render Pass to Offscreen Texture ---
     MTL::RenderPassDescriptor* rpd = MTL::RenderPassDescriptor::renderPassDescriptor();
-    if (!rpd) {
-        std::cerr << "Error: Failed to create RenderPassDescriptor." << std::endl;
-        return;
-    }
-    rpd->colorAttachments()->object(0)->setTexture(finalFluidTexture_); // Target our texture
+    if (!rpd) { /* Keep error */ return; }
+    rpd->colorAttachments()->object(0)->setTexture(finalFluidTexture_);
     rpd->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionClear);
     rpd->colorAttachments()->object(0)->setStoreAction(MTL::StoreActionStore);
-    rpd->colorAttachments()->object(0)->setClearColor(MTL::ClearColor(0.0, 0.0, 0.5, 1.0)); // Opaque Blue clear
-    std::cout << "Debug: Configured RenderPassDescriptor for offscreen texture." << std::endl;
+    rpd->colorAttachments()->object(0)->setClearColor(MTL::ClearColor(0.0, 0.0, 0.0, 0.0)); // Transparent Black
 
-    // Create Render Command Encoder
     MTL::RenderCommandEncoder* renderEncoder = cmdBuffer->renderCommandEncoder(rpd);
-    if (!renderEncoder) {
-        std::cerr << "Error: Failed to create RenderCommandEncoder." << std::endl;
-        return;
-    }
-    std::cout << "Debug: Created RenderCommandEncoder." << std::endl;
+    if (!renderEncoder) { /* Keep error */ return; }
 
-    // Set Viewport based on finalFluidTexture_
     MTL::Viewport viewport = {0.0, 0.0, (double)finalFluidTexture_->width(), (double)finalFluidTexture_->height(), 0.0, 1.0 };
     renderEncoder->setViewport(viewport);
-    std::cout << "Debug: Set Viewport." << std::endl;
 
-    // Checks for PSO and Depth State (as before)
-    // ... checks ...
-
-    // Set PSO and Depth State
     renderEncoder->setRenderPipelineState(screenShaderPSO_);
     renderEncoder->setDepthStencilState(depthState_);
-    std::cout << "Debug: Set RenderPipelineState." << std::endl;
-    std::cout << "Debug: Set DepthStencilState." << std::endl;
 
-    // Set fragment inputs - Use NORMALIZED texture now!
     renderEncoder->setFragmentTexture(normalizedDensityTexture_, 0); 
     sf::Color sfFluidColor(40, 130, 240, 255); 
     FluidFragmentParams fragmentParams = {
@@ -553,23 +490,17 @@ void FluidRenderer::render(const entt::registry& registry)
             (float)sfFluidColor.b / 255.0f, 
             (float)sfFluidColor.a / 255.0f 
         },
-        .threshold = 0.2f,  // Increase threshold significantly, reduce smoothness slightly
-        .smoothness = 0.05f // New range [0.4, 0.6]
+        .threshold = 0.19f,
+        .smoothness = 0.02f,
     }; 
     renderEncoder->setFragmentBytes(&fragmentParams, sizeof(FluidFragmentParams), 0); 
-    std::cout << "Debug: Set Fragment resources (Using normalizedDensityTexture_)." << std::endl;
 
-    // Draw
     renderEncoder->drawPrimitives(MTL::PrimitiveTypeTriangle, NS::UInteger(0), NS::UInteger(3));
-    std::cout << "Debug: Draw call encoded." << std::endl;
 
-    // End encoding
     renderEncoder->endEncoding();
-    std::cout << "Debug: Render encoding finished." << std::endl;
 
-    // --- Commit --- (commits normalization compute + render pass)
+    // --- Commit ---
     cmdBuffer->commit(); 
-    std::cout << "Debug: Final command buffer committed." << std::endl;
 }
 
 // --- Read Texture Data --- // Updated for finalFluidTexture_
@@ -600,12 +531,10 @@ bool FluidRenderer::readFluidTexture(std::vector<uint8_t>& outBuffer, sf::Vector
         blitEncoder->endEncoding();
         syncCmdBuffer->commit();
         syncCmdBuffer->waitUntilCompleted(); // Essential to wait for GPU sync
-        std::cout << "Debug: Synchronized managed texture." << std::endl;
     }
 
     // Copy texture contents to buffer
     finalFluidTexture_->getBytes(outBuffer.data(), bytesPerRow, region, 0);
-    std::cout << "Debug: Copied texture bytes to CPU buffer." << std::endl;
 
     // --- Swizzle R and B components (BGRA -> RGBA) ---
     for (size_t i = 0; i < bytesPerImage; i += 4) {
@@ -613,7 +542,6 @@ bool FluidRenderer::readFluidTexture(std::vector<uint8_t>& outBuffer, sf::Vector
         // Swap B (at i) and R (at i + 2)
         std::swap(outBuffer[i], outBuffer[i + 2]);
     }
-    std::cout << "Debug: Swizzled texture bytes for SFML (BGRA -> RGBA)." << std::endl;
 
     return true;
 }

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <SFML/System/Clock.hpp>
 #include <SFML/Window/Event.hpp>
+#include <SFML/System/Time.hpp>
 
 #include "sim_manager.hpp"
 #include "presentation_manager.hpp"
@@ -29,7 +30,9 @@ SimManager::SimManager()
       scenarioManager(),
       running(true),
       paused(false),
-      stepFrame(false)
+      stepFrame(false),
+      timeSinceLastProfilerPrint(sf::Time::Zero),
+      profilerPrintInterval(sf::seconds(10.f))
 {
 }
 
@@ -40,6 +43,7 @@ void SimManager::run() {
     }
 
     sf::Clock clock;
+    timeSinceLastProfilerPrint = sf::Time::Zero;
     running = true;
 
     while (presentationManagerInstance.isWindowOpen()) {
@@ -48,9 +52,19 @@ void SimManager::run() {
             running = false;
             break;
         }
+
+        sf::Time dt = clock.restart();
+
         tick();
-        float fps = 1.f / clock.restart().asSeconds();
-        render(fps);
+        
+        render(dt.asSeconds() > 0 ? 1.f / dt.asSeconds() : 0);
+
+        timeSinceLastProfilerPrint += dt;
+        if (timeSinceLastProfilerPrint >= profilerPrintInterval) {
+            Profiling::Profiler::printStats();
+            Profiling::Profiler::reset();
+            timeSinceLastProfilerPrint = sf::Time::Zero;
+        }
     }
 }
 
@@ -68,6 +82,8 @@ bool SimManager::init() {
 
 // Tick simulation
 void SimManager::tick() {
+  PROFILE_SCOPE("SimManager::tick");
+
   if (!paused || stepFrame) {
     simulatorInstance.tick();
     stepFrame = false;

@@ -21,8 +21,6 @@
 #include "sim_manager.hpp"
 
 int main() {
-    PROFILE_SCOPE("main");
-
     SimManager::getInstance().run();
 
     return 0;

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <SFML/System/Time.hpp>
 
 #include "presentation_manager.hpp"
 #include "scenario_manager.hpp"
@@ -96,4 +97,8 @@ class SimManager {
   bool running;
   bool paused;
   bool stepFrame;
+
+  // Timer for profiler printing
+  sf::Time timeSinceLastProfilerPrint;
+  const sf::Time profilerPrintInterval = sf::seconds(10.f);
 };

@@ -169,13 +169,9 @@ fragment float4 fluidScreenSpaceFragmentShader(
 )
 {
     constexpr sampler sam(filter::linear, address::clamp_to_edge); 
-    // Sample the normalized density value (0.0-1.0)
     float normalizedDensity = normalizedDensityTexture.sample(sam, in.texCoord).r;
     
-    // Remove DEBUG visualization
-    // return float4(normalizedDensity, normalizedDensity, normalizedDensity, 1.0f);
-
-    // Restore original logic (thresholding)
+    // Apply thresholding and smoothing using normalized density
     float alpha = smoothstep(params.threshold - params.smoothness,
                            params.threshold + params.smoothness,
                            normalizedDensity);

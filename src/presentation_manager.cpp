@@ -11,6 +11,7 @@
 #include "event_manager.hpp"
 #include "sim.hpp"
 #include "sim_manager.hpp"
+#include "core/profile.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -110,73 +111,34 @@ void PresentationManager::handleEvents() {
 
 // Render a complete frame
 void PresentationManager::renderFrame(float fps) {
+    PROFILE_SCOPE("PresentationManager::renderFrame");
     ECSSimulator& simulator = ECSSimulator::getInstance();
     const entt::registry& registry = simulator.getRegistry();
 
-    // 1. Render Fluid Simulation to offscreen Metal texture
+    // Tell FluidRenderer to render to its offscreen texture
     if (fluidRenderer) {
-        fluidRenderer->render(registry); // No window needed
+        fluidRenderer->render(registry); 
     }
 
-    // 2. Clear SFML window
-    clear(); // window.clear(sf::Color::Black);
+    // Clear SFML window
+    clear(); 
 
-    // 3. Render SFML-based elements
+    // Render SFML-based elements
+    renderFluidInternal(registry);
     renderSolidParticlesInternal(registry);
     renderGasParticlesInternal(registry);
 
-    // 4. Read back Metal texture and draw it as an SFML sprite
-    if (fluidRenderer) {
-        sf::Vector2u textureSize;
-        if (fluidRenderer->readFluidTexture(fluidTextureBuffer, textureSize)) {
-            // Ensure sf::Texture exists and has the right size
-            if (metalFluidTexture.getSize() != textureSize) {
-                if (!metalFluidTexture.create(textureSize.x, textureSize.y)) {
-                    std::cerr << "Error: Failed to create sf::Texture for fluid." << std::endl;
-                } else {
-                    std::cout << "Debug: Created/Resized sf::Texture for fluid: " << textureSize.x << "x" << textureSize.y << std::endl;
-                }
-            }
-            // Update the texture with the new pixel data
-            if (metalFluidTexture.getSize() == textureSize && !fluidTextureBuffer.empty()) {
-                metalFluidTexture.update(fluidTextureBuffer.data());
-                metalFluidSprite.setTexture(metalFluidTexture, true); 
-                
-                // --- Explicitly set view before drawing sprite ---
-                // Create a view that maps 1:1 to the window pixels
-                sf::View defaultView = window.getDefaultView(); 
-                // Or manually: sf::View defaultView(sf::FloatRect(0.f, 0.f, static_cast<float>(window.getSize().x), static_cast<float>(window.getSize().y)));
-                window.setView(defaultView);
-                // --------------------------------------------------
-
-                // Log sprite properties
-                std::cout << "Debug: Drawing fluid sprite. Pos: (" << metalFluidSprite.getPosition().x << "," << metalFluidSprite.getPosition().y 
-                          << "), Scale: (" << metalFluidSprite.getScale().x << "," << metalFluidSprite.getScale().y 
-                          << "), TexSize: (" << metalFluidSprite.getTexture()->getSize().x << "," << metalFluidSprite.getTexture()->getSize().y 
-                          << ")" << std::endl;
-
-                window.draw(metalFluidSprite);
-                // Restore the original view if other things depend on it?
-                // window.setView(originalView); // Need to store originalView earlier
-                 std::cout << "Debug: Drew fluid sprite." << std::endl;
-            } else {
-                 std::cout << "Debug: Skipped drawing fluid sprite (texture size mismatch or empty buffer)." << std::endl;
-            }
-        } else {
-             std::cout << "Debug: Failed to read fluid texture." << std::endl;
-        }
-    }
-
-    // 5. Render UI on top
+    // Render FPS and UI
     renderFPSInternal(fps);
     renderUI();
 
-    // 6. Present final frame
-    present(); // window.display();
+    // Present final frame
+    present(); 
 }
 
 // Delegate solid particle rendering
 void PresentationManager::renderSolidParticlesInternal(const entt::registry &registry) {
+    PROFILE_SCOPE("PresentationManager::renderSolidParticlesInternal");
     if (solidRenderer) {
         solidRenderer->setDebugRendering(solidDebugEnabled);
         solidRenderer->render(window, registry, currentColorScheme);
@@ -184,6 +146,7 @@ void PresentationManager::renderSolidParticlesInternal(const entt::registry &reg
 }
 // Delegate gas particle rendering
 void PresentationManager::renderGasParticlesInternal(const entt::registry &registry) {
+    PROFILE_SCOPE("PresentationManager::renderGasParticlesInternal");
     if (gasRenderer) { gasRenderer->render(window, registry); }
 }
 // Render FPS using UIRenderer
@@ -368,4 +331,38 @@ bool PresentationManager::isDebugVisualization() const {
 UIRenderer& PresentationManager::getUIRenderer() {
     if (!uiRenderer) throw std::runtime_error("UIRenderer not initialized!");
     return *uiRenderer;
+}
+
+// --- Add new internal helper method --- 
+/**
+ * @brief Reads the fluid texture from FluidRenderer and draws it.
+ */
+void PresentationManager::renderFluidInternal(const entt::registry& registry)
+{
+    PROFILE_SCOPE("PresentationManager::renderFluidInternal");
+    if (!fluidRenderer) return;
+
+    sf::Vector2u textureSize;
+    if (fluidRenderer->readFluidTexture(fluidTextureBuffer, textureSize)) {
+        if (metalFluidTexture.getSize() != textureSize) {
+            if (!metalFluidTexture.create(textureSize.x, textureSize.y)) {
+                std::cerr << "Error: Failed to create sf::Texture for fluid." << std::endl;
+                return; // Exit if texture fails
+            }
+            // No log needed here
+        }
+        if (metalFluidTexture.getSize() == textureSize && !fluidTextureBuffer.empty()) {
+            metalFluidTexture.update(fluidTextureBuffer.data());
+            metalFluidSprite.setTexture(metalFluidTexture, true); 
+            sf::View defaultView = window.getDefaultView(); 
+            window.setView(defaultView);
+            // Remove sprite logging
+            window.draw(metalFluidSprite);
+            // Remove draw log
+        } 
+        // Remove skip log
+    } else {
+        // Keep failure log
+         std::cout << "Debug: Failed to read fluid texture." << std::endl;
+    }
 } 
