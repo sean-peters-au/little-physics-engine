@@ -94,7 +94,5 @@ std::optional<EPAResult> EPA(const ShapeData &a, const ShapeData &b, const Simpl
         poly.insert(poly.begin() + ((closestEdge+1)%poly.size()), p);
     }
 
-    // If no convergence
-    std::cerr << "Warning: EPA exceeded max iterations. Returning no penetration." << std::endl;
     return std::nullopt;
 }

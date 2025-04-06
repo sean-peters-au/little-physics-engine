@@ -10,9 +10,6 @@ ifeq ($(shell uname),Darwin)
 APP_CXXFLAGS += -stdlib=libc++ -isysroot $(shell xcrun --show-sdk-path) -D_DARWIN_C_SOURCE -D_XOPEN_SOURCE=700
 endif
 
-# Determine the Homebrew prefix for libomp
-LIBOMP_PREFIX := $(shell brew --prefix libomp)
-
 # Include entt
 ENTT_INCLUDE := -I./vendor/entt/include
 
@@ -76,8 +73,8 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | directories
 	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
 
 simulator: CXX := clang++
-simulator: CXXFLAGS += $(APP_CXXFLAGS) -Xpreprocessor -fopenmp -I$(LIBOMP_PREFIX)/include $(METAL_INCLUDE) $(METAL_CPP_INCLUDE)
-simulator: LDFLAGS := -L/opt/homebrew/lib -L$(LIBOMP_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system -lomp -framework Metal -framework Cocoa -framework MetalKit -framework QuartzCore
+simulator: CXXFLAGS += $(APP_CXXFLAGS) $(METAL_INCLUDE) $(METAL_CPP_INCLUDE)
+simulator: LDFLAGS := -L/opt/homebrew/lib -lsfml-graphics -lsfml-window -lsfml-system -framework Metal -framework Cocoa -framework MetalKit -framework QuartzCore # Removed OpenMP libs
 simulator: $(OBJS) $(BUILD_DIR)/fluid_kernels.metallib $(BUILD_DIR)/fluid_renderer_kernels.metallib
 	@echo "Building simulator target with objects: $(OBJS)"
 	$(CXX) $(CXXFLAGS) $(OBJS) -o $(BUILD_DIR)/simulator $(LDFLAGS)
