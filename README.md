@@ -7,7 +7,7 @@
     </td>
     <td valign="top" width="60%" style="padding-left: 20px;">
       This is a little C++ physics engine I built as a curiosity project. The code is >99% LLM generated
-      and attempts to build everything from scratch (a couple of concenssions were made along the way; EnTT, SFML).
+      and attempts to build everything from scratch (a couple of concessions were made along the way; EnTT, SFML).
       <br><br><b>Key Features:</b><br>
       - Barnes-Hut N-Body sim.<br>
       - GPU SPH fluids (Metal, Verlet, grid, rigid coupling).<br>
