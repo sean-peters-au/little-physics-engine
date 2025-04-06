@@ -2,23 +2,21 @@
 
 <table>
   <tr>
-    <td valign="middle" width="40%"> <!-- Adjust width % as needed -->
-      <img src="assets/gifs/highlight-reel.gif" alt="Combined Demo" width="100%"> <!-- Image scales to cell width -->
+    <td valign="middle"> <!-- Removed width attribute -->
+      <img src="assets/gifs/highlight-reel.gif" alt="Combined Demo" width="100%"> <!-- Keep width=100% on img -->
     </td>
-    <td valign="top" width="60%" style="padding-left: 20px;"> <!-- Add padding for spacing -->
+    <td valign="top" style="padding-left: 20px;"> <!-- Removed width, kept padding -->
       This is a little C++ physics engine I built as a curiosity to project to see how far I could push a 99+% LLM 
       generated codebase. The ambition was to build this without any 3rd party dependencies, but some
       concenssions were made along the way (EnTT, SFML). Everything else was built from scratch.
 
-      <br><b>Key Features:</b>
-      <ul>
-        <li>Barnes-Hut N-Body sim.</li>
-        <li>GPU SPH fluids (Metal, Verlet, grid, rigid coupling).</li>
-        <li>Rigid body pipeline (GJK/EPA, LCP/PGS solver, Baumgarte stab.).</li>
-        <li>Solid, fluid (GPU screen-space), gas renderers.</li>
-        <li>Basic UI controls & Scenario support.</li>
-        <li>ECS design (EnTT).</li>
-      </ul>
+      <br><br><b>Key Features:</b><br>
+      - Barnes-Hut N-Body sim.<br>
+      - GPU SPH fluids (Metal, Verlet, grid, rigid coupling).<br>
+      - Rigid body pipeline (GJK/EPA, LCP/PGS solver, Baumgarte stab.).<br>
+      - Solid, fluid (GPU screen-space), gas renderers.<br>
+      - Basic UI controls & Scenario support.<br>
+      - ECS design (EnTT).
     </td>
   </tr>
 </table>
