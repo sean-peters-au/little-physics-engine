@@ -2,36 +2,29 @@
 
 <table>
   <tr>
-    <td valign="top" width="40%"> <!-- Adjust width % as needed -->
+    <td valign="middle" width="40%"> <!-- Adjust width % as needed -->
       <img src="assets/gifs/highlight-reel.gif" alt="Combined Demo" width="100%"> <!-- Image scales to cell width -->
     </td>
     <td valign="top" width="60%" style="padding-left: 20px;"> <!-- Add padding for spacing -->
-      A little C++ physics engine I built as a curiosity to project to see how far I could push a 99+% LLM 
+      This is a little C++ physics engine I built as a curiosity to project to see how far I could push a 99+% LLM 
       generated codebase. The ambition was to build this without any 3rd party dependencies, but some
-      concenssions were made along the way (EnTT, SFML and Metal). Everything else was built from scratch right
-      down to the vector math.
+      concenssions were made along the way (EnTT, SFML). Everything else was built from scratch.
+
+      <br><b>Key Features:</b>
+      <ul>
+        <li>Barnes-Hut N-Body sim.</li>
+        <li>GPU SPH fluids (Metal, Verlet, grid, rigid coupling).</li>
+        <li>Rigid body pipeline (GJK/EPA, LCP/PGS solver, Baumgarte stab.).</li>
+        <li>Solid, fluid (GPU screen-space), gas renderers.</li>
+        <li>Basic UI controls & Scenario support.</li>
+        <li>ECS design (EnTT).</li>
+      </ul>
     </td>
   </tr>
 </table>
 
-It includes;
-*   N-Body gravity simulation (using Barnes-Hut optimization).
-*   GPU-accelerated SPH fluid dynamics (Metal compute):
-    *   Velocity Verlet integration
-    *   Spatial grid neighbor search
-    *   Two-way rigid-fluid coupling.
-*   Rigid body collision pipeline:
-    *   Broadphase and GJK/EPA Narrowphase for detection.
-    *   Contact LCP solved with Projected Gauss-Seidel (PGS).
-    *   Baumgarte position correction for stabilization.
-*   Rendering for solid, fluid (screen-space shaders on GPU), and gas particles.
-*   Basic UI controls (pause, step, speed adjustment).
-*   Support for different simulation scenarios.
-*   Built with an Entity-Component-System (ECS) design (using EnTT).
 
-## Setup
-
-This was all built for and assumes macOS and metal
+## Setup (Assumes Mac)
 
 - Install build dependencies (includes SFML for graphics):
 ```bash
