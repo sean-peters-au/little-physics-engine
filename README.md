@@ -1,3 +1,11 @@
+| Keplerian Disk | Planetary Ocean | Fluid Simulation | Polygons |
+| :--------------: | :---------------: | :----------------: | :--------: |
+| ![Keplerian Disk](assets/gifs/keplerian-disk-fancy.gif) | ![Planetary Ocean](assets/gifs/planet-ocean-fancy.gif) | ![Fluid Simulation](assets/gifs/fluid-fancy.gif) | ![Polygons](assets/gifs/polygons-fancy.gif) |
+
+| Polygons & Fluid | Galton Board | Hourglasses |
+| :----------------: | :------------: | :-----------: |
+| ![Polygons & Fluid](assets/gifs/polygons-and-fluid-fancy.gif) | ![Galton Board](assets/gifs/galton-board-fancy.gif) | ![Hourglasses](assets/gifs/hourglasses-fancy.gif) |
+
 # Little Physics Engine
 
 A little C++ physics engine I built as a curiosity to project to see how far I could push a 99+% LLM 
@@ -5,9 +13,16 @@ generated codebase. The ambition was to build this without any 3rd party depende
 concenssions were made along the way (EnTT, SFML and Metal). Everything else was built from scratch right
 down to the vector math.
 
+It includes;
 *   N-Body gravity simulation (using Barnes-Hut optimization).
-*   Particle-based fluid dynamics (accelerated with Metal compute shaders).
-*   Rigid body collision detection (GJK/EPA) and position-based resolution.
+*   GPU-accelerated SPH fluid dynamics (Metal compute):
+    *   Velocity Verlet integration
+    *   Spatial grid neighbor search
+    *   Two-way rigid-fluid coupling.
+*   Rigid body collision pipeline:
+    *   Broadphase and GJK/EPA Narrowphase for detection.
+    *   Contact LCP solved with Projected Gauss-Seidel (PGS).
+    *   Baumgarte position correction for stabilization.
 *   Rendering for solid, fluid (screen-space shaders on GPU), and gas particles.
 *   Basic UI controls (pause, step, speed adjustment).
 *   Support for different simulation scenarios.
