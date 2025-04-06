@@ -9,7 +9,6 @@
       This is a little C++ physics engine I built as a curiosity to project to see how far I could push a 99+% LLM 
       generated codebase. The ambition was to build this without any 3rd party dependencies, but some
       concenssions were made along the way (EnTT, SFML). Everything else was built from scratch.
-
       <br><br><b>Key Features:</b><br>
       - Barnes-Hut N-Body sim.<br>
       - GPU SPH fluids (Metal, Verlet, grid, rigid coupling).<br>
