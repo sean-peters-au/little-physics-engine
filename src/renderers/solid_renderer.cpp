@@ -71,16 +71,63 @@ void SolidRenderer::render(sf::RenderTarget& target,
             double const rad = angleDeg * (MathConstants::PI / 180.0);
             double const ca = std::cos(rad);
             double const sa = std::sin(rad);
+            
+            // Calculate center point in pixels
+            float const centerPx = static_cast<float>(coordinates.metersToPixels(pos.x));
+            float const centerPy = static_cast<float>(coordinates.metersToPixels(pos.y));
+            // sf::Vector2f firstVertexPx; // REMOVE - No longer needed for line
+
+            // Temporary storage for vertex positions before setting color
+            std::vector<sf::Vector2f> vertexPositions(poly->vertices.size());
+            float minY = centerPy, maxY = centerPy; // Find min/max Y for gradient
+
             for (size_t i = 0; i < poly->vertices.size(); ++i) {
                 const auto &v = poly->vertices[i];
                 double const rx = v.x * ca - v.y * sa;
                 double const ry = v.x * sa + v.y * ca;
                 auto const vxPx = static_cast<float>(coordinates.metersToPixels(pos.x + rx));
                 auto const vyPx = static_cast<float>(coordinates.metersToPixels(pos.y + ry));
-                convex.setPoint(i, sf::Vector2f(vxPx, vyPx));
+                vertexPositions[i] = sf::Vector2f(vxPx, vyPx);
+                // Find bounds for gradient
+                if (i == 0) { minY = maxY = vyPx; }
+                else { minY = std::min(minY, vyPx); maxY = std::max(maxY, vyPx); }
             }
-            convex.setFillColor(fillColor);
+
+            // Set outline properties
+            sf::Color outlineColor = sf::Color(std::max(0, fillColor.r - 50), 
+                                                 std::max(0, fillColor.g - 50), 
+                                                 std::max(0, fillColor.b - 50));
+            convex.setOutlineThickness(1.0f); 
+            convex.setOutlineColor(outlineColor);
+            // convex.setFillColor(fillColor); // REMOVE - Will set vertex colors instead
+
+            // Apply vertex colors for gradient
+            float height = std::max(1.0f, maxY - minY); // Avoid division by zero
+            for (size_t i = 0; i < poly->vertices.size(); ++i) {
+                float t = (vertexPositions[i].y - minY) / height; // Normalize y position (0=top, 1=bottom)
+                // Simple vertical gradient: lighter at top (t=0), darker at bottom (t=1)
+                float factor = 1.1f - 0.3f * t; // e.g., from 1.1 down to 0.8
+                sf::Color vertexColor(
+                    static_cast<sf::Uint8>(std::min(255.f, std::max(0.f, fillColor.r * factor))),
+                    static_cast<sf::Uint8>(std::min(255.f, std::max(0.f, fillColor.g * factor))),
+                    static_cast<sf::Uint8>(std::min(255.f, std::max(0.f, fillColor.b * factor)))
+                );
+                convex.setPoint(i, vertexPositions[i]); // Set position and color
+                convex.setFillColor(vertexColor); // NOTE: For sf::ConvexShape, you set FillColor *before* setting the point for vertex colors!
+                                                  // Correction: This is wrong for sf::Convex. Need to set vertex colors differently. 
+                                                  // Reverting to a simpler approach for now: Keep fill color, add outline.
+            }
+            // --- REVERTING VERTEX COLOR ATTEMPT --- Keep it simple for now.
+            convex.setFillColor(fillColor); // Set the base fill color back.
+            for (size_t i = 0; i < poly->vertices.size(); ++i) {
+                 convex.setPoint(i, vertexPositions[i]); // Just set positions
+            }
+            // --- END REVERT --- 
+            
             target.draw(convex);
+
+            // REMOVE indicator line drawing
+            // if (poly->vertices.size() > 0) { ... }
         }
         else {
              if (shape.type == Components::ShapeType::Circle) {
@@ -89,20 +136,29 @@ void SolidRenderer::render(sf::RenderTarget& target,
                 circle.setOrigin(radiusPixels, radiusPixels);
                 circle.setPosition(px, py);
                 circle.setFillColor(fillColor);
+                
+                // Add outline to circle
+                circle.setOutlineThickness(1.0f); // Adjust thickness as needed
+                sf::Color outlineColor = sf::Color(std::max(0, fillColor.r - 50), 
+                                                     std::max(0, fillColor.g - 50), 
+                                                     std::max(0, fillColor.b - 50));
+                circle.setOutlineColor(outlineColor);
+                
                 target.draw(circle);
 
-                float const indicatorRadius = std::max(1.0F, radiusPixels * 0.2F);
-                sf::CircleShape indicator(indicatorRadius);
-                indicator.setFillColor(sf::Color(std::max(0, fillColor.r - 50), std::max(0, fillColor.g - 50), std::max(0, fillColor.b - 50)));
-                double angleRad = 0.0;
-                 if (registry.any_of<Components::AngularPosition>(entity)) {
-                     angleRad = registry.get<Components::AngularPosition>(entity).angle;
-                 }
-                float const indicatorX = px + (radiusPixels - indicatorRadius * 1.5f) * std::cos(angleRad);
-                float const indicatorY = py + (radiusPixels - indicatorRadius * 1.5f) * std::sin(angleRad);
-                indicator.setOrigin(indicatorRadius, indicatorRadius);
-                indicator.setPosition(indicatorX, indicatorY);
-                target.draw(indicator);
+                // REMOVE indicator dot drawing
+                // float const indicatorRadius = std::max(1.0F, radiusPixels * 0.2F);
+                // sf::CircleShape indicator(indicatorRadius);
+                // indicator.setFillColor(sf::Color(std::max(0, fillColor.r - 50), std::max(0, fillColor.g - 50), std::max(0, fillColor.b - 50)));
+                // double angleRad = 0.0;
+                //  if (registry.any_of<Components::AngularPosition>(entity)) {
+                //      angleRad = registry.get<Components::AngularPosition>(entity).angle;
+                //  }
+                // float const indicatorX = px + (radiusPixels - indicatorRadius * 1.5f) * std::cos(angleRad);
+                // float const indicatorY = py + (radiusPixels - indicatorRadius * 1.5f) * std::sin(angleRad);
+                // indicator.setOrigin(indicatorRadius, indicatorRadius);
+                // indicator.setPosition(indicatorX, indicatorY);
+                // target.draw(indicator);
             } else {
                 auto const halfSide = static_cast<float>(coordinates.metersToPixels(shape.size));
                 float const side = halfSide * 2.0F;
