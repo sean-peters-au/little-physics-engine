@@ -183,23 +183,3 @@ fragment float4 fluidScreenSpaceFragmentShader(
 
     return finalColor;
 }
-
-// --- TODO: Add Screen-space Fragment Shader ---
-/*
-fragment float4 fluidFragmentShader(
-    constant GPURenderParams& params [[buffer(0)]],
-    texture2d<float> blurredDensityTexture [[texture(0)]],
-    float2 texCoord [[stage_in]]) // Texture coordinates (0-1)
-{
-    // Sample blurred density
-    float density = blurredDensityTexture.sample(sampler, texCoord).r;
-
-    // Apply thresholding and smoothing (similar to fluid_screenspace.frag)
-    float alpha = smoothstep(params.threshold - params.smoothness,
-                           params.threshold + params.smoothness,
-                           density);
-
-    // Return final color (baseColor * alpha)
-    return params.baseColor * alpha;
-}
-*/ 
