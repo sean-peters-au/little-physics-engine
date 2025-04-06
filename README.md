@@ -1,12 +1,6 @@
-| Keplerian Disk | Planetary Ocean | Fluid Simulation | Polygons |
-| :--------------: | :---------------: | :----------------: | :--------: |
-| ![Keplerian Disk](assets/gifs/keplerian-disk-fancy.gif) | ![Planetary Ocean](assets/gifs/planet-ocean-fancy.gif) | ![Fluid Simulation](assets/gifs/fluid-fancy.gif) | ![Polygons](assets/gifs/polygons-fancy.gif) |
-
-| Polygons & Fluid | Galton Board | Hourglasses |
-| :----------------: | :------------: | :-----------: |
-| ![Polygons & Fluid](assets/gifs/polygons-and-fluid-fancy.gif) | ![Galton Board](assets/gifs/galton-board-fancy.gif) | ![Hourglasses](assets/gifs/hourglasses-fancy.gif) |
-
 # Little Physics Engine
+
+![Combined Demo](assets/gifs/highlight-reel.gif)
 
 A little C++ physics engine I built as a curiosity to project to see how far I could push a 99+% LLM 
 generated codebase. The ambition was to build this without any 3rd party dependencies, but some
