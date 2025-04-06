@@ -6,9 +6,8 @@
       <img src="assets/gifs/highlight-reel.gif" alt="Combined Demo" width="100%"> <!-- Keep width=100% on img -->
     </td>
     <td valign="top" width="60%" style="padding-left: 20px;"> <!-- Removed width, kept padding -->
-      This is a little C++ physics engine I built as a curiosity to project to see how far I could push a 99+% LLM 
-      generated codebase. The ambition was to build this without any 3rd party dependencies, but some
-      concenssions were made along the way (EnTT, SFML). Everything else was built from scratch.
+      This is a little C++ physics engine I built as a curiosity to project. The code is >99% LLM generated
+      and attempts to build everything from scratch (a couple of concenssions were made along the way; EnTT, SFML).
       <br><br><b>Key Features:</b><br>
       - Barnes-Hut N-Body sim.<br>
       - GPU SPH fluids (Metal, Verlet, grid, rigid coupling).<br>
