@@ -6,7 +6,7 @@
       <img src="assets/gifs/highlight-reel.gif" alt="Combined Demo" width="100%">
     </td>
     <td valign="top" width="60%" style="padding-left: 20px;">
-      This is a little C++ physics engine I built as a curiosity to project. The code is >99% LLM generated
+      This is a little C++ physics engine I built as a curiosity project. The code is >99% LLM generated
       and attempts to build everything from scratch (a couple of concenssions were made along the way; EnTT, SFML).
       <br><br><b>Key Features:</b><br>
       - Barnes-Hut N-Body sim.<br>
