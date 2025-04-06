@@ -97,7 +97,7 @@ void SolidRenderer::render(sf::RenderTarget& target,
             sf::Color outlineColor = sf::Color(std::max(0, fillColor.r - 50), 
                                                  std::max(0, fillColor.g - 50), 
                                                  std::max(0, fillColor.b - 50));
-            convex.setOutlineThickness(1.0f); 
+            convex.setOutlineThickness(0.0f); 
             convex.setOutlineColor(outlineColor);
             // convex.setFillColor(fillColor); // REMOVE - Will set vertex colors instead
 

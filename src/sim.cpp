@@ -105,14 +105,13 @@ void ECSSimulator::createSystems() {
   systems.clear();
   
   systems.push_back(std::make_unique<Systems::FluidSystem>());
-  systems.push_back(std::make_unique<Systems::RigidBodyCollisionSystem>());
+  systems.push_back(std::make_unique<Systems::BoundarySystem>());
   systems.push_back(std::make_unique<Systems::BasicGravitySystem>());
+  systems.push_back(std::make_unique<Systems::RigidBodyCollisionSystem>());
   systems.push_back(std::make_unique<Systems::BarnesHutSystem>());
-  // systems.push_back(std::make_unique<Systems::DampeningSystem>());
   systems.push_back(std::make_unique<Systems::RotationSystem>());
   systems.push_back(std::make_unique<Systems::MovementSystem>());
   systems.push_back(std::make_unique<Systems::SleepSystem>());
-  systems.push_back(std::make_unique<Systems::BoundarySystem>());
   
   // Configure all systems with both shared and specific configs
   for (auto& system : systems) {

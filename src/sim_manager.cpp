@@ -66,25 +66,27 @@ void SimManager::run() {
             break;
         }
 
-        // --- Simulation Ticks (Fixed Timestep Loop) ---
-        const int MAX_TICKS_PER_FRAME = 5; // Limit ticks to prevent spiral
-        int ticksThisFrame = 0; 
-        while (simulationAccumulator >= fixedTickDt && ticksThisFrame < MAX_TICKS_PER_FRAME) { // Add tick limit
+        // --- Simulation Tick (Run at most once per frame) ---
+        // Remove the MAX_TICKS_PER_FRAME limit as we only run once
+        // const int MAX_TICKS_PER_FRAME = 5;
+        // int ticksThisFrame = 0; 
+        
+        // Replace while loop with if statement
+        if (simulationAccumulator >= fixedTickDt) { 
             if (!paused || stepFrame) { 
                 tick(); 
                 tickCount++;
-                ticksThisFrame++;
+                // ticksThisFrame++; // No longer needed
                 stepFrame = false; 
-            } else {
-                break; 
-            }
-            simulationAccumulator -= fixedTickDt;
+                simulationAccumulator -= fixedTickDt; // Subtract time for the executed tick
+            } 
+            // else { // If paused, do nothing, accumulator will grow
+            //    break; 
+            // }
+            // No subtraction if paused, accumulator keeps growing until unpaused
         }
-        // Optional: If accumulator is still large after max ticks, log a warning or clamp it?
-        // if (simulationAccumulator >= fixedTickDt) { 
-        //    std::cout << "Warning: Simulation lagging behind real time!" << std::endl;
-        //    simulationAccumulator = sf::Time::Zero; // Example: Discard remaining time to prevent future spiral
-        // }
+        // Removed the old accumulator warning/clamping logic as we don't run multiple ticks.
+        // If the simulation lags significantly, simulationAccumulator will just grow large.
 
         // --- Rendering --- 
         // We pass actualFPS and actualTPS, which are updated periodically below

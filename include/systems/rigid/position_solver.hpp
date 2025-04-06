@@ -21,12 +21,12 @@ namespace RigidBodyCollision {
 struct PositionSolverConfig {
     // Number of position correction iterations to perform.
     // More iterations yield a more accurate resolution of penetrations, but may impact performance.
-    int iterations = 3;
+    int iterations = 10;
     
     // Baumgarte stabilization factor (correction strength).
     // This factor (between 0 and 1) controls the incremental positional correction applied each iteration.
     // Higher values result in more aggressive corrections, which can improve convergence but may lead to instability if set too high.
-    double baumgarte = 0.2;
+    double baumgarte = 0.02;
     
     // Penetration tolerance (slop).
     // Corrections are applied only if the penetration depth exceeds this threshold to avoid excessive jittering from minor overlaps.
