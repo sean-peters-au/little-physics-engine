@@ -50,11 +50,9 @@ void EventManager::updateLayout(const std::vector<UIButton>& currentButtonLayout
 // --- Private Helper Methods ---
 
 void EventManager::handleMouseButtonPressed(int x, int y) {
-    std::cout << "EventManager: Mouse Clicked at (" << x << ", " << y << ")" << std::endl;
     const UIButton* clickedButton = getButtonAt(x, y);
 
     if (clickedButton) {
-        std::cout << "  Clicked on button ID: " << static_cast<int>(clickedButton->id) << " Label: " << clickedButton->label << std::endl;
         // --- Dispatch actions based on ButtonID ---
         switch (clickedButton->id) {
             case ButtonID::PAUSE_PLAY:
@@ -95,27 +93,19 @@ void EventManager::handleMouseButtonPressed(int x, int y) {
                  std::cerr << "Warning: Clicked button with unknown or unhandled ID." << std::endl;
                 break;
         }
-    } else {
-         std::cout << "  Click outside known UI buttons." << std::endl;
-         // Potentially handle clicks within the simulation area here later
     }
 }
 
 void EventManager::handleMouseMoved(int x, int y) {
-    // std::cout << "EventManager: Mouse Moved to (" << x << ", " << y << ")" << std::endl;
     const UIButton* hoveredButton = getButtonAt(x, y);
     ButtonID newHighlight = hoveredButton ? hoveredButton->id : ButtonID::UNKNOWN;
 
     if (newHighlight != highlightedButton) {
-        // std::cout << "  Highlight changed to button ID: " << static_cast<int>(newHighlight) << std::endl;
         highlightedButton = newHighlight;
-        // TODO: Need a way to signal PresentationManager/UIRenderer that highlights changed
-        // Maybe PresentationManager polls EventManager::getHighlightedButtonID() during rendering?
     }
 }
 
 void EventManager::handleKeyPressed(sf::Keyboard::Key key) {
-     std::cout << "EventManager: Key Pressed: " << key << std::endl;
     // Handle global keyboard shortcuts related to UI actions if desired
      switch (key) {
         // Example: Scenario switching (Could be moved from SimManager)

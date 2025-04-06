@@ -187,7 +187,6 @@ void FluidSystem::initBuffersIfNeeded(
         {
             particleBuf_->release();
         }
-        std::cout << "[FluidSystem] Resizing particleBuf_ to " << paddedCount << std::endl;
         particleBuf_ = device_->newBuffer(
             sizeof(GPUFluidParticle) * paddedCount,
             MTL::ResourceStorageModeShared
@@ -202,7 +201,6 @@ void FluidSystem::initBuffersIfNeeded(
         {
             rigidBuf_->release();
         }
-        std::cout << "[FluidSystem] Resizing rigidBuf_ to " << rigidCount << std::endl;
         rigidBuf_ = device_->newBuffer(
             sizeof(GPURigidBody) * rigidCount,
             MTL::ResourceStorageModeShared
@@ -227,7 +225,6 @@ void FluidSystem::initBuffersIfNeeded(
         {
             boundingBoxBuf_->release();
         }
-        std::cout << "[FluidSystem] Resizing boundingBoxBuf_ to " << threadgroups << " groups" << std::endl;
         boundingBoxBuf_ = device_->newBuffer(
             sizeof(float) * 4 * threadgroups,
             MTL::ResourceStorageModeShared

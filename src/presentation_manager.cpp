@@ -154,31 +154,33 @@ void PresentationManager::renderGasParticlesInternal(const entt::registry &regis
 void PresentationManager::renderStatsInternal(float actualFPS, float actualTPS) {
     if (!uiRenderer) return;
 
-    // Get desired time scale
-    ECSSimulator& simulator = ECSSimulator::getInstance();
-    const entt::registry& registry = simulator.getRegistry();
-    double desiredTimeScale = 1.0; // Default
-    auto stView = registry.view<Components::SimulatorState>();
-    if (!stView.empty()) {
-        desiredTimeScale = registry.get<Components::SimulatorState>(stView.front()).timeScale;
+    // Only render stats if debug mode is active
+    if (isDebugVisualization()) {
+        // Get desired time scale
+        ECSSimulator& simulator = ECSSimulator::getInstance();
+        const entt::registry& registry = simulator.getRegistry();
+        double desiredTimeScale = 1.0; // Default
+        auto stView = registry.view<Components::SimulatorState>();
+        if (!stView.empty()) {
+            desiredTimeScale = registry.get<Components::SimulatorState>(stView.front()).timeScale;
+        }
+
+        // Calculate achieved time scale (normalized by target TPS)
+        const float targetTPS = static_cast<float>(SimulatorConstants::StepsPerSecond); // Use constant
+        double achievedTimeScale = (targetTPS > 0) ? (actualTPS / targetTPS) * desiredTimeScale : 0.0;
+
+        std::stringstream ssFPS, ssTPS, ssAcc;
+        ssFPS << std::fixed << std::setprecision(1) << actualFPS << " FPS";
+        ssTPS << std::fixed << std::setprecision(1) << actualTPS << " TPS";
+        ssAcc << "Acc: " << std::fixed << std::setprecision(2) << achievedTimeScale
+              << "x (Tgt: " << desiredTimeScale << "x)";
+
+        // Position the stats
+        int yPos = 10;
+        uiRenderer->renderText(window, ssFPS.str(), 10, yPos, sf::Color::White); yPos += 15;
+        uiRenderer->renderText(window, ssTPS.str(), 10, yPos, sf::Color::White); yPos += 15;
+        uiRenderer->renderText(window, ssAcc.str(), 10, yPos, sf::Color::White);
     }
-
-    // Calculate achieved time scale (normalized by target TPS)
-    const float targetTPS = static_cast<float>(SimulatorConstants::StepsPerSecond); // Use constant
-    double achievedTimeScale = (targetTPS > 0) ? (actualTPS / targetTPS) * desiredTimeScale : 0.0;
-
-
-    std::stringstream ssFPS, ssTPS, ssAcc;
-    ssFPS << std::fixed << std::setprecision(1) << actualFPS << " FPS";
-    ssTPS << std::fixed << std::setprecision(1) << actualTPS << " TPS";
-    ssAcc << "Acc: " << std::fixed << std::setprecision(2) << achievedTimeScale
-          << "x (Tgt: " << desiredTimeScale << "x)";
-
-    // Position the stats
-    int yPos = 10;
-    uiRenderer->renderText(window, ssFPS.str(), 10, yPos, sf::Color::White); yPos += 15;
-    uiRenderer->renderText(window, ssTPS.str(), 10, yPos, sf::Color::White); yPos += 15;
-    uiRenderer->renderText(window, ssAcc.str(), 10, yPos, sf::Color::White);
 }
 
 // Calculate UI layout and tell UIRenderer to draw it
@@ -330,18 +332,14 @@ ColorScheme PresentationManager::getColorScheme() const { return currentColorSch
 void PresentationManager::toggleDebugVisualization() {
     if (!solidDebugEnabled && fluidRenderer) { // If solid is OFF, try turning solid ON
          solidDebugEnabled = true;
-         std::cout << "Solid Debug: ON" << std::endl;
          if (fluidRenderer->isDebugVisualization()) fluidRenderer->toggleDebugVisualization();
     } else if (solidDebugEnabled && fluidRenderer) { // If solid is ON, try turning fluid ON (and solid OFF)
         solidDebugEnabled = false;
         fluidRenderer->toggleDebugVisualization();
-        std::cout << "Solid Debug: OFF, Fluid Debug toggled." << std::endl;
     } else if (fluidRenderer) { // If solid is OFF and fluid might be ON
         fluidRenderer->toggleDebugVisualization();
-        std::cout << "Fluid Debug toggled." << std::endl;
     } else { // Fallback if no fluid renderer
         solidDebugEnabled = !solidDebugEnabled;
-        std::cout << "Solid Debug: " << (solidDebugEnabled ? "ON" : "OFF") << std::endl;
     }
 }
 

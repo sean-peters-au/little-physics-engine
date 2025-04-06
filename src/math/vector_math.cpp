@@ -5,7 +5,7 @@
 
 double my_sqrt(double d) {
   if (d < 0) {
-    std::cout << "-1 sqrt" << std::endl;
+    std::cerr << "-1 sqrt" << std::endl;
   }
   return sqrt(d);
 }
@@ -151,7 +151,7 @@ Vector Vector::scale(double length) const {
   if (vlen > 1e-9) {
     double const factor = length / vlen;
     return {this->x * factor, this->y * factor};
-  }     std::cout << "Warning: scaling zero-length vector." << std::endl;
+  }     std::cerr << "Warning: scaling zero-length vector." << std::endl;
     return *this;
  
 }

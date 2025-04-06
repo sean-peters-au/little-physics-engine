@@ -150,9 +150,6 @@ void ECSSimulator::createSystems() {
 }
 
 void ECSSimulator::init() {
-  std::cout << "ECSSimulator::init()" << std::endl;
-  
-  // Create all systems according to the current configuration
   createSystems();
 }
 

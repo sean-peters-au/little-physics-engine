@@ -233,7 +233,6 @@ bool FluidRenderer::initializeMetal() {
     // Check other resources
     if (!finalFluidTexture_ || !normalizedDensityTexture_) { return false; }
 
-    std::cout << "Metal initialized successfully for FluidRenderer." << std::endl;
     return true;
 }
 
@@ -247,7 +246,6 @@ void FluidRenderer::ensureResources(int particleCount) {
         maxParticles_ = particleCount > 0 ? static_cast<size_t>(particleCount) : 1;
         particleBuffer_ = device_->newBuffer(sizeof(GPURenderFluidParticle) * maxParticles_, MTL::ResourceStorageModeShared);
          if (!particleBuffer_) std::cerr << "Error: Failed to create particle buffer!" << std::endl;
-         else std::cout << "Resized particle buffer to " << maxParticles_ << " particles." << std::endl;
     }
 
     // Compute Textures - Size should match screen/output resolution now
@@ -285,7 +283,6 @@ void FluidRenderer::ensureResources(int particleCount) {
              std::cerr << "Error: Failed to create density/blur textures!" << std::endl;
         } else {
              currentGridSize_ = {screenDimensions.x, screenDimensions.y}; 
-             std::cout << "Recreated compute textures with size " << currentGridSize_.x << "x" << currentGridSize_.y << std::endl;
         }
     }
 
@@ -561,7 +558,6 @@ bool FluidRenderer::readFluidTexture(std::vector<uint8_t>& outBuffer, sf::Vector
 // Stub implementations for debug methods
 void FluidRenderer::toggleDebugVisualization() {
     // TODO: Implement Metal-based debug views if needed
-    std::cout << "FluidRenderer::toggleDebugVisualization() called (No-Op for Metal)" << std::endl;
 }
 
 bool FluidRenderer::isDebugVisualization() const {

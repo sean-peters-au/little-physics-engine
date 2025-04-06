@@ -1,13 +1,13 @@
 # @fileoverview Makefile
-# @brief Build script for both native (desktop) and WASM (web) targets.
+# @brief Build script for the physics simulator.
 
 # ---------------------------------------------------------------------------------
 # Common settings
 # ---------------------------------------------------------------------------------
 
-# Only apply macOS-specific flags for native builds
+# Only apply macOS-specific flags
 ifeq ($(shell uname),Darwin)
-NATIVE_CXXFLAGS += -stdlib=libc++ -isysroot $(shell xcrun --show-sdk-path) -D_DARWIN_C_SOURCE -D_XOPEN_SOURCE=700
+APP_CXXFLAGS += -stdlib=libc++ -isysroot $(shell xcrun --show-sdk-path) -D_DARWIN_C_SOURCE -D_XOPEN_SOURCE=700
 endif
 
 # Determine the Homebrew prefix for libomp
@@ -20,7 +20,7 @@ ENTT_INCLUDE := -I./vendor/entt/include
 CXXFLAGS := -Wall -Wextra -std=c++17 \
             -I./include \
             -isystem /opt/homebrew/include \
-			$(ENTT_INCLUDE)
+            $(ENTT_INCLUDE)
 
 # Define path for Metal framework headers on macOS.
 METAL_INCLUDE := -I$(shell xcrun --sdk macosx --show-sdk-path)/System/Library/Frameworks/Metal.framework/Headers
@@ -38,114 +38,62 @@ SRC_DIR := src
 INC_DIR := include
 ASSETS_DIR := assets
 
-# Base source files (excluding arch-specific code)
-BASE_SRCS := $(shell find $(SRC_DIR) -name '*.cpp' \
-             ! -path "$(SRC_DIR)/arch/*")
+# Source files
+SRCS := $(shell find $(SRC_DIR) -name '*.cpp')
+
+# Object files (handle Objective-C++ separately)
+OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(filter-out $(SRC_DIR)/renderers/fluid_renderer.cpp,$(SRCS))) \
+        $(BUILD_DIR)/renderers/fluid_renderer.o
+
+# Dependency files
+DEPS := $(OBJS:.o=.d)
 
 # Clang-tidy settings
 TIDY := run-clang-tidy
 TIDY_FIX_FLAGS := -fix
 
 # ---------------------------------------------------------------------------------
-# Architecture-specific targets
+# Build Target
 # ---------------------------------------------------------------------------------
 
-.PHONY: native wasm print-debug
+.DEFAULT_GOAL := simulator
+
+.PHONY: simulator print-debug clean rebuild directories copy_assets lint lint-fix compile_commands.json
 
 print-debug:
-	@echo "BASE_SRCS: $(BASE_SRCS)"
-	@echo "ARCH_SRCS: $(ARCH_SRCS)"
+	@echo "SRCS: $(SRCS)"
 	@echo "OBJS: $(OBJS)"
+	@echo "DEPS: $(DEPS)"
 
-# Define variables for native build
-NATIVE_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/native/*.cpp)
-NATIVE_OBJS := $(filter-out $(BUILD_DIR)/native/renderers/fluid_renderer.o, \
-               $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/native/%.o,$(BASE_SRCS))) \
-               $(BUILD_DIR)/renderers/fluid_renderer.o \
-               $(patsubst $(SRC_DIR)/arch/native/%.cpp,$(BUILD_DIR)/arch/native/%.o,$(NATIVE_ARCH_SRCS))
-NATIVE_SRCS := $(BASE_SRCS) $(NATIVE_ARCH_SRCS)
-NATIVE_DEPS := $(NATIVE_OBJS:.o=.d)  # Add dependency files
-
-# Define variables for wasm build
-WASM_ARCH_SRCS := $(wildcard $(SRC_DIR)/arch/wasm/*.cpp)
-WASM_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/wasm/%.o,$(BASE_SRCS)) \
-             $(patsubst $(SRC_DIR)/arch/wasm/%.cpp,$(BUILD_DIR)/arch/wasm/%.o,$(WASM_ARCH_SRCS))
-WASM_SRCS := $(BASE_SRCS) $(WASM_ARCH_SRCS)
-WASM_DEPS := $(WASM_OBJS:.o=.d)  # Add dependency files
-
-# Compile fluid_renderer.cpp as Objective-C++ for native build
-$(BUILD_DIR)/renderers/fluid_renderer.o: $(SRC_DIR)/renderers/fluid_renderer.cpp
+# Compile fluid_renderer.cpp as Objective-C++
+$(BUILD_DIR)/renderers/fluid_renderer.o: $(SRC_DIR)/renderers/fluid_renderer.cpp | directories
 	@echo "Compiling Objective-C++ $<"
-	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -x objective-c++ -MMD -MP -MF $(@:.o=.d) -c $< -o $@
 
-# General rule for native C++ files (ensure it doesn't conflict)
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
-	# Prevent this rule from matching fluid_renderer.cpp again
-	$(if $(filter $(SRC_DIR)/renderers/fluid_renderer.cpp,$<), , \
-		@echo "Compiling native C++ $<" ; \
-		@mkdir -p $(@D) ; \
-		$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@ )
-
-native: CXX := clang++
-native: CXXFLAGS += $(NATIVE_CXXFLAGS) -Xpreprocessor -fopenmp -I$(LIBOMP_PREFIX)/include $(METAL_INCLUDE) $(METAL_CPP_INCLUDE)
-native: LDFLAGS := -L/opt/homebrew/lib -L$(LIBOMP_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system -lomp -framework Metal -framework Cocoa -framework MetalKit -framework QuartzCore
-native: directories copy_assets $(NATIVE_OBJS) $(BUILD_DIR)/fluid_kernels.metallib $(BUILD_DIR)/fluid_renderer_kernels.metallib
-	@echo "Building native target with objects: $(NATIVE_OBJS)"
-	$(CXX) $(CXXFLAGS) $(NATIVE_OBJS) -o $(BUILD_DIR)/simulator_native $(LDFLAGS)
-
-wasm: CXX := em++
-wasm: CXXFLAGS += -s USE_WEBGL2=1  # Add emscripten-specific flags
-wasm: LDFLAGS := -s USE_WEBGL2=1 -s FULL_ES3=1 \
-                 -s ALLOW_MEMORY_GROWTH=1 \
-                 -s INVOKE_RUN=1 -s DEMANGLE_SUPPORT=1
-wasm: directories copy_assets $(WASM_OBJS)
-	@echo "Building wasm target with objects: $(WASM_OBJS)"
-	$(CXX) $(CXXFLAGS) $(WASM_OBJS) -o $(BUILD_DIR)/simulator_wasm.html \
-	    $(LDFLAGS) \
-	    --shell-file assets/sim.html \
-	    -s EXIT_RUNTIME=1 -s ASSERTIONS=1
-
-# ---------------------------------------------------------------------------------
-# Build rules
-# ---------------------------------------------------------------------------------
-
-$(BUILD_DIR)/native/%.o: $(SRC_DIR)/%.cpp
-	@echo "Compiling native $<"
-	@mkdir -p $(@D)
+# General rule for C++ files (excluding the Objective-C++ one)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | directories
+	@echo "Compiling C++ $<"
 	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
 
-$(BUILD_DIR)/wasm/%.o: $(SRC_DIR)/%.cpp
-	@echo "Compiling wasm $<"
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
-
-$(BUILD_DIR)/arch/native/%.o: $(SRC_DIR)/arch/native/%.cpp
-	@echo "Compiling arch-specific native $<"
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
-
-$(BUILD_DIR)/arch/wasm/%.o: $(SRC_DIR)/arch/wasm/%.cpp
-	@echo "Compiling arch-specific wasm $<"
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -MMD -MP -MF $(@:.o=.d) -c $< -o $@
+simulator: CXX := clang++
+simulator: CXXFLAGS += $(APP_CXXFLAGS) -Xpreprocessor -fopenmp -I$(LIBOMP_PREFIX)/include $(METAL_INCLUDE) $(METAL_CPP_INCLUDE)
+simulator: LDFLAGS := -L/opt/homebrew/lib -L$(LIBOMP_PREFIX)/lib -lsfml-graphics -lsfml-window -lsfml-system -lomp -framework Metal -framework Cocoa -framework MetalKit -framework QuartzCore
+simulator: $(OBJS) $(BUILD_DIR)/fluid_kernels.metallib $(BUILD_DIR)/fluid_renderer_kernels.metallib
+	@echo "Building simulator target with objects: $(OBJS)"
+	$(CXX) $(CXXFLAGS) $(OBJS) -o $(BUILD_DIR)/simulator $(LDFLAGS)
 
 # Include generated dependency files if they exist
--include $(NATIVE_DEPS)
--include $(WASM_DEPS)
+-include $(DEPS)
 
 # ---------------------------------------------------------------------------------
 # Utility targets
 # ---------------------------------------------------------------------------------
 
+# Create all necessary build subdirectories based on src structure
+BUILD_DIRS := $(BUILD_DIR) $(patsubst $(SRC_DIR)/%,$(BUILD_DIR)/%,$(shell find $(SRC_DIR) -mindepth 1 -type d))
 directories:
-	@mkdir -p $(BUILD_DIR)
-	@mkdir -p $(BUILD_DIR)/systems
-	@mkdir -p $(BUILD_DIR)/core
-	@mkdir -p $(BUILD_DIR)/rendering
-	@mkdir -p $(BUILD_DIR)/renderers
-	@mkdir -p $(BUILD_DIR)/arch/native
-	@mkdir -p $(BUILD_DIR)/arch/wasm
+	@echo "Creating build directories..."
+	@mkdir -p $(BUILD_DIRS)
 	@mkdir -p $(ASSETS_DIR)/fonts
 
 copy_assets: directories
@@ -158,63 +106,35 @@ copy_assets: directories
 clean:
 	rm -rf $(BUILD_DIR)
 
-rebuild: clean all
+rebuild: clean simulator
 
 compile_commands.json: directories
 	@echo "Generating compile_commands.json..."
+	@$(MAKE) simulator # Ensure target is built first
 	@cd $(BUILD_DIR) && \
-	CXXFLAGS="$(CXXFLAGS)" bear -- $(MAKE) -C .. -B native > /dev/null 2>&1 || true
+	CXXFLAGS="$(CXXFLAGS)" bear -- $(MAKE) -C .. -B simulator > /dev/null 2>&1 || true
 	@echo "Generated compile_commands.json"
 
 # ---------------------------------------------------------------------------------
 # Clang-Tidy Targets
 # ---------------------------------------------------------------------------------
-# We explicitly list only our own source files (NATIVE_SRCS or WASM_SRCS),
+# We explicitly list only our own source files (SRCS),
 # and we override header-filter to skip /opt/homebrew and vendor.
 # On macOS, use 'sysctl -n hw.ncpu' for parallel jobs; on Linux, 'nproc' is fine.
 
 lint: compile_commands.json
 	@echo "Running clang-tidy..."
-	@if [ "$(WASM)" = "1" ]; then \
-		echo "Checking WASM build..."; \
-		$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
-			-p $(BUILD_DIR) -quiet -j $(shell sysctl -n hw.ncpu) \
-			$(WASM_SRCS); \
-	else \
-		echo "Checking native build..."; \
-		$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
-			-p $(BUILD_DIR) -quiet -j $(shell sysctl -n hw.ncpu) \
-			$(NATIVE_SRCS); \
-	fi
+	@echo "Checking build..."
+	$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
+		-p $(BUILD_DIR) -quiet -j $(shell sysctl -n hw.ncpu) \
+		$(SRCS); \
 
 lint-fix: compile_commands.json
 	@echo "Running clang-tidy with auto-fix..."
-	@if [ "$(WASM)" = "1" ]; then \
-		echo "Checking WASM build..."; \
-		$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
-			-p $(BUILD_DIR) $(TIDY_FIX_FLAGS) \
-			$(WASM_SRCS); \
-	else \
-		echo "Checking native build..."; \
-		$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
-			-p $(BUILD_DIR) $(TIDY_FIX_FLAGS) \
-			$(NATIVE_SRCS); \
-	fi
-
-# Add new serve target
-serve: wasm
-	@echo "Starting server at http://localhost:8080/simulator_wasm.html"
-	@if command -v python3 &> /dev/null; then \
-		if command -v xdg-open &> /dev/null; then \
-			xdg-open http://localhost:8080/simulator_wasm.html; \
-		elif command -v open &> /dev/null; then \
-			open http://localhost:8080/simulator_wasm.html; \
-		fi; \
-		cd $(BUILD_DIR) && python3 -m http.server 8080; \
-	else \
-		echo "Error: python3 is not installed"; \
-		exit 1; \
-	fi
+	@echo "Checking build..."
+	$(TIDY) -header-filter='^((?!vendor|/opt/homebrew).)*$$' \
+		-p $(BUILD_DIR) $(TIDY_FIX_FLAGS) \
+		$(SRCS); \
 
 # ---------------------------------------------------------------------------------
 # Build rule for Metal shader files
@@ -227,11 +147,9 @@ $(BUILD_DIR)/fluid_kernels.metallib: $(SRC_DIR)/systems/fluid/fluid_kernels.meta
 	$(METALLIB) $(BUILD_DIR)/fluid_kernels.air -o $@
 	@rm $(BUILD_DIR)/fluid_kernels.air
 
-# Rule for RENDERING kernels (New - Line ~207)
+# Rule for RENDERING kernels
 $(BUILD_DIR)/fluid_renderer_kernels.metallib: $(SRC_DIR)/renderers/fluid_renderer_kernels.metal | directories
 	@echo "Compiling RENDERING Metal shader $<"
 	$(METAL) -c $< -I./include -o $(BUILD_DIR)/fluid_renderer_kernels.air
 	$(METALLIB) $(BUILD_DIR)/fluid_renderer_kernels.air -o $@
 	@rm $(BUILD_DIR)/fluid_renderer_kernels.air
-
-.PHONY: all native wasm clean rebuild test directories copy_assets lint lint-fix compile_commands serve

@@ -40,7 +40,6 @@ BarnesHutSystem::QuadTreeNode* BarnesHutSystem::allocateNode() {
         // Pool exhausted, double its size (or use a different growth strategy)
         size_t oldSize = nodePool_.size();
         nodePool_.resize(oldSize * 2);
-        std::cout << "[BarnesHut] Resized node pool from " << oldSize << " to " << nodePool_.size() << std::endl;
     }
     QuadTreeNode* node = &nodePool_[nextNodeIndex_++];
     // Reset the node's state (using default constructor logic)
@@ -67,8 +66,7 @@ void BarnesHutSystem::update(entt::registry& registry) {
             }
         }
         if (shouldSkip) {
-            // std::cout << "[BarnesHut] Skipping update: All masses below threshold." << std::endl;
-            return; // Exit early
+            return;
         }
     }
     // --- End of early exit check ---
