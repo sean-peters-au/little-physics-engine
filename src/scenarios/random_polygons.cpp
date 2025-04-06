@@ -122,7 +122,7 @@ void RandomPolygonsScenario::createEntities(entt::registry& registry) const {
   std::uniform_real_distribution<> vel_dist(-2.0, 2.0);
   std::uniform_real_distribution<> shape_dist(0.0, 1.0);
   std::uniform_real_distribution<> size_ratio_dist(0.0, 1.0);
-  std::uniform_int_distribution<> color_dist(0, 255);
+  std::uniform_int_distribution<> color_dist(50, 200);
 
   // Mass distribution
   std::normal_distribution<> mass_dist(scenarioEntityConfig.particleMassMean, scenarioEntityConfig.particleMassStdDev);
@@ -206,9 +206,11 @@ void RandomPolygonsScenario::createEntities(entt::registry& registry) const {
     registry.emplace<Components::AngularPosition>(e, 0.0);
     registry.emplace<Components::AngularVelocity>(e, vel_dist(generator) * 0.5);
 
-    // 5. Random color
-    registry.emplace<Components::Color>(e, color_dist(generator),
-                                      color_dist(generator),
-                                      color_dist(generator));
+    // 5. Random color (now within the restricted range)
+    registry.emplace<Components::Color>(e, 
+        static_cast<uint8_t>(color_dist(generator)),
+        static_cast<uint8_t>(color_dist(generator)),
+        static_cast<uint8_t>(color_dist(generator))
+    );
   }
 }

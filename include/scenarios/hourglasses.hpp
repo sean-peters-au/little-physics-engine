@@ -11,20 +11,20 @@
  */
 struct HourglassesConfig {
     // Fluid parameters
-    int fluidParticleCount = 250;     // Number of fluid particles
+    int fluidParticleCount = 300;     // Number of fluid particles
     double fluidParticleMass = 1.0;   // Mass per fluid particle (increased for better dynamics)
-    double fluidRestDensity = 100.0;  // Rest density for fluid
+    double fluidRestDensity = 60.0;  // Rest density for fluid
     double fluidParticleSize = 0.05;  // Size of fluid particles (diameter)
     
     // Hexagon parameters
     int hexagonCount = 60;           // Fewer hexagons for better flow
-    double hexagonSize = 0.06;        // Larger size of each hexagon
+    double hexagonSize = 0.05;        // Larger size of each hexagon
     double hexagonMass = 1.0;         // Mass of each hexagon
     
     // Hourglass parameters
     double hourglassHeight = 4.0;     // Height of each hourglass
     double hourglassTopWidth = 2.0;   // Width of hourglass top chamber
-    double hourglassNeckWidth = 0.13;  // Width of hourglass neck
+    double hourglassNeckWidth = 0.16;  // Width of hourglass neck
     double hourglassWallThickness = 0.2; // Thickness of hourglass walls
     
     // Friction parameters  

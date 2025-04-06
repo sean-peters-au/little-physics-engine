@@ -86,12 +86,6 @@ void SolidRenderer::render(sf::RenderTarget& target,
                 vertexPositions[i] = sf::Vector2f(vxPx, vyPx);
             }
 
-            // Set outline properties
-            sf::Color outlineColor = sf::Color(std::max(0, fillColor.r - 50), 
-                                                 std::max(0, fillColor.g - 50), 
-                                                 std::max(0, fillColor.b - 50));
-            convex.setOutlineThickness(1.0f);
-            convex.setOutlineColor(outlineColor);
             convex.setFillColor(fillColor); // Set the base fill color back.
             for (size_t i = 0; i < poly->vertices.size(); ++i) {
                  convex.setPoint(i, vertexPositions[i]); // Just set positions
@@ -106,13 +100,6 @@ void SolidRenderer::render(sf::RenderTarget& target,
                 circle.setOrigin(radiusPixels, radiusPixels);
                 circle.setPosition(px, py);
                 circle.setFillColor(fillColor);
-                
-                // Add outline to circle
-                circle.setOutlineThickness(1.0f); // Adjust thickness as needed
-                sf::Color outlineColor = sf::Color(std::max(0, fillColor.r - 50), 
-                                                     std::max(0, fillColor.g - 50), 
-                                                     std::max(0, fillColor.b - 50));
-                circle.setOutlineColor(outlineColor);
                 
                 target.draw(circle);
             } else {

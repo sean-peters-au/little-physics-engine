@@ -41,7 +41,7 @@ std::optional<EPAResult> EPA(const ShapeData &a, const ShapeData &b, const Simpl
         Vector const ac = poly[2] - poly[0];
         double const crossVal = ab.cross(ac);
         if (std::fabs(crossVal) < 1e-14) {
-            std::cerr << "Warning: EPA degenerate simplex (collinear points). Returning no penetration." << std::endl;
+            // std::cerr << "Warning: EPA degenerate simplex (collinear points). Returning no penetration." << std::endl;
             return std::nullopt;
         }
     }
