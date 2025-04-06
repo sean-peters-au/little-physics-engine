@@ -2,10 +2,10 @@
 
 <table>
   <tr>
-    <td valign="middle"> <!-- Removed width attribute -->
-      <img src="assets/gifs/highlight-reel.gif" alt="Combined Demo" width="100%"> <!-- Keep width=100% on img -->
+    <td valign="middle">
+      <img src="assets/gifs/highlight-reel.gif" alt="Combined Demo" width="100%">
     </td>
-    <td valign="top" width="60%" style="padding-left: 20px;"> <!-- Removed width, kept padding -->
+    <td valign="top" width="60%" style="padding-left: 20px;">
       This is a little C++ physics engine I built as a curiosity to project. The code is >99% LLM generated
       and attempts to build everything from scratch (a couple of concenssions were made along the way; EnTT, SFML).
       <br><br><b>Key Features:</b><br>
