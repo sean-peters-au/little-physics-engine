@@ -1,11 +1,18 @@
 # Little Physics Engine
 
-![Combined Demo](assets/gifs/highlight-reel.gif)
-
-A little C++ physics engine I built as a curiosity to project to see how far I could push a 99+% LLM 
-generated codebase. The ambition was to build this without any 3rd party dependencies, but some
-concenssions were made along the way (EnTT, SFML and Metal). Everything else was built from scratch right
-down to the vector math.
+<table>
+  <tr>
+    <td valign="top" width="40%"> <!-- Adjust width % as needed -->
+      <img src="assets/gifs/highlight-reel.gif" alt="Combined Demo" width="100%"> <!-- Image scales to cell width -->
+    </td>
+    <td valign="top" width="60%" style="padding-left: 20px;"> <!-- Add padding for spacing -->
+      A little C++ physics engine I built as a curiosity to project to see how far I could push a 99+% LLM 
+      generated codebase. The ambition was to build this without any 3rd party dependencies, but some
+      concenssions were made along the way (EnTT, SFML and Metal). Everything else was built from scratch right
+      down to the vector math.
+    </td>
+  </tr>
+</table>
 
 It includes;
 *   N-Body gravity simulation (using Barnes-Hut optimization).
